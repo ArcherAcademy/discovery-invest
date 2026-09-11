@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
-import { MapPin, Clock, Copy, Check, ExternalLink } from 'lucide-react'
+import { MapPin, Clock, ExternalLink } from 'lucide-react'
 import { useApp } from '@/components/app-context'
 import type { DemoEvent } from '@/lib/types'
 
+import GratisClaimBlock from '@/components/GratisClaimBlock'
 
-const KORTINGSCODE = 'Free-discovery-invest'
 const EVENTBRITE_URL =
   'https://www.eventbrite.be/e/krijg-grip-op-je-geld-en-de-handvatten-om-het-te-laten-groeien-tickets-1995064585882?aff=oddtdtcreator&utm_source=archer&utm_medium=event-page&utm_campaign=content-network'
 
@@ -100,59 +100,6 @@ const VIDEOS = [
   },
 ]
 
-function KortingscodeBlock() {
-  const [copied, setCopied] = useState(false)
-  function copyCode() {
-    navigator.clipboard.writeText(KORTINGSCODE).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2200)
-    })
-  }
-  return (
-    <div
-      className="rounded-xl px-4 py-4 flex flex-col gap-3"
-      style={{ background: 'rgba(37,0,245,0.05)', border: '1.5px solid rgba(37,0,245,0.18)' }}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-bold tracking-[0.13em]" style={{ color: '#2500F5' }}>
-          VRIJGESPEELD
-        </p>
-        <span
-          className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full"
-          style={{ background: 'rgba(37,0,245,0.1)', color: '#2500F5' }}
-        >
-          Eenmalig
-        </span>
-      </div>
-      <p className="text-xs" style={{ color: 'rgba(13,15,20,0.6)' }}>
-        Jouw kortingscode. Gebruik deze op Eventbrite om je ticket gratis te maken.
-      </p>
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-        <div
-          className="flex-1 min-w-0 px-3 py-2.5 rounded-lg font-mono text-sm font-bold tracking-wide select-all whitespace-nowrap overflow-x-auto"
-          style={{ background: '#fff', border: '1px solid rgba(37,0,245,0.2)', color: '#2500F5' }}
-        >
-          {KORTINGSCODE}
-        </div>
-        <button
-          onClick={copyCode}
-          className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-semibold shrink-0 transition-all"
-          style={{
-            background: copied ? 'rgba(37,0,245,0.08)' : '#f0f3fb',
-            color: copied ? '#2500F5' : '#0d0f14',
-            border: '1px solid',
-            borderColor: copied ? 'rgba(37,0,245,0.2)' : '#e8ecf4',
-          }}
-          aria-label="Kopieer kortingscode"
-        >
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-          {copied ? 'Gekopieerd' : 'Kopieer'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function EventVideoPlayer() {
   const [active, setActive] = useState(0)
 
@@ -227,7 +174,7 @@ export default function EventsPage() {
                   INVEST-AVOND
                 </p>
                 <h1 className="text-lg font-extrabold text-balance mb-0.5" style={{ color: '#0d0f14' }}>
-                  Kijk alle 6 video&apos;s en ontvang je gratis-code.
+                  Kijk alle 6 video&apos;s en claim je gratis plek.
                 </h1>
                 <p className="text-sm" style={{ color: 'rgba(13,15,20,0.52)' }}>
                   Nog {remaining} video{remaining === 1 ? '' : "'s"} te gaan. Daarna speel je een gratis plek vrij voor de Invest-avond in de Handelsbeurs Antwerpen.
@@ -350,28 +297,26 @@ export default function EventsPage() {
                     {event.description}
                   </p>
 
-                  {/* Kortingscode block — alleen voor 6/6 */}
-                  {allCoreCompleted && (
-                    <KortingscodeBlock />
-                  )}
+                  {/* Persoonsgebonden gratis claim — alleen na 6/6 */}
+                  {allCoreCompleted && <GratisClaimBlock variant="compact" />}
 
-                  {/* CTA — altijd naar Eventbrite */}
-                  <a
-                    href={meta.eventbriteUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-semibold transition-opacity hover:opacity-85"
-                    style={{ background: '#2500F5', color: '#fff' }}
-                  >
-                    {allCoreCompleted ? 'Reserveer je gratis plaats op Eventbrite' : 'Reserveer je plaats op Eventbrite'}
-                    <ExternalLink size={13} />
-                  </a>
-
-                  {/* Nudge voor wie nog niet op 6/6 zit */}
+                  {/* Reguliere reservatie blijft beschikbaar zolang de gratis plek niet is vrijgespeeld */}
                   {!allCoreCompleted && (
-                    <p className="text-center text-xs" style={{ color: 'rgba(13,15,20,0.4)' }}>
-                      Kijk alle 6 video&apos;s en ontvang een code om gratis binnen te gaan.
-                    </p>
+                    <>
+                      <a
+                        href={meta.eventbriteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-semibold transition-opacity hover:opacity-85"
+                        style={{ background: '#2500F5', color: '#fff' }}
+                      >
+                        Reserveer je plaats op Eventbrite
+                        <ExternalLink size={13} />
+                      </a>
+                      <p className="text-center text-xs" style={{ color: 'rgba(13,15,20,0.4)' }}>
+                        Kijk alle 6 video&apos;s en speel een gratis, persoonsgebonden plek vrij.
+                      </p>
+                    </>
                   )}
                 </div>
               </div>

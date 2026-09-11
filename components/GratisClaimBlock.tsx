@@ -1,128 +1,161 @@
 'use client'
 
-import { useState } from 'react'
-import { Copy, Check, ExternalLink, Ticket } from 'lucide-react'
+import { FormEvent, useState } from 'react'
+import useSWR from 'swr'
+import { CalendarDays, CheckCircle2, Loader2, Phone, Ticket } from 'lucide-react'
 
-const KORTINGSCODE = 'Free-discovery-invest'
-const EVENTBRITE_URL =
-  'https://www.eventbrite.be/e/krijg-grip-op-je-geld-en-de-handvatten-om-het-te-laten-groeien-tickets-1995064585882?aff=oddtdtcreator&utm_source=archer&utm_medium=event-page&utm_campaign=content-network'
+interface Claim {
+  id: string
+  mobiel_nummer: string
+  datum_keuze: string
+  claimed_at: string
+  status: string
+}
 
 interface GratisClaimBlockProps {
-  variant?: 'full' | 'compact'
+  variant?: 'full' | 'compact' | 'popup'
+}
+
+const fetcher = async (url: string) => {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error('Status niet beschikbaar')
+  return response.json() as Promise<{ claim: Claim | null }>
+}
+
+function formatDatum(datum: string) {
+  return new Date(`${datum}T00:00:00`).toLocaleDateString('nl-BE', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
 }
 
 export default function GratisClaimBlock({ variant = 'full' }: GratisClaimBlockProps) {
-  const [copied, setCopied] = useState(false)
+  const { data, mutate } = useSWR('/api/invest-avond-claim', fetcher, { shouldRetryOnError: false })
+  const [mobielNummer, setMobielNummer] = useState('')
+  const [datumKeuze, setDatumKeuze] = useState('')
+  const [website, setWebsite] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [ingediendeClaim, setIngediendeClaim] = useState<Claim | null>(null)
 
-  function copyCode() {
-    navigator.clipboard.writeText(KORTINGSCODE).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2200)
-    })
+  const claim = ingediendeClaim ?? data?.claim ?? null
+  const compact = variant === 'compact'
+  const popup = variant === 'popup'
+  const vandaag = new Date().toISOString().slice(0, 10)
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/invest-avond-claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mobiel_nummer: mobielNummer, datum_keuze: datumKeuze, website }),
+      })
+      const resultaat = await response.json().catch(() => null)
+      if (!response.ok) {
+        setError(resultaat?.error ?? 'Je aanvraag kon niet worden verstuurd. Probeer opnieuw.')
+        return
+      }
+      setIngediendeClaim(resultaat.claim)
+      await mutate({ claim: resultaat.claim }, false)
+    } catch {
+      setError('Netwerkfout. Controleer je verbinding en probeer opnieuw.')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  if (variant === 'compact') {
+  if (claim) {
     return (
-      <div
-        className="px-4 py-4 rounded-xl border flex flex-col gap-3"
-        style={{ background: 'rgba(37,0,245,0.04)', borderColor: 'rgba(37,0,245,0.18)' }}
-      >
-        <div className="flex items-center gap-2">
-          <Ticket size={15} style={{ color: '#2500F5' }} />
-          <p className="text-sm font-semibold" style={{ color: '#0d0f14' }}>
-            Je gratis Invest-avond staat klaar
-          </p>
-        </div>
-
-        {/* Code row */}
-        <div className="flex items-center gap-2">
-          <div
-            className="flex-1 min-w-0 px-3 py-2 rounded-lg font-mono text-sm font-bold tracking-wide select-all whitespace-nowrap overflow-x-auto"
-            style={{ background: '#fff', border: '1px solid rgba(37,0,245,0.2)', color: '#2500F5' }}
-          >
-            {KORTINGSCODE}
+      <div className={`flex flex-col gap-3 rounded-2xl border border-border bg-card ${compact ? 'p-4' : 'p-6'}`}>
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+            <CheckCircle2 size={20} />
           </div>
-          <button
-            onClick={copyCode}
-            className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-all hover:scale-105"
-            style={{ background: copied ? 'rgba(37,0,245,0.1)' : '#2500F5', color: '#fff' }}
-            aria-label="Kopieer code"
-          >
-            {copied ? <Check size={15} style={{ color: '#2500F5' }} /> : <Copy size={14} />}
-          </button>
+          <div>
+            <p className="font-bold text-foreground">Je aanvraag is goed ontvangen.</p>
+            <p className="text-sm leading-6 text-muted-foreground">Het Archer-team neemt contact met je op.</p>
+          </div>
         </div>
-
-        <p className="text-xs" style={{ color: 'rgba(13,15,20,0.5)' }}>
-          Vul deze code in op Eventbrite om je ticket gratis te maken. De code is eenmalig geldig.
-        </p>
-
-        <a
-          href={EVENTBRITE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-semibold transition-opacity hover:opacity-85"
-          style={{ background: '#2500F5', color: '#fff' }}
-        >
-          Reserveer je gratis plaats
-          <ExternalLink size={13} />
-        </a>
+        <div className="rounded-xl bg-background px-4 py-3 text-sm text-foreground">
+          Voorkeursdatum: <strong>{formatDatum(claim.datum_keuze)}</strong>
+        </div>
       </div>
     )
   }
 
-  // Full variant
   return (
-    <div
-      className="rounded-2xl mb-8 px-7 py-6"
-      style={{
-        background: 'rgba(37,0,245,0.05)',
-        border: '1.5px solid rgba(37,0,245,0.18)',
-      }}
-    >
-      <p className="text-xs font-bold tracking-[0.15em] mb-2" style={{ color: '#2500F5' }}>
-        VRIJGESPEELD
-      </p>
-      <h2 className="text-xl font-extrabold mb-1.5 text-balance" style={{ color: '#0d0f14' }}>
-        Proficiat, je gratis Invest-avond staat klaar.
-      </h2>
-      <p className="text-sm mb-5" style={{ color: 'rgba(13,15,20,0.55)', lineHeight: 1.55 }}>
-        Gebruik onderstaande kortingscode op de Eventbrite-pagina om je ticket gratis te maken. De code is <strong style={{ color: '#0d0f14' }}>eenmalig</strong> geldig.
-      </p>
-
-      {/* Code block — stacks on mobile so the code never wraps mid-word against the button */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 mb-3">
-        <div
-          className="flex-1 min-w-0 px-4 py-3 rounded-xl font-mono text-base font-bold tracking-wide select-all whitespace-nowrap overflow-x-auto"
-          style={{ background: '#fff', border: '1.5px solid rgba(37,0,245,0.25)', color: '#2500F5' }}
-        >
-          {KORTINGSCODE}
+    <div className={`rounded-2xl border border-border bg-card ${popup ? 'p-0' : compact ? 'p-4' : 'p-6 md:p-7'}`}>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2 text-primary">
+          <Ticket size={compact ? 15 : 18} />
+          <p className="text-xs font-bold uppercase tracking-wider">Vrijgespeeld</p>
         </div>
-        <button
-          onClick={copyCode}
-          className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl text-sm font-semibold shrink-0 transition-all hover:scale-[1.02] active:scale-[0.98]"
-          style={{
-            background: copied ? 'rgba(37,0,245,0.08)' : '#f0f3fb',
-            color: copied ? '#2500F5' : '#0d0f14',
-            border: '1.5px solid',
-            borderColor: copied ? 'rgba(37,0,245,0.2)' : '#e8ecf4',
-          }}
-          aria-label="Kopieer code"
-        >
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-          {copied ? 'Gekopieerd' : 'Kopieer'}
-        </button>
+        <h2 className={`${compact ? 'text-base' : 'text-xl'} font-extrabold text-balance text-foreground`}>
+          Proficiat, je hebt een gratis plek verdiend.
+        </h2>
+        <p className="text-sm leading-6 text-muted-foreground">
+          Vul je mobiel nummer en voorkeursdatum in. Het Archer-team bevestigt je plaats persoonlijk.
+        </p>
       </div>
 
-      <a
-        href={EVENTBRITE_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-opacity hover:opacity-85"
-        style={{ background: '#2500F5', color: '#fff' }}
-      >
-        Reserveer je gratis plaats
-        <ExternalLink size={13} />
-      </a>
+      <form onSubmit={submit} className="mt-5 flex flex-col gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row">
+          <label className="flex flex-1 flex-col gap-1.5 text-sm font-semibold text-foreground">
+            Mobiel nummer
+            <span className="relative">
+              <Phone size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                required
+                minLength={8}
+                maxLength={20}
+                value={mobielNummer}
+                onChange={event => setMobielNummer(event.target.value)}
+                placeholder="bv. +32 470 12 34 56"
+                className="w-full rounded-xl border border-border bg-background py-3 pl-10 pr-3 text-base text-foreground outline-none transition-shadow focus:ring-2 focus:ring-ring"
+              />
+            </span>
+          </label>
+
+          <label className="flex flex-1 flex-col gap-1.5 text-sm font-semibold text-foreground">
+            Voorkeursdatum
+            <span className="relative">
+              <CalendarDays size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="date"
+                required
+                min={vandaag}
+                value={datumKeuze}
+                onChange={event => setDatumKeuze(event.target.value)}
+                className="w-full rounded-xl border border-border bg-background py-3 pl-10 pr-3 text-base text-foreground outline-none transition-shadow focus:ring-2 focus:ring-ring"
+              />
+            </span>
+          </label>
+        </div>
+
+        <label className="absolute -left-[9999px]" aria-hidden="true">
+          Website
+          <input type="text" tabIndex={-1} autoComplete="off" value={website} onChange={event => setWebsite(event.target.value)} />
+        </label>
+
+        {error && <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+
+        <div className={`flex flex-col gap-3 ${compact ? '' : 'sm:flex-row sm:items-center sm:justify-between'}`}>
+          <p className="text-xs leading-5 text-muted-foreground">Eén claim per account. Je gegevens worden enkel gebruikt om je plaats te bevestigen.</p>
+          <button type="submit" disabled={loading} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-85 disabled:opacity-50">
+            {loading && <Loader2 size={15} className="animate-spin" />}
+            {loading ? 'Aanvraag versturen…' : 'Claim mijn gratis avond'}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }

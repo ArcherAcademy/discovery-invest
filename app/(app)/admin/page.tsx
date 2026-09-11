@@ -9,6 +9,7 @@ import { WORKFLOWS } from '@/lib/workflow-engine'
 import { HUBSPOT_CODES_ORDERED } from '@/lib/hubspot-codes'
 import { VoortgangTab } from '@/components/admin/VoortgangTab'
 import { InhaalrondeModal } from '@/components/admin/InhaalrondeModal'
+import { InvestAvondClaimsTab } from '@/components/admin/InvestAvondClaimsTab'
 import type { DemoUser, DemoUserFunnel, DemoWebhookLog, DemoTriggerLog, DemoWebhookConfig, AccountWebhookLog, DemoQuizSubmission } from '@/lib/types'
 import { QUIZ_QUESTIONS } from '@/lib/quiz-data'
 import { hasPermanentAccess, isTrialExpired, trialDaysRemaining } from '@/lib/access'
@@ -24,7 +25,7 @@ interface DemoInvite {
 
 type AccountStatus = 'aangemaakt' | 'geactiveerd' | 'zonder_link'
 
-type Tab = 'overview' | 'accounts' | 'users' | 'mentors' | 'webhooks' | 'workflows' | 'history' | 'account_logs' | 'voortgang'
+type Tab = 'overview' | 'accounts' | 'users' | 'mentors' | 'webhooks' | 'workflows' | 'history' | 'account_logs' | 'voortgang' | 'claims'
 
 export default function AdminPage() {
   const { user, locale } = useApp()
@@ -388,6 +389,7 @@ export default function AdminPage() {
     { id: 'overview', label: tr.admin.overview },
     { id: 'accounts', label: 'Accounts' },
     { id: 'voortgang', label: 'Voortgang' },
+    { id: 'claims', label: 'Claims' },
     { id: 'users', label: tr.admin.users },
     { id: 'mentors', label: 'Mentoren' },
     { id: 'workflows', label: 'Workflows' },
@@ -599,6 +601,9 @@ export default function AdminPage() {
 
       {/* Voortgang tab */}
       {tab === 'voortgang' && <VoortgangTab />}
+
+      {/* Gratis Invest-avond claims — uitsluitend voor admins */}
+      {tab === 'claims' && isAdmin && <InvestAvondClaimsTab />}
 
       {/* Accounts tab */}
       {tab === 'accounts' && (() => {
