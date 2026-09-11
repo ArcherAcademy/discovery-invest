@@ -25,7 +25,6 @@ export async function GET(req: NextRequest) {
     { data: accountLogsData },
     { data: invitesData },
     { data: quizData },
-    { data: followUpDisabledData },
   ] = await Promise.all([
     supabase.from('demo_invest_users').select('*').order('created_at', { ascending: false }),
     supabase.from('demo_invest_user_funnel').select('*'),
@@ -35,17 +34,10 @@ export async function GET(req: NextRequest) {
     supabase.from('demo_invest_account_webhook_log').select('*').order('created_at', { ascending: false }).limit(300),
     supabase.from('demo_invest_invites').select('user_id, expires_at, used_at'),
     supabase.from('demo_invest_quiz_submissions').select('*'),
-    supabase.from('demo_invest_trigger_sent').select('user_id').eq('workflow_naam', '__automatische_opvolging_uit__'),
   ])
 
-  const followUpDisabledUserIds = new Set((followUpDisabledData ?? []).map(row => row.user_id))
-  const users = (usersData ?? []).map(user => ({
-    ...user,
-    opvolging_actief: !followUpDisabledUserIds.has(user.id),
-  }))
-
   return NextResponse.json({
-    users,
+    users: usersData ?? [],
     funnels: funnelsData ?? [],
     logs: logsData ?? [],
     triggerLogs: triggerData ?? [],

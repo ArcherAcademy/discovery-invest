@@ -7,7 +7,6 @@ import {
   Zap, TrendingUp, BarChart2, ClipboardList, ToggleLeft, ToggleRight,
 } from 'lucide-react'
 import { QUIZ_QUESTIONS } from '@/lib/quiz-data'
-import { UserFollowUpControl } from '@/components/admin/UserFollowUpControl'
 
 // ── Types ────────────────────────────────────────────────────────
 interface VideoStrip {
@@ -24,7 +23,6 @@ interface UserRow {
   id: string
   email: string
   name: string
-  opvolging_actief: boolean
   created_at: string | null
   activated_at: string | null
   last_activity_at: string | null
@@ -38,11 +36,6 @@ interface UserRow {
   all_completed_at: string | null
   invest_avond_geclaimd: boolean
   invest_avond_verschenen: boolean
-  contact_owner_email: string | null
-  call_opened_at: string | null
-  call_clicked_at: string | null
-  call_booked: boolean
-  call_booked_at: string | null
   quiz_submission: { submitted_at: string; score: number; answers: { question_no: number; chosen: string; correct: boolean }[] } | null
 }
 
@@ -448,7 +441,7 @@ function TrialExtendBox({ user, onExtended }: { user: UserRow; onExtended: () =>
 }
 
 // ── UserDetailSlideOver ───────────────────────────────────────
-function UserDetailSlideOver({ user, onClose, onExtended, onFollowUpChange }: { user: UserRow; onClose: () => void; onExtended: () => void; onFollowUpChange: (actief: boolean) => void }) {
+function UserDetailSlideOver({ user, onClose, onExtended }: { user: UserRow; onClose: () => void; onExtended: () => void }) {
   const now = Date.now()
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set())
 
@@ -705,23 +698,11 @@ function UserDetailSlideOver({ user, onClose, onExtended, onFollowUpChange }: { 
               </div>
             </div>
           </div>
-          <div className="flex items-start gap-2">
-            <UserFollowUpControl
-              userId={user.id}
-              actief={user.opvolging_actief}
-              compact
-              onChange={onFollowUpChange}
-            />
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Detailpaneel sluiten"
-              className="w-8 h-8 flex items-center justify-center rounded-xl shrink-0"
-              style={{ background: '#f0f3fb', color: TEXT_DIM }}
-            >
-              <X size={14} />
-            </button>
-          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-xl shrink-0"
+            style={{ background: '#f0f3fb', color: TEXT_DIM }}>
+            <X size={14} />
+          </button>
         </div>
 
         {/* Scrollable body */}
@@ -1237,13 +1218,6 @@ export function VoortgangTab() {
                     {u.event_booked && (
                       <Calendar size={12} style={{ color: COBALT }} />
                     )}
-                    {u.call_booked ? (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg" style={{ background: GREEN_BG, color: GREEN }}>Call geboekt</span>
-                    ) : u.call_clicked_at ? (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg" style={{ background: COBALT_08, color: COBALT }}>Call geklikt</span>
-                    ) : u.call_opened_at ? (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg" style={{ background: '#f0f3fb', color: TEXT_DIM }}>Call gezien</span>
-                    ) : null}
                   </div>
 
                   {/* Arrow hint */}
@@ -1404,16 +1378,9 @@ export function VoortgangTab() {
       {selectedUser && (
         <UserDetailSlideOver
           user={selectedUser}
-            onClose={() => setSelectedUser(null)}
-            onExtended={refreshSilent}
-            onFollowUpChange={actief => {
-              setSelectedUser(current => current ? { ...current, opvolging_actief: actief } : current)
-              setData(current => current ? {
-                ...current,
-                userRows: current.userRows.map(row => row.id === selectedUser.id ? { ...row, opvolging_actief: actief } : row),
-              } : current)
-            }}
-          />
+          onClose={() => setSelectedUser(null)}
+          onExtended={refreshSilent}
+        />
       )}
     </div>
   )

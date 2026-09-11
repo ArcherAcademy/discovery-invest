@@ -72,14 +72,10 @@ export async function createSession(userId: string): Promise<string> {
  */
 export function applySessionCookie(response: import('next/server').NextResponse, rawToken: string): void {
   const expires = new Date(Date.now() + SESSION_DURATION_MS)
-  const isProduction = process.env.NODE_ENV === 'production'
-
   response.cookies.set(COOKIE_NAME, rawToken, {
     httpOnly: true,
-    secure: isProduction,
-    // V0 toont deployments in een cross-site iframe. SameSite=None is daar
-    // nodig; lokaal op HTTP blijft Lax vereist omdat Secure ontbreekt.
-    sameSite: isProduction ? 'none' : 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
     path: '/',
     expires,
   })

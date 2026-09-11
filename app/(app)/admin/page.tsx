@@ -9,8 +9,6 @@ import { WORKFLOWS } from '@/lib/workflow-engine'
 import { HUBSPOT_CODES_ORDERED } from '@/lib/hubspot-codes'
 import { VoortgangTab } from '@/components/admin/VoortgangTab'
 import { InhaalrondeModal } from '@/components/admin/InhaalrondeModal'
-import { UserFollowUpControl } from '@/components/admin/UserFollowUpControl'
-import { BookingLinksTab } from '@/components/admin/BookingLinksTab'
 import type { DemoUser, DemoUserFunnel, DemoWebhookLog, DemoTriggerLog, DemoWebhookConfig, AccountWebhookLog, DemoQuizSubmission } from '@/lib/types'
 import { QUIZ_QUESTIONS } from '@/lib/quiz-data'
 import { hasPermanentAccess, isTrialExpired, trialDaysRemaining } from '@/lib/access'
@@ -26,7 +24,7 @@ interface DemoInvite {
 
 type AccountStatus = 'aangemaakt' | 'geactiveerd' | 'zonder_link'
 
-type Tab = 'overview' | 'accounts' | 'users' | 'mentors' | 'webhooks' | 'workflows' | 'history' | 'account_logs' | 'voortgang' | 'booking_links'
+type Tab = 'overview' | 'accounts' | 'users' | 'mentors' | 'webhooks' | 'workflows' | 'history' | 'account_logs' | 'voortgang'
 
 export default function AdminPage() {
   const { user, locale } = useApp()
@@ -383,30 +381,6 @@ export default function AdminPage() {
     setWebhookConfig(prev => prev.map(c => c.trigger_naam === triggerNaam ? { ...c, actief: !current } : c))
   }
 
-  async function handleOwnerUpdate(userId: string, contactOwnerEmail: string) {
-    const response = await fetch('/api/admin/user-owner', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, contact_owner_email: contactOwnerEmail }),
-    })
-    if (!response.ok) return
-    setUsers(current => current.map(item => item.id === userId
-      ? { ...item, contact_owner_email: contactOwnerEmail.trim().toLowerCase() || null }
-      : item))
-  }
-
-  async function handleCallBookedUpdate(userId: string, callBooked: boolean) {
-    const response = await fetch('/api/admin/user-owner', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, call_booked: callBooked }),
-    })
-    if (!response.ok) return
-    setUsers(current => current.map(item => item.id === userId
-      ? { ...item, call_booked: callBooked, call_booked_at: callBooked ? new Date().toISOString() : null }
-      : item))
-  }
-
   // Tabs accessible to mentor (opvolg-tabs only)
   const MENTOR_TABS: Tab[] = ['overview', 'accounts', 'voortgang', 'users']
 
@@ -416,7 +390,6 @@ export default function AdminPage() {
     { id: 'voortgang', label: 'Voortgang' },
     { id: 'users', label: tr.admin.users },
     { id: 'mentors', label: 'Mentoren' },
-    { id: 'booking_links', label: 'Boekingslinks' },
     { id: 'workflows', label: 'Workflows' },
     { id: 'history', label: 'Trigger-history' },
     { id: 'webhooks', label: tr.admin.webhookLog },
@@ -485,8 +458,6 @@ export default function AdminPage() {
           ))}
         </div>
       )}
-
-      {tab === 'booking_links' && isAdmin && <BookingLinksTab />}
 
       {/* Mentorenbeheer — uitsluitend zichtbaar voor admins */}
       {tab === 'mentors' && isAdmin && (() => {
@@ -724,7 +695,7 @@ export default function AdminPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e8ecf4', background: '#F5F8FF' }}>
-                      {['Naam', 'E-mail', 'Contacteigenaar', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
+                      {['Naam', 'E-mail', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Verleng trial', ''].map(h => (
                         <th key={h} className="px-4 py-3 text-left font-semibold" style={{ color: 'rgba(13,15,20,0.45)' }}>{h}</th>
                       ))}
                     </tr>
@@ -747,19 +718,6 @@ export default function AdminPage() {
 
                           {/* E-mail */}
                           <td className="px-4 py-3" style={{ color: 'rgba(13,15,20,0.6)' }}>{u.email}</td>
-
-                          {/* HubSpot-contacteigenaar */}
-                          <td className="px-4 py-3 min-w-48">
-                            <input
-                              type="email"
-                              defaultValue={u.contact_owner_email ?? ''}
-                              onBlur={event => handleOwnerUpdate(u.id, event.currentTarget.value)}
-                              placeholder="adviseur@bedrijf.be"
-                              aria-label={`Contacteigenaar voor ${u.email}`}
-                              className="w-full rounded-lg border px-2 py-1.5 text-[11px] outline-none focus:ring-2"
-                              style={{ borderColor: '#e8ecf4', color: '#0d0f14', background: '#fafbff' }}
-                            />
-                          </td>
 
                           {/* Status badge */}
                           <td className="px-4 py-3 whitespace-nowrap">
@@ -819,38 +777,6 @@ export default function AdminPage() {
                             }
                           </td>
 
-                          {/* Persoonlijke adviescall */}
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => handleCallBookedUpdate(u.id, !u.call_booked)}
-                              className="rounded-full px-2.5 py-1 text-[10px] font-semibold transition-opacity hover:opacity-75"
-                              style={u.call_booked
-                                ? { background: 'rgba(22,163,74,0.1)', color: '#16a34a' }
-                                : u.call_clicked_at
-                                  ? { background: 'rgba(37,0,245,0.08)', color: '#2500F5' }
-                                  : { background: '#f0f3fb', color: 'rgba(13,15,20,0.45)' }}
-                            >
-                              {u.call_booked ? 'Geboekt' : u.call_clicked_at ? 'Geklikt' : u.call_opened_at ? 'Gezien' : 'Niet gezien'}
-                            </button>
-                          </td>
-
-                          {/* Automatische opvolging */}
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            {u.role === 'user' ? (
-                              <UserFollowUpControl
-                                userId={u.id}
-                                actief={u.opvolging_actief}
-                                compact
-                                onChange={actief => setUsers(current => current.map(item =>
-                                  item.id === u.id ? { ...item, opvolging_actief: actief } : item
-                                ))}
-                              />
-                            ) : (
-                              <span className="text-[10px]" style={{ color: 'rgba(13,15,20,0.35)' }}>Niet van toepassing</span>
-                            )}
-                          </td>
-
                           {/* Extend trial */}
                           <td className="px-4 py-3 whitespace-nowrap">
                             {permanent ? (
@@ -905,7 +831,7 @@ export default function AdminPage() {
                     })}
                     {filtered.length === 0 && (
                       <tr>
-                        <td colSpan={13} className="px-4 py-8 text-center text-xs" style={{ color: 'rgba(13,15,20,0.35)' }}>
+                        <td colSpan={10} className="px-4 py-8 text-center text-xs" style={{ color: 'rgba(13,15,20,0.35)' }}>
                           Geen accounts gevonden
                         </td>
                       </tr>

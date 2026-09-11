@@ -5,7 +5,6 @@ import { Lock, Play, Clock, FileText } from 'lucide-react'
 import { useApp } from '@/components/app-context'
 import GratisClaimBlock from '@/components/GratisClaimBlock'
 import GratisClaimPopup from '@/components/GratisClaimPopup'
-import CallBookingBlock from '@/components/CallBookingBlock'
 import PdfThumbnail from '@/components/PdfThumbnail'
 
 // Accent colours per video slot (index 0–5)
@@ -73,8 +72,6 @@ export default function TrajectPage() {
           <p className="text-xs" style={{ color: 'rgba(13,15,20,0.4)' }}>video&apos;s</p>
         </div>
       </div>
-
-      <CallBookingBlock />
 
       {/* Core videos — main block */}
       <div>

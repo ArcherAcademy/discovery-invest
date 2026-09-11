@@ -148,13 +148,6 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   }
 
   const name = [voornaam, achternaam].filter(Boolean).join(' ') || email.split('@')[0]
-  const contactOwnerEmail = pick(
-    body,
-    'contact_owner_email',
-    'hubspot_owner_email',
-    'owner_email',
-    'contacteigenaar_email',
-  ).toLowerCase() || null
 
   // ── 4. Voorlopig account aanmaken of hergebruiken ─────────────────────────
   const { data: existing } = await supabase
@@ -170,12 +163,6 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   if (existing) {
     userId = existing.id
     outcome = 'reused'
-    if (contactOwnerEmail) {
-      await supabase
-        .from('demo_invest_users')
-        .update({ contact_owner_email: contactOwnerEmail })
-        .eq('id', userId)
-    }
     console.log(`[v0] account-aanmaken: bestaand niet-geactiveerd account hergebruikt voor ${email} (id=${userId})`)
   } else {
     const newId = crypto.randomUUID()
@@ -188,7 +175,6 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
         role: 'user',
         locale: 'nl',
         whatsapp_opt_in: false,
-        contact_owner_email: contactOwnerEmail,
         created_at: new Date().toISOString(),
         activated_at: null,
       })

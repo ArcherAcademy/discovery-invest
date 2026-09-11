@@ -63,19 +63,34 @@ export async function POST(req: NextRequest) {
   const now = new Date()
   const trialExpires = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
 
+  const { data: userBeforeActivation } = await supabase
+    .from('demo_invest_users')
+    .select('activated_at')
+    .eq('id', userId)
+    .maybeSingle()
+
+  const isPasswordReset = Boolean(userBeforeActivation?.activated_at)
+
   // ── 2. Hash wachtwoord server-side ────────────────────────────────────────
   const passwordHash = await hashPassword(password)
 
-  // ── 3. Profiel activeren ──────────────────────────────────────────────────
+  // ── 3. Profiel activeren of bestaand wachtwoord herstellen ───────────────
+  const userUpdate = isPasswordReset
+    ? {
+        password_hash: passwordHash,
+        last_activity_at: now.toISOString(),
+      }
+    : {
+        password_hash: passwordHash,
+        activated_at: now.toISOString(),
+        trial_started_at: now.toISOString(),
+        trial_expires_at: trialExpires.toISOString(),
+        last_activity_at: now.toISOString(),
+      }
+
   const { error: activateError } = await supabase
     .from('demo_invest_users')
-    .update({
-      password_hash: passwordHash,
-      activated_at: now.toISOString(),
-      trial_started_at: now.toISOString(),
-      trial_expires_at: trialExpires.toISOString(),
-      last_activity_at: now.toISOString(),
-    })
+    .update(userUpdate)
     .eq('id', userId)
 
   if (activateError) {
@@ -96,16 +111,18 @@ export async function POST(req: NextRequest) {
     // The write succeeded despite the error — continue
   }
 
-  // ── 4. Funnel aanmaken ────────────────────────────────────────────────────
-  await supabase
-    .from('demo_invest_user_funnel')
-    .upsert({
-      user_id: userId,
-      videos_completed_count: 0,
-      all_completed_at: null,
-      event_booked: false,
-      event_booked_at: null,
-    }, { onConflict: 'user_id' })
+  // ── 4. Funnel alleen bij eerste activatie aanmaken ────────────────────────
+  if (!isPasswordReset) {
+    await supabase
+      .from('demo_invest_user_funnel')
+      .upsert({
+        user_id: userId,
+        videos_completed_count: 0,
+        all_completed_at: null,
+        event_booked: false,
+        event_booked_at: null,
+      }, { onConflict: 'user_id' })
+  }
 
   // ── 5. Invite sluiten ─────────────────────────────────────────────────────
   await supabase
@@ -125,20 +142,22 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // ── 7. Welkom-trigger (non-fatal) ─────────────────────────────────────────
-  try {
-    const { data: newUser } = await supabase
-      .from('demo_invest_users')
-      .select('*')
-      .eq('id', userId)
-      .single()
+  // ── 7. Welkom-trigger alleen bij eerste activatie (non-fatal) ─────────────
+  if (!isPasswordReset) {
+    try {
+      const { data: newUser } = await supabase
+        .from('demo_invest_users')
+        .select('*')
+        .eq('id', userId)
+        .single()
 
-    if (newUser) {
-      await fireInstant(supabase, 'welkom', newUser as DemoUser, new Set(), {
-        trial_expires_at: (newUser as DemoUser).trial_expires_at,
-      })
-    }
-  } catch { /* non-fatal */ }
+      if (newUser) {
+        await fireInstant(supabase, 'welkom', newUser as DemoUser, new Set(), {
+          trial_expires_at: (newUser as DemoUser).trial_expires_at,
+        })
+      }
+    } catch { /* non-fatal */ }
+  }
 
   // ── 8. Redirect naar /home als ingelogde gebruiker ────────────────────────
   const redirectUrl = new URL('/home', req.url)
