@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { Play, ChevronRight, Lock, CheckCircle2, GraduationCap, CalendarDays, Pause, Volume2, VolumeX, Clock, Zap } from 'lucide-react'
 import GratisClaimBlock from '@/components/GratisClaimBlock'
 import GratisClaimPopup from '@/components/GratisClaimPopup'
-import CallBookingBlock from '@/components/CallBookingBlock'
 import { useApp } from '@/components/app-context'
 import { t } from '@/lib/i18n'
 
@@ -444,10 +443,8 @@ export default function HomePage() {
             </span>
           </Link>
 
-<CallBookingBlock compact />
-
-  {/* Events card */}
-  <Link
+          {/* Events card */}
+          <Link
             href="/events"
             className="flex items-center gap-3 p-4 rounded-xl border transition-all hover:shadow-md group"
             style={{ background: '#fff', borderColor: '#e8ecf4', boxShadow: '0 1px 3px rgba(13,15,20,0.05)' }}

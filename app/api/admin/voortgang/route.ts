@@ -18,11 +18,10 @@ export async function GET(req: NextRequest) {
     { data: progress },
     { data: funnels },
     { data: quizRows },
-    { data: followUpDisabledRows },
   ] = await Promise.all([
     supabase
       .from('demo_invest_users')
-      .select('id, email, name, activated_at, trial_expires_at, last_activity_at, created_at, contact_owner_email, call_opened_at, call_clicked_at, call_booked, call_booked_at')
+      .select('id, email, name, activated_at, trial_expires_at, last_activity_at, created_at')
       .not('activated_at', 'is', null)
       .order('activated_at', { ascending: false }),
     supabase
@@ -38,10 +37,6 @@ export async function GET(req: NextRequest) {
     supabase
       .from('demo_invest_quiz_submissions')
       .select('user_id, submitted_at, score, answers'),
-    supabase
-      .from('demo_invest_trigger_sent')
-      .select('user_id')
-      .eq('workflow_naam', '__automatische_opvolging_uit__'),
   ])
 
   const coreVideos = (videos ?? []).filter(v => v.section === 'core')
@@ -57,7 +52,6 @@ export async function GET(req: NextRequest) {
 
   const funnelByUser = new Map((funnels ?? []).map(f => [f.user_id, f]))
   const quizByUser = new Map((quizRows ?? []).map(q => [q.user_id, q]))
-  const followUpDisabledUserIds = new Set((followUpDisabledRows ?? []).map(row => row.user_id))
 
   // ── Per-user rows ─────────────────────────────────────────────
   const userRows = (users ?? []).map(u => {
@@ -93,7 +87,6 @@ export async function GET(req: NextRequest) {
       id: u.id,
       email: u.email,
       name: u.name,
-      opvolging_actief: !followUpDisabledUserIds.has(u.id),
       activated_at: u.activated_at,
       last_activity_at: u.last_activity_at,
       ms_since_activity: msSinceActivity,
@@ -107,11 +100,6 @@ export async function GET(req: NextRequest) {
       all_completed_at: funnel?.all_completed_at ?? null,
       invest_avond_geclaimd: funnel?.invest_avond_geclaimd ?? false,
       invest_avond_verschenen: funnel?.invest_avond_verschenen ?? false,
-      contact_owner_email: u.contact_owner_email ?? null,
-      call_opened_at: u.call_opened_at ?? null,
-      call_clicked_at: u.call_clicked_at ?? null,
-      call_booked: u.call_booked ?? false,
-      call_booked_at: u.call_booked_at ?? null,
       quiz_submission: quizByUser.get(u.id) ?? null,
     }
   })
