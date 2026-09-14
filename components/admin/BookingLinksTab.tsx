@@ -87,7 +87,7 @@ export function BookingLinksTab() {
           <div>
             <h2 className="text-lg font-bold">Persoonlijke boekingslinks</h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Koppel het e-mailadres van de HubSpot-contacteigenaar aan diens persoonlijke agenda. De standaardlink vangt contacten zonder match op.
+              Koppel de HubSpot owner-ID van de contacteigenaar aan diens persoonlijke agenda. De standaardlink vangt contacten zonder match op.
             </p>
           </div>
         </div>
@@ -98,8 +98,8 @@ export function BookingLinksTab() {
             <input required value={form.naam} onChange={event => setForm(current => ({ ...current, naam: event.target.value }))} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-primary/20" placeholder="Voornaam Achternaam" />
           </label>
           <label className="flex flex-col gap-1.5 text-xs font-semibold">
-            HubSpot-e-mailadres
-            <input required type="email" value={form.owner_email} onChange={event => setForm(current => ({ ...current, owner_email: event.target.value }))} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-primary/20" placeholder="adviseur@bedrijf.be" />
+            HubSpot owner-ID
+            <input required inputMode="numeric" value={form.owner_email} onChange={event => setForm(current => ({ ...current, owner_email: event.target.value }))} className="rounded-xl border border-border bg-background px-3 py-2.5 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-primary/20" placeholder="12345678" />
           </label>
           <label className="flex flex-col gap-1.5 text-xs font-semibold lg:col-span-2">
             Boekingslink
@@ -135,7 +135,7 @@ export function BookingLinksTab() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[700px] text-left text-sm">
-              <thead className="bg-muted text-muted-foreground"><tr><th className="px-4 py-3">Adviseur</th><th className="px-4 py-3">E-mail</th><th className="px-4 py-3">Link</th><th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right">Actie</th></tr></thead>
+              <thead className="bg-muted text-muted-foreground"><tr><th className="px-4 py-3">Adviseur</th><th className="px-4 py-3">Owner-ID</th><th className="px-4 py-3">Link</th><th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right">Actie</th></tr></thead>
               <tbody>
                 {data?.links.map(link => (
                   <tr key={link.id} className="border-t border-border">

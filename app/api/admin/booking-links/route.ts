@@ -31,12 +31,12 @@ export async function POST(req: NextRequest) {
   if (denied) return denied
 
   const body = await req.json() as Partial<BookingLink>
-  const ownerEmail = body.owner_email?.trim().toLowerCase()
+  const ownerId = body.owner_email?.trim()
   const naam = body.naam?.trim()
   const bookingUrl = body.booking_url?.trim()
 
-  if (!ownerEmail || !naam || !bookingUrl) {
-    return NextResponse.json({ error: 'E-mail, naam en boekingslink zijn verplicht.' }, { status: 400 })
+  if (!ownerId || !naam || !bookingUrl) {
+    return NextResponse.json({ error: 'HubSpot owner-ID, naam en boekingslink zijn verplicht.' }, { status: 400 })
   }
   try {
     const url = new URL(bookingUrl)
@@ -48,14 +48,14 @@ export async function POST(req: NextRequest) {
   const supabase = createAdminClient()
   try {
     const links = await getBookingLinks(supabase)
-    const duplicate = links.find(link => link.owner_email === ownerEmail && link.id !== body.id)
+    const duplicate = links.find(link => link.owner_email === ownerId && link.id !== body.id)
     if (duplicate) {
-      return NextResponse.json({ error: 'Voor dit e-mailadres bestaat al een boekingslink.' }, { status: 409 })
+      return NextResponse.json({ error: 'Voor deze HubSpot owner-ID bestaat al een boekingslink.' }, { status: 409 })
     }
 
     const link: BookingLink = {
       id: body.id ?? crypto.randomUUID(),
-      owner_email: ownerEmail,
+      owner_email: ownerId,
       naam,
       booking_url: bookingUrl,
       actief: body.actief ?? true,

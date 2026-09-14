@@ -149,13 +149,17 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   }
 
   const name = [voornaam, achternaam].filter(Boolean).join(' ') || email.split('@')[0]
-  const contactOwnerEmail = pick(
+  const contactOwnerId = pick(
     body,
+    'hubspot_owner_id',
+    'contact_owner_id',
+    'owner_id',
+    'contacteigenaar_id',
     'contact_owner_email',
     'hubspot_owner_email',
     'owner_email',
     'contacteigenaar_email',
-  ).toLowerCase() || null
+  ) || null
 
   // ── 4. Voorlopig account aanmaken of hergebruiken ─────────────────────────
   const { data: existing } = await supabase
@@ -197,8 +201,8 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     console.log(`[v0] account-aanmaken: nieuw voorlopig account aangemaakt voor ${email} (id=${userId})`)
   }
 
-  if (contactOwnerEmail) {
-    await updateCallUserState(supabase, userId, { contact_owner_email: contactOwnerEmail })
+  if (contactOwnerId) {
+    await updateCallUserState(supabase, userId, { contact_owner_email: contactOwnerId })
   }
 
   // ── 5. Invite ophalen of aanmaken (nooit twee actieve invites per user) ────
