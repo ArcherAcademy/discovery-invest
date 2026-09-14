@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuthMarker, ensureDiscoveryAuthUser, getDiscoveryAuthEmail } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient } from '@/lib/supabase/server'
+import { hashPassword, createSession, applySessionCookie } from '@/lib/auth'
 import { fireInstant } from '@/lib/workflow-engine'
 import type { DemoUser } from '@/lib/types'
 
@@ -9,58 +8,69 @@ async function sha256hex(raw: string): Promise<string> {
   const buf = new TextEncoder().encode(raw)
   const digest = await crypto.subtle.digest('SHA-256', buf)
   return Array.from(new Uint8Array(digest))
-    .map(byte => byte.toString(16).padStart(2, '0'))
+    .map(b => b.toString(16).padStart(2, '0'))
     .join('')
 }
 
 export async function POST(req: NextRequest) {
   const { token, password } = await req.json()
 
-  if (typeof token !== 'string' || typeof password !== 'string' || !token || !password) {
+  if (!token || !password) {
     return NextResponse.json({ ok: false, error: 'Token en wachtwoord zijn vereist.' }, { status: 400 })
   }
-  if (password.length < 8) {
+  if (typeof password !== 'string' || password.length < 8) {
     return NextResponse.json({ ok: false, error: 'Wachtwoord moet minstens 8 tekens bevatten.' }, { status: 400 })
   }
 
   const tokenHash = await sha256hex(token)
-  const admin = createAdminClient()
-  const { data: invite, error: inviteError } = await admin
+  const supabase = createAdminClient()
+
+  // ── 1. Invite ophalen en valideren ────────────────────────────────────────
+  const { data: invite } = await supabase
     .from('demo_invest_invites')
     .select('id, user_id, email, used_at')
     .eq('token_hash', tokenHash)
     .maybeSingle()
 
-  if (inviteError || !invite) {
+  if (!invite) {
     return NextResponse.json({ ok: false, error: 'Ongeldige activatielink.' }, { status: 400 })
   }
+
   if (invite.used_at) {
-    return NextResponse.json(
-      { ok: false, error: 'Deze activatielink is al gebruikt. Log in via de inlogpagina.' },
-      { status: 409 }
-    )
+    // If the invite is already used, check whether the account actually has a
+    // password_hash. If it does, the user is fully activated — create a new
+    // session so they land on /home immediately. If it does not, a prior
+    // attempt failed mid-way, so allow the activation to proceed.
+    const { data: existingUser } = await supabase
+      .from('demo_invest_users')
+      .select('password_hash')
+      .eq('id', invite.user_id)
+      .maybeSingle()
+
+    if (existingUser?.password_hash) {
+      const rawToken = await createSession(invite.user_id)
+      const redirectUrl = new URL('/home', req.url)
+      const response = NextResponse.redirect(redirectUrl, { status: 303 })
+      applySessionCookie(response, rawToken)
+      return response
+    }
+    // No password_hash yet — fall through to complete activation
   }
+
+  // Geen vervalcheck meer: een activatielink blijft geldig tot hij gebruikt is.
 
   const userId = invite.user_id
   const now = new Date()
   const trialExpires = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-  let authUserId: string
 
-  try {
-    const { authUser } = await ensureDiscoveryAuthUser(userId, password)
-    authUserId = authUser.id
-  } catch (error) {
-    console.error('[v0] activeren: Supabase Auth-gebruiker aanmaken gefaald:', error)
-    return NextResponse.json(
-      { ok: false, error: 'Activatie mislukt. Neem contact op via info@archerinvest.nl.' },
-      { status: 500 }
-    )
-  }
+  // ── 2. Hash wachtwoord server-side ────────────────────────────────────────
+  const passwordHash = await hashPassword(password)
 
-  const { error: activateError } = await admin
+  // ── 3. Profiel activeren ──────────────────────────────────────────────────
+  const { error: activateError } = await supabase
     .from('demo_invest_users')
     .update({
-      password_hash: createAuthMarker(authUserId),
+      password_hash: passwordHash,
       activated_at: now.toISOString(),
       trial_started_at: now.toISOString(),
       trial_expires_at: trialExpires.toISOString(),
@@ -69,58 +79,70 @@ export async function POST(req: NextRequest) {
     .eq('id', userId)
 
   if (activateError) {
-    console.error('[v0] activeren: profiel bijwerken gefaald:', activateError.message)
-    return NextResponse.json(
-      { ok: false, error: 'Activatie mislukt. Neem contact op via info@archerinvest.nl.' },
-      { status: 500 }
-    )
+    // Even if the UPDATE returned an error, verify whether it actually wrote.
+    // Some DB configurations fire a side-effect after a successful write.
+    const { data: checkUser } = await supabase
+      .from('demo_invest_users')
+      .select('password_hash')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (!checkUser?.password_hash) {
+      return NextResponse.json(
+        { ok: false, error: 'Activatie mislukt. Neem contact op via info@archerinvest.nl.' },
+        { status: 500 }
+      )
+    }
+    // The write succeeded despite the error — continue
   }
 
-  await admin.from('demo_invest_user_funnel').upsert(
-    {
+  // ── 4. Funnel aanmaken ────────────────────────────────────────────────────
+  await supabase
+    .from('demo_invest_user_funnel')
+    .upsert({
       user_id: userId,
       videos_completed_count: 0,
       all_completed_at: null,
       event_booked: false,
       event_booked_at: null,
-    },
-    { onConflict: 'user_id' }
-  )
+    }, { onConflict: 'user_id' })
 
-  await admin
+  // ── 5. Invite sluiten ─────────────────────────────────────────────────────
+  await supabase
     .from('demo_invest_invites')
     .update({ used_at: now.toISOString() })
     .eq('id', invite.id)
 
-  const supabase = await createClient()
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email: getDiscoveryAuthEmail(userId),
-    password,
-  })
-
-  if (signInError) {
-    console.error('[v0] activeren: Supabase-sessie aanmaken gefaald:', signInError.message)
+  // ── 6. Sessie aanmaken ────────────────────────────────────────────────────
+  let rawToken: string
+  try {
+    rawToken = await createSession(userId)
+  } catch (err) {
+    console.error('[activate] sessie aanmaken gefaald:', err)
     return NextResponse.json(
-      { ok: false, error: 'Account geactiveerd. Log in via de inlogpagina.' },
+      { ok: false, error: 'Sessie aanmaken mislukt. Log in via /login.' },
       { status: 500 }
     )
   }
 
+  // ── 7. Welkom-trigger (non-fatal) ─────────────────────────────────────────
   try {
-    const { data: newUser } = await admin
+    const { data: newUser } = await supabase
       .from('demo_invest_users')
       .select('*')
       .eq('id', userId)
       .single()
 
     if (newUser) {
-      await fireInstant(admin, 'welkom', newUser as DemoUser, new Set(), {
+      await fireInstant(supabase, 'welkom', newUser as DemoUser, new Set(), {
         trial_expires_at: (newUser as DemoUser).trial_expires_at,
       })
     }
-  } catch {
-    // De welkom-trigger mag een geslaagde activatie niet blokkeren.
-  }
+  } catch { /* non-fatal */ }
 
-  return NextResponse.redirect(new URL('/home', req.url), { status: 303 })
+  // ── 8. Redirect naar /home als ingelogde gebruiker ────────────────────────
+  const redirectUrl = new URL('/home', req.url)
+  const response = NextResponse.redirect(redirectUrl, { status: 303 })
+  applySessionCookie(response, rawToken!)
+  return response
 }

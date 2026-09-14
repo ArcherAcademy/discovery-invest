@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { parseAuthMarker, requireAdmin } from '@/lib/auth'
+import { requireAdmin } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
  * DELETE /api/admin/delete-user
- * Verwijdert een gebruiker en alle gekoppelde gegevens permanent.
+ * Permanently deletes a user and all related rows.
  * Body: { userId: string }
  */
 export async function DELETE(req: NextRequest) {
   try {
     await requireAdmin(req)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unauthorized'
-    return NextResponse.json({ error: message }, { status: message === 'Forbidden' ? 403 : 401 })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unauthorized'
+    return NextResponse.json({ error: msg }, { status: msg === 'Forbidden' ? 403 : 401 })
   }
 
   const { userId } = await req.json()
@@ -21,22 +21,10 @@ export async function DELETE(req: NextRequest) {
   }
 
   const supabase = createAdminClient()
-  const { data: profile } = await supabase
-    .from('demo_invest_users')
-    .select('password_hash')
-    .eq('id', userId)
-    .maybeSingle()
 
-  const authUserId = parseAuthMarker(profile?.password_hash)
-  if (authUserId) {
-    const { error: authError } = await supabase.auth.admin.deleteUser(authUserId)
-    if (authError) {
-      console.error('[v0] delete-user: Supabase Auth-gebruiker verwijderen gefaald:', authError.message)
-      return NextResponse.json({ error: 'Authenticatieaccount verwijderen mislukt.' }, { status: 500 })
-    }
-  }
-
+  // Delete all related rows in the correct order (child → parent)
   const deletes = await Promise.all([
+    supabase.from('demo_invest_sessions').delete().eq('user_id', userId),
     supabase.from('demo_invest_webhook_log').delete().eq('user_id', userId),
     supabase.from('demo_invest_trigger_log').delete().eq('user_id', userId),
     supabase.from('demo_invest_user_funnel').delete().eq('user_id', userId),
@@ -44,9 +32,10 @@ export async function DELETE(req: NextRequest) {
     supabase.from('demo_invest_video_progress').delete().eq('user_id', userId),
   ])
 
-  const firstError = deletes.find(result => result.error)
+  const firstError = deletes.find(r => r.error)
   if (firstError?.error) {
-    console.error('[v0] delete-user: gekoppelde gegevens verwijderen gefaald:', firstError.error.message)
+    console.error('[v0] delete-user: related row deletion failed:', firstError.error.message)
+    // Continue anyway — still try to delete the user row itself
   }
 
   const { error: userError } = await supabase

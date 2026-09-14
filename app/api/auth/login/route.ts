@@ -1,28 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  createAuthMarker,
-  ensureDiscoveryAuthUser,
-  getDiscoveryAuthEmail,
-  parseAuthMarker,
-  verifyLegacyPassword,
-} from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient } from '@/lib/supabase/server'
+import { verifyPassword, createSession, applySessionCookie } from '@/lib/auth'
 import type { DemoUser } from '@/lib/types'
-
-type LoginCandidate = DemoUser & { password_hash: string }
 
 export async function POST(req: NextRequest) {
   const { email, password } = await req.json()
 
-  if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
+  if (!email || !password) {
     return NextResponse.json({ ok: false, error: 'E-mail en wachtwoord zijn vereist.' }, { status: 400 })
   }
 
-  const admin = createAdminClient()
-  const supabase = await createClient()
-  const normalizedEmail = email.toLowerCase().trim()
-  const { data: users, error: userError } = await admin
+  const supabase = createAdminClient()
+
+  const normalizedEmail = (email as string).toLowerCase().trim()
+  const { data: users, error: userError } = await supabase
     .from('demo_invest_users')
     .select('id, email, password_hash, activated_at, role')
     .ilike('email', normalizedEmail)
@@ -35,60 +26,53 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Inloggen mislukt. Probeer het opnieuw.' }, { status: 500 })
   }
 
-  const candidates = (users ?? []) as LoginCandidate[]
-  let authenticatedUser: LoginCandidate | null = null
+  const candidates = (users ?? []) as Array<DemoUser & { password_hash: string }>
+  let typedUser: (DemoUser & { password_hash: string }) | null = null
 
+  // Historische imports kunnen meerdere records met hetzelfde e-mailadres bevatten.
+  // Controleer daarom elk bruikbaar wachtwoordhash in plaats van willekeurig één record te kiezen.
   for (const candidate of candidates) {
-    if (!parseAuthMarker(candidate.password_hash)) continue
-    if (!candidate.activated_at && candidate.role !== 'admin') continue
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email: getDiscoveryAuthEmail(candidate.id),
-      password,
-    })
-    if (!error) {
-      authenticatedUser = candidate
+    if (await verifyPassword(password, candidate.password_hash)) {
+      typedUser = candidate
       break
     }
   }
 
-  if (!authenticatedUser) {
-    for (const candidate of candidates) {
-      if (!candidate.activated_at && candidate.role !== 'admin') continue
-      if (!(await verifyLegacyPassword(password, candidate.password_hash))) continue
-
-      try {
-        const { authUser } = await ensureDiscoveryAuthUser(candidate.id, password)
-        const { error: markerError } = await admin
-          .from('demo_invest_users')
-          .update({ password_hash: createAuthMarker(authUser.id) })
-          .eq('id', candidate.id)
-
-        if (markerError) throw new Error(markerError.message)
-
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: getDiscoveryAuthEmail(candidate.id),
-          password,
-        })
-        if (signInError) throw signInError
-
-        authenticatedUser = candidate
-        break
-      } catch (error) {
-        console.error('[v0] login: migratie naar Supabase Auth gefaald:', error)
-        return NextResponse.json({ ok: false, error: 'Inloggen mislukt. Probeer het opnieuw.' }, { status: 500 })
-      }
-    }
-  }
-
-  if (!authenticatedUser) {
+  if (!typedUser) {
     return NextResponse.json({ ok: false, error: 'Ongeldige e-mail of wachtwoord.' }, { status: 401 })
   }
 
-  await admin
+  // Admins bypass the activated_at check — they are set up directly in the DB
+  if (!typedUser.activated_at && typedUser.role !== 'admin') {
+    return NextResponse.json(
+      { ok: false, error: 'Dit account is nog niet geactiveerd. Gebruik de activatielink uit je e-mail.' },
+      { status: 403 }
+    )
+  }
+
+  await supabase
     .from('demo_invest_users')
     .update({ last_activity_at: new Date().toISOString() })
-    .eq('id', authenticatedUser.id)
+    .eq('id', typedUser.id)
 
-  return NextResponse.json({ ok: true })
+  // Clean up expired + old sessions for this user before creating a new one
+  await supabase
+    .from('demo_invest_sessions')
+    .delete()
+    .eq('user_id', typedUser.id)
+    .lt('expires_at', new Date().toISOString())
+
+  let rawToken: string
+  try {
+    rawToken = await createSession(typedUser.id)
+  } catch (err) {
+    console.error('[v0] login: sessie aanmaken gefaald:', err)
+    return NextResponse.json({ ok: false, error: 'Inloggen mislukt. Probeer het opnieuw.' }, { status: 500 })
+  }
+
+  // Zet de cookie op een gewone fetch-response. Dit werkt ook in de v0-preview,
+  // waar handmatige fetch-redirects de Set-Cookie-header niet betrouwbaar bewaren.
+  const response = NextResponse.json({ ok: true })
+  applySessionCookie(response, rawToken)
+  return response
 }

@@ -1,14 +1,16 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { destroySession } from '@/lib/auth'
 
-export async function POST() {
-  const supabase = await createClient()
-  const { error } = await supabase.auth.signOut({ scope: 'local' })
-
-  if (error) {
-    console.error('[v0] logout: Supabase-sessie beëindigen gefaald:', error.message)
-    return NextResponse.json({ ok: false, error: 'Uitloggen mislukt.' }, { status: 500 })
-  }
-
-  return NextResponse.json({ ok: true })
+export async function POST(req: NextRequest) {
+  await destroySession(req)
+  const response = NextResponse.json({ ok: true })
+  const isProduction = process.env.NODE_ENV === 'production'
+  response.cookies.set('di_session', '', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    path: '/',
+    maxAge: 0,
+  })
+  return response
 }
