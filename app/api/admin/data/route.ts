@@ -16,8 +16,41 @@ export async function GET(req: NextRequest) {
 
   const supabase = createAdminClient()
 
+  const accountBatchSize = 1000
+
+  async function fetchAllUsers() {
+    const { count, error: countError } = await supabase
+      .from('demo_invest_users')
+      .select('id', { count: 'exact', head: true })
+
+    if (countError) throw countError
+
+    const rows = []
+    for (let from = 0; from < (count ?? 0); from += accountBatchSize) {
+      const { data, error } = await supabase
+        .from('demo_invest_users')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, from + accountBatchSize - 1)
+
+      if (error) throw error
+      rows.push(...(data ?? []))
+      if (!data || data.length < accountBatchSize) break
+    }
+
+    return { rows, count: count ?? rows.length }
+  }
+
+  let usersResult
+  try {
+    usersResult = await fetchAllUsers()
+  } catch (error) {
+    console.error('[admin/data] Volledige accountlijst ophalen mislukt:', error)
+    return NextResponse.json({ error: 'De volledige accountlijst kon niet worden opgehaald.' }, { status: 500 })
+  }
+
   const [
-    { data: usersData },
     { data: funnelsData },
     { data: logsData },
     { data: triggerData },
@@ -27,7 +60,6 @@ export async function GET(req: NextRequest) {
     { data: quizData },
     { data: followUpDisabledData },
   ] = await Promise.all([
-    supabase.from('demo_invest_users').select('*').order('created_at', { ascending: false }),
     supabase.from('demo_invest_user_funnel').select('*'),
     supabase.from('demo_invest_webhook_log').select('*').order('created_at', { ascending: false }).limit(200),
     supabase.from('demo_invest_trigger_log').select('*').order('created_at', { ascending: false }).limit(500),
@@ -38,6 +70,8 @@ export async function GET(req: NextRequest) {
     supabase.from('demo_invest_trigger_sent').select('user_id').eq('workflow_naam', '__automatische_opvolging_uit__'),
   ])
 
+  const usersData = usersResult.rows
+
   const followUpDisabledUserIds = new Set((followUpDisabledData ?? []).map(row => row.user_id))
   const users = (usersData ?? []).map(user => ({
     ...user,
@@ -46,6 +80,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     users,
+    accountTotal: usersResult.count,
     funnels: funnelsData ?? [],
     logs: logsData ?? [],
     triggerLogs: triggerData ?? [],
