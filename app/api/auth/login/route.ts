@@ -16,6 +16,9 @@ export async function POST(req: NextRequest) {
     .from('demo_invest_users')
     .select('id, email, password_hash, activated_at, role')
     .eq('email', (email as string).toLowerCase().trim())
+    .not('password_hash', 'is', null)
+    .order('activated_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
 
   if (!user || !(user as DemoUser & { password_hash: string }).password_hash) {
@@ -57,11 +60,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Inloggen mislukt. Probeer het opnieuw.' }, { status: 500 })
   }
 
-  // Return a 303 redirect to /home with the session cookie set on the same
-  // response. The browser follows the redirect with a GET, sending the cookie
-  // back — no client-side navigation needed and no race with Server Components.
-  const redirectUrl = new URL('/home', req.url)
-  const response = NextResponse.redirect(redirectUrl, { status: 303 })
-  applySessionCookie(response, rawToken!)
+  // Zet de cookie op een gewone fetch-response. Dit werkt ook in de v0-preview,
+  // waar handmatige fetch-redirects de Set-Cookie-header niet betrouwbaar bewaren.
+  const response = NextResponse.json({ ok: true })
+  applySessionCookie(response, rawToken)
   return response
 }

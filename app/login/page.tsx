@@ -19,27 +19,20 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
 
-    // Use fetch with redirect:'manual' so the browser does NOT follow the
-    // 303 via the fetch stack (which drops Set-Cookie in the document jar).
-    // Instead we read the Location header and do a top-level navigation,
-    // which correctly applies the Set-Cookie from the 303 response.
-    // On error the route returns JSON (non-redirect) which we parse normally.
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
-      redirect: 'manual',
     })
 
-    // A redirect (opaque-redirect type) means success — navigate at top level.
-    if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
-      window.location.href = '/home'
+    let data: { ok: boolean; error?: string } = { ok: false }
+    try { data = await res.json() } catch { /* ignore */ }
+
+    if (res.ok && data.ok) {
+      window.location.assign('/home')
       return
     }
 
-    // Non-redirect = error JSON
-    let data: { ok: boolean; error?: string } = { ok: false }
-    try { data = await res.json() } catch { /* ignore */ }
     setLoading(false)
     setError(data.error ?? 'Inloggen mislukt.')
   }
