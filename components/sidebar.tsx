@@ -13,6 +13,7 @@ interface NavItem {
   href: string
   icon: React.ReactNode
   adminOnly?: boolean
+  external?: boolean
 }
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
@@ -30,7 +31,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       items: [
         { label: tr.nav.home, href: '/home', icon: <Home size={16} /> },
         { label: tr.nav.traject, href: '/traject', icon: <PlaySquare size={16} /> },
-        { label: tr.nav.events, href: '/events', icon: <CalendarDays size={16} /> },
+        {
+          label: tr.nav.events,
+          href: 'https://workshops.archerinvest.be',
+          icon: <CalendarDays size={16} />,
+          external: true,
+        },
         { label: tr.nav.masterclass, href: '/masterclass', icon: <GraduationCap size={16} /> },
       ],
     },
@@ -81,11 +87,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               <ul className="space-y-0.5">
                 {group.items.map((item) => {
                   if (item.adminOnly && !isMentorOrAdmin) return null
-                  const active = pathname === item.href || pathname.startsWith(item.href + '/')
+                  const active = !item.external && (pathname === item.href || pathname.startsWith(item.href + '/'))
                   return (
                     <li key={item.href}>
                       <Link
                         href={item.href}
+                        target={item.external ? '_blank' : undefined}
+                        rel={item.external ? 'noopener noreferrer' : undefined}
+                        aria-label={item.external ? `${item.label} openen in een nieuw tabblad` : undefined}
                         onClick={onNavigate}
                         className="flex items-center gap-2.5 px-3 py-3 sm:py-2 rounded-full text-sm font-medium transition-all duration-150"
                         style={

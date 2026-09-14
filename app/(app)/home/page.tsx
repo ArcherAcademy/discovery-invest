@@ -442,9 +442,12 @@ export default function HomePage() {
             </span>
           </Link>
 
-  {/* Events card */}
-  <Link
-            href="/events"
+          {/* Events card */}
+          <Link
+            href="https://workshops.archerinvest.be"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Open Archer Invest workshops in een nieuw tabblad"
             className="flex items-center gap-3 p-4 rounded-xl border transition-all hover:shadow-md group"
             style={{ background: '#fff', borderColor: '#e8ecf4', boxShadow: '0 1px 3px rgba(13,15,20,0.05)' }}
           >
