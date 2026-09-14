@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminOrMentor } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getAllCallUserStates } from '@/lib/call-booking-data'
 
 export async function GET(req: NextRequest) {
   try {
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
   ] = await Promise.all([
     supabase
       .from('demo_invest_users')
-      .select('id, email, name, activated_at, trial_expires_at, last_activity_at, created_at, contact_owner_email, call_opened_at, call_clicked_at, call_booked, call_booked_at')
+      .select('id, email, name, activated_at, trial_expires_at, last_activity_at, created_at')
       .not('activated_at', 'is', null)
       .order('activated_at', { ascending: false }),
     supabase
@@ -44,6 +45,7 @@ export async function GET(req: NextRequest) {
       .eq('workflow_naam', '__automatische_opvolging_uit__'),
   ])
 
+  const callStates = await getAllCallUserStates(supabase)
   const coreVideos = (videos ?? []).filter(v => v.section === 'core')
   const now = Date.now()
 
@@ -63,6 +65,7 @@ export async function GET(req: NextRequest) {
   const userRows = (users ?? []).map(u => {
     const uProgress = progressByUser.get(u.id) ?? new Map()
     const funnel = funnelByUser.get(u.id)
+    const callState = callStates.get(u.id)
 
     // Always recount from DB rows
     const completedCount = coreVideos.filter(v => uProgress.get(v.id)?.status === 'completed').length
@@ -107,11 +110,11 @@ export async function GET(req: NextRequest) {
       all_completed_at: funnel?.all_completed_at ?? null,
       invest_avond_geclaimd: funnel?.invest_avond_geclaimd ?? false,
       invest_avond_verschenen: funnel?.invest_avond_verschenen ?? false,
-      contact_owner_email: u.contact_owner_email ?? null,
-      call_opened_at: u.call_opened_at ?? null,
-      call_clicked_at: u.call_clicked_at ?? null,
-      call_booked: u.call_booked ?? false,
-      call_booked_at: u.call_booked_at ?? null,
+      contact_owner_email: callState?.contact_owner_email ?? null,
+      call_opened_at: callState?.call_opened_at ?? null,
+      call_clicked_at: callState?.call_clicked_at ?? null,
+      call_booked: callState?.call_booked ?? false,
+      call_booked_at: callState?.call_booked_at ?? null,
       quiz_submission: quizByUser.get(u.id) ?? null,
     }
   })

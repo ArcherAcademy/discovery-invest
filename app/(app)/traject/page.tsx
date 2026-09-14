@@ -3,8 +3,6 @@
 import Link from 'next/link'
 import { Lock, Play, Clock, FileText } from 'lucide-react'
 import { useApp } from '@/components/app-context'
-import GratisClaimBlock from '@/components/GratisClaimBlock'
-import GratisClaimPopup from '@/components/GratisClaimPopup'
 import CallBookingBlock from '@/components/CallBookingBlock'
 import PdfThumbnail from '@/components/PdfThumbnail'
 
@@ -34,8 +32,6 @@ export default function TrajectPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-
-      <GratisClaimPopup allCoreCompleted={allCoreCompleted} />
 
       {/* Page header */}
       <div>
@@ -73,8 +69,6 @@ export default function TrajectPage() {
           <p className="text-xs" style={{ color: 'rgba(13,15,20,0.4)' }}>video&apos;s</p>
         </div>
       </div>
-
-      <CallBookingBlock />
 
       {/* Core videos — main block */}
       <div>
@@ -307,30 +301,8 @@ export default function TrajectPage() {
         </div>
       </div>
 
-      {/* Gratis Invest-avond — subordinate teaser */}
-      {allCoreCompleted ? (
-        <GratisClaimBlock variant="compact" />
-      ) : (
-        <div
-          className="flex items-center gap-4 px-4 py-3.5 rounded-xl border"
-          style={{ background: '#f8f9fc', borderColor: '#e8ecf4' }}
-        >
-          <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-            style={{ background: '#e8ecf4' }}
-          >
-            <Lock size={14} style={{ color: 'rgba(13,15,20,0.3)' }} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold" style={{ color: 'rgba(13,15,20,0.5)' }}>
-              Gratis Invest-avond t.w.v. 97 euro
-            </p>
-            <p className="text-xs" style={{ color: 'rgba(13,15,20,0.4)' }}>
-              Vergrendeld: voltooi eerst alle 6 kernvideo&apos;s
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Persoonlijk adviesgesprek — vrijgespeeld na 6/6 */}
+      <CallBookingBlock unlocked={allCoreCompleted} />
 
     </div>
   )

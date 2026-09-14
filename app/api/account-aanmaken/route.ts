@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { updateCallUserState } from '@/lib/call-booking-data'
 
 // ── CORS helpers ──────────────────────────────────────────────────────────────
 // Allow any origin so both the Lovable marketing site and HubSpot can call this.
@@ -170,12 +171,6 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   if (existing) {
     userId = existing.id
     outcome = 'reused'
-    if (contactOwnerEmail) {
-      await supabase
-        .from('demo_invest_users')
-        .update({ contact_owner_email: contactOwnerEmail })
-        .eq('id', userId)
-    }
     console.log(`[v0] account-aanmaken: bestaand niet-geactiveerd account hergebruikt voor ${email} (id=${userId})`)
   } else {
     const newId = crypto.randomUUID()
@@ -188,7 +183,6 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
         role: 'user',
         locale: 'nl',
         whatsapp_opt_in: false,
-        contact_owner_email: contactOwnerEmail,
         created_at: new Date().toISOString(),
         activated_at: null,
       })
@@ -201,6 +195,10 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     userId = newId
     outcome = 'created'
     console.log(`[v0] account-aanmaken: nieuw voorlopig account aangemaakt voor ${email} (id=${userId})`)
+  }
+
+  if (contactOwnerEmail) {
+    await updateCallUserState(supabase, userId, { contact_owner_email: contactOwnerEmail })
   }
 
   // ── 5. Invite ophalen of aanmaken (nooit twee actieve invites per user) ────

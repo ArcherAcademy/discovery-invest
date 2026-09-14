@@ -18,7 +18,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { HUBSPOT_CODE } from '@/lib/hubspot-codes'
-import { resolveBookingLink } from '@/lib/booking-links'
+import { getCallUserState, resolveBookingLink } from '@/lib/call-booking-data'
 import type {
   DemoUser,
   DemoUserFunnel,
@@ -488,12 +488,13 @@ async function attemptFire(
       .eq('workflow_naam', workflow.naam)
   } else {
   const hubspotCode = HUBSPOT_CODE[workflow.naam] ?? workflow.naam
-  const booking = await resolveBookingLink(supabase, user.contact_owner_email)
+  const callState = await getCallUserState(supabase, user.id)
+  const booking = await resolveBookingLink(supabase, callState.contact_owner_email)
   const outboundBody = JSON.stringify({
   workflow: hubspotCode,
   email:    user.email,
   naam:     user.name ?? '',
-  contact_owner_email: user.contact_owner_email ?? null,
+  contact_owner_email: callState.contact_owner_email,
   appointment_url: booking?.booking_url ?? null,
   appointment_owner_name: booking?.owner_name ?? null,
   appointment_link_is_fallback: booking?.is_fallback ?? null,

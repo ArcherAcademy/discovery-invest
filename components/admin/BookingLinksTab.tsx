@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import useSWR from 'swr'
-import { CalendarDays, CheckCircle2, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 
 interface BookingLink {
   id: string
@@ -25,6 +25,7 @@ const emptyForm = { owner_email: '', naam: '', booking_url: '', actief: true, is
 export function BookingLinksTab() {
   const { data, error, isLoading, mutate } = useSWR('/api/admin/booking-links', fetcher)
   const [form, setForm] = useState(emptyForm)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [feedback, setFeedback] = useState<string | null>(null)
 
@@ -35,7 +36,7 @@ export function BookingLinksTab() {
     const response = await fetch('/api/admin/booking-links', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, id: editingId }),
     })
     const result = await response.json().catch(() => null)
     setSaving(false)
@@ -44,14 +45,36 @@ export function BookingLinksTab() {
       return
     }
     setForm(emptyForm)
-    setFeedback('Boekingslink opgeslagen.')
+    setEditingId(null)
+    setFeedback(editingId ? 'Boekingslink bijgewerkt.' : 'Boekingslink opgeslagen.')
     await mutate()
+  }
+
+  function startEditing(link: BookingLink) {
+    setEditingId(link.id)
+    setForm({
+      owner_email: link.owner_email,
+      naam: link.naam,
+      booking_url: link.booking_url,
+      actief: link.actief,
+      is_default: link.is_default,
+    })
+    setFeedback(null)
+  }
+
+  function cancelEditing() {
+    setEditingId(null)
+    setForm(emptyForm)
+    setFeedback(null)
   }
 
   async function remove(id: string) {
     if (!window.confirm('Deze boekingslink verwijderen?')) return
     const response = await fetch(`/api/admin/booking-links?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-    if (response.ok) await mutate()
+    if (response.ok) {
+      if (editingId === id) cancelEditing()
+      await mutate()
+    }
   }
 
   return (
@@ -85,10 +108,18 @@ export function BookingLinksTab() {
           <div className="flex flex-wrap items-center gap-4 lg:col-span-2">
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.actief} onChange={event => setForm(current => ({ ...current, actief: event.target.checked }))} /> Actief</label>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.is_default} onChange={event => setForm(current => ({ ...current, is_default: event.target.checked }))} /> Gebruik als standaardlink</label>
-            <button disabled={saving} className="ml-auto inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
-              {saving ? <RefreshCw size={15} className="animate-spin" /> : <Plus size={15} />}
-              Opslaan
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              {editingId && (
+                <button type="button" onClick={cancelEditing} className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-muted">
+                  <X size={15} />
+                  Annuleren
+                </button>
+              )}
+              <button disabled={saving} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+                {saving ? <RefreshCw size={15} className="animate-spin" /> : editingId ? <Pencil size={15} /> : <Plus size={15} />}
+                {editingId ? 'Wijzigingen opslaan' : 'Toevoegen'}
+              </button>
+            </div>
           </div>
           {feedback && <p role="status" className="text-sm text-muted-foreground lg:col-span-2">{feedback}</p>}
         </form>
@@ -112,7 +143,12 @@ export function BookingLinksTab() {
                     <td className="px-4 py-3 text-muted-foreground">{link.owner_email}</td>
                     <td className="max-w-64 truncate px-4 py-3"><a href={link.booking_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{link.booking_url}</a></td>
                     <td className="px-4 py-3"><span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">{link.actief && <CheckCircle2 size={12} />}{link.is_default ? 'Standaard' : link.actief ? 'Actief' : 'Inactief'}</span></td>
-                    <td className="px-4 py-3 text-right"><button type="button" onClick={() => remove(link.id)} aria-label={`Verwijder boekingslink van ${link.naam}`} className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><Trash2 size={15} /></button></td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button type="button" onClick={() => startEditing(link)} aria-label={`Bewerk boekingslink van ${link.naam}`} className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><Pencil size={15} /></button>
+                        <button type="button" onClick={() => remove(link.id)} aria-label={`Verwijder boekingslink van ${link.naam}`} className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><Trash2 size={15} /></button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

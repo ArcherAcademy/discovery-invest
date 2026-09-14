@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminOrMentor } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getAllCallUserStates } from '@/lib/call-booking-data'
 
 /**
  * GET /api/admin/data
@@ -71,10 +72,12 @@ export async function GET(req: NextRequest) {
   ])
 
   const usersData = usersResult.rows
+  const callStates = await getAllCallUserStates(supabase)
 
   const followUpDisabledUserIds = new Set((followUpDisabledData ?? []).map(row => row.user_id))
   const users = (usersData ?? []).map(user => ({
     ...user,
+    ...callStates.get(user.id),
     opvolging_actief: !followUpDisabledUserIds.has(user.id),
   }))
 

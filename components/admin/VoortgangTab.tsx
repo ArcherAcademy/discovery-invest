@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import {
   RefreshCw, AlertTriangle, CheckCircle2, Play, Circle,
   Calendar, Trophy, Clock, X, ChevronRight, User,
-  Zap, TrendingUp, BarChart2, ClipboardList, ToggleLeft, ToggleRight,
+    Zap, TrendingUp, BarChart2, ClipboardList,
 } from 'lucide-react'
 import { QUIZ_QUESTIONS } from '@/lib/quiz-data'
 import { UserFollowUpControl } from '@/components/admin/UserFollowUpControl'
@@ -173,31 +173,6 @@ function InsightCard({ title, children }: { title: string; children: React.React
 
 // ── IdealeKlantPanel ──────────────────────────────────────────
 function IdealeKlantPanel({ user }: { user: UserRow }) {
-  // Optimistic local state for the two manual toggles
-  const [geclaimd, setGeclaimd] = useState(user.invest_avond_geclaimd)
-  const [verschenen, setVerschenen] = useState(user.invest_avond_verschenen)
-  const [saving, setSaving] = useState<string | null>(null)
-
-  async function toggle(field: 'invest_avond_geclaimd' | 'invest_avond_verschenen', next: boolean) {
-    if (saving) return
-    setSaving(field)
-    if (field === 'invest_avond_geclaimd') setGeclaimd(next)
-    else setVerschenen(next)
-    try {
-      await fetch('/api/funnel-status', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: user.id, field, value: next }),
-      })
-    } catch {
-      // revert on error
-      if (field === 'invest_avond_geclaimd') setGeclaimd(!next)
-      else setVerschenen(!next)
-    } finally {
-      setSaving(null)
-    }
-  }
-
   // Step 1: Ingelogd binnen 24u na aanmaak
   const within24h = (() => {
     if (!user.created_at || !user.activated_at) return null
@@ -205,15 +180,7 @@ function IdealeKlantPanel({ user }: { user: UserRow }) {
     return diff <= 86400000
   })()
 
-  const steps: {
-    label: string
-    sub: string
-    done: boolean | null
-    manual?: boolean
-    field?: 'invest_avond_geclaimd' | 'invest_avond_verschenen'
-    value?: boolean
-    onToggle?: () => void
-  }[] = [
+  const steps: { label: string; sub: string; done: boolean | null }[] = [
     {
       label: 'Ingelogd binnen 24u',
       sub: within24h === null
@@ -231,22 +198,22 @@ function IdealeKlantPanel({ user }: { user: UserRow }) {
       done: !!user.all_completed_at,
     },
     {
-      label: 'Gratis avond geclaimd',
-      sub: geclaimd ? 'Claim-mail ontvangen door team' : 'Nog niet geclaimd',
-      done: geclaimd,
-      manual: true,
-      field: 'invest_avond_geclaimd',
-      value: geclaimd,
-      onToggle: () => toggle('invest_avond_geclaimd', !geclaimd),
+      label: 'Adviesgesprek geopend',
+      sub: user.call_clicked_at
+        ? `Boekingslink geklikt op ${formatDateTime(user.call_clicked_at)}`
+        : user.call_opened_at
+          ? `Callblok gezien op ${formatDateTime(user.call_opened_at)}`
+          : 'Nog niet gezien',
+      done: !!user.call_opened_at,
     },
     {
-      label: 'Verschenen op de avond',
-      sub: verschenen ? 'Aanwezig geweest' : 'Nog niet bevestigd',
-      done: verschenen,
-      manual: true,
-      field: 'invest_avond_verschenen',
-      value: verschenen,
-      onToggle: () => toggle('invest_avond_verschenen', !verschenen),
+      label: 'Adviesgesprek geboekt',
+      sub: user.call_booked_at
+        ? `Geboekt op ${formatDateTime(user.call_booked_at)}`
+        : user.call_clicked_at
+          ? 'Boekingslink geopend, boeking nog niet bevestigd'
+          : 'Nog niet geboekt',
+      done: user.call_booked,
     },
   ]
 
@@ -309,21 +276,6 @@ function IdealeKlantPanel({ user }: { user: UserRow }) {
                 <p className="text-[10px] mt-0.5" style={{ color: TEXT_DIM }}>{step.sub}</p>
               </div>
 
-              {/* Manual toggle for steps 3 + 4 */}
-              {step.manual && (
-                <button
-                  onClick={step.onToggle}
-                  disabled={saving === step.field}
-                  className="shrink-0 transition-opacity disabled:opacity-50"
-                  aria-label={step.done ? 'Markeer als niet gedaan' : 'Markeer als gedaan'}
-                  title={step.done ? 'Zet uit' : 'Zet aan'}
-                >
-                  {step.done
-                    ? <ToggleRight size={22} style={{ color: GREEN }} />
-                    : <ToggleLeft size={22} style={{ color: 'rgba(13,15,20,0.25)' }} />
-                  }
-                </button>
-              )}
             </div>
           )
         })}

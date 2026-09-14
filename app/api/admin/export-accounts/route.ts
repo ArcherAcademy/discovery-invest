@@ -3,6 +3,7 @@ import { utils, write } from 'xlsx'
 import { requireAdminOrMentor } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hasPermanentAccess } from '@/lib/access'
+import { getAllCallUserStates } from '@/lib/call-booking-data'
 
 export const runtime = 'nodejs'
 
@@ -18,11 +19,6 @@ type ExportUser = {
   trial_started_at: string | null
   trial_expires_at: string | null
   last_activity_at: string | null
-  contact_owner_email: string | null
-  call_opened_at: string | null
-  call_clicked_at: string | null
-  call_booked: boolean | null
-  call_booked_at: string | null
 }
 
 type ExportFunnel = {
@@ -71,6 +67,7 @@ export async function GET(req: NextRequest) {
   }
 
   const users = (usersResult.data ?? []) as ExportUser[]
+  const callStates = await getAllCallUserStates(supabase)
   const funnels = (funnelsResult.data ?? []) as ExportFunnel[]
   const invites = (invitesResult.data ?? []) as ExportInvite[]
   const funnelsByUser = new Map(funnels.map(funnel => [funnel.user_id, funnel]))
@@ -79,6 +76,7 @@ export async function GET(req: NextRequest) {
 
   const rows = users.map(user => {
     const funnel = funnelsByUser.get(user.id)
+    const callState = callStates.get(user.id)
     return {
       Naam: user.name || '',
       'E-mailadres': user.email,
@@ -90,11 +88,11 @@ export async function GET(req: NextRequest) {
       'Trial gestart': excelDate(user.trial_started_at),
       'Trial verloopt': hasPermanentAccess(user.role) ? 'Onbeperkt' : excelDate(user.trial_expires_at),
       'Laatste activiteit': excelDate(user.last_activity_at),
-      'Contacteigenaar e-mail': user.contact_owner_email ?? '',
-      'Adviescall gezien op': excelDate(user.call_opened_at),
-      'Adviescall geklikt op': excelDate(user.call_clicked_at),
-      'Adviescall geboekt': user.call_booked ? 'Ja' : 'Nee',
-      'Adviescall geboekt op': excelDate(user.call_booked_at),
+      'Contacteigenaar e-mail': callState?.contact_owner_email ?? '',
+      'Adviescall gezien op': excelDate(callState?.call_opened_at ?? null),
+      'Adviescall geklikt op': excelDate(callState?.call_clicked_at ?? null),
+      'Adviescall geboekt': callState?.call_booked ? 'Ja' : 'Nee',
+      'Adviescall geboekt op': excelDate(callState?.call_booked_at ?? null),
       'Video\'s voltooid': funnel?.videos_completed_count ?? 0,
       'Alle video\'s voltooid': excelDate(funnel?.all_completed_at ?? null),
       'Event geboekt': funnel?.event_booked ? 'Ja' : 'Nee',

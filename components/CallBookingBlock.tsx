@@ -1,12 +1,17 @@
 'use client'
 
 import useSWR from 'swr'
-import { ArrowUpRight, CalendarDays, CheckCircle2 } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, CheckCircle2, Lock } from 'lucide-react'
 import { useApp } from '@/components/app-context'
 
 interface BookingResponse {
   available: boolean
   owner_name?: string | null
+}
+
+interface CallBookingBlockProps {
+  compact?: boolean
+  unlocked: boolean
 }
 
 const fetcher = async (url: string): Promise<BookingResponse> => {
@@ -15,12 +20,28 @@ const fetcher = async (url: string): Promise<BookingResponse> => {
   return response.json()
 }
 
-export default function CallBookingBlock({ compact = false }: { compact?: boolean }) {
+export default function CallBookingBlock({ compact = false, unlocked }: CallBookingBlockProps) {
   const { user } = useApp()
-  const { data } = useSWR<BookingResponse>('/api/call-booking', fetcher, {
+  const { data } = useSWR<BookingResponse>(unlocked ? '/api/call-booking' : null, fetcher, {
     revalidateOnFocus: false,
     shouldRetryOnError: false,
   })
+
+  if (!unlocked) {
+    return (
+      <section className={`rounded-2xl border border-border bg-muted/50 ${compact ? 'p-4' : 'p-5 sm:p-6'}`}>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+            <Lock size={17} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground/60">Persoonlijk adviesgesprek</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">Vrijgespeeld zodra je alle 6 kernvideo&apos;s hebt voltooid.</p>
+          </div>
+        </div>
+      </section>
+    )
+  }
 
   if (!data?.available) return null
 
@@ -46,7 +67,7 @@ export default function CallBookingBlock({ compact = false }: { compact?: boolea
           <div>
             <p className="text-sm font-bold text-foreground">Plan je persoonlijk adviesgesprek</p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              Kies rechtstreeks een moment in de agenda{data.owner_name ? ` van ${data.owner_name}` : ''}.
+              Je hebt het traject afgerond. Kies rechtstreeks een moment in de agenda{data.owner_name ? ` van ${data.owner_name}` : ''}.
             </p>
           </div>
         </div>
