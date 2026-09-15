@@ -46,12 +46,24 @@ async function sha256hex(raw: string): Promise<string> {
 }
 
 // ── Extract field with aliases ────────────────────────────────────────────────
+// Tolerant lezen: HubSpot stuurt sommige velden (o.a. hubspot_owner_id) als
+// GETAL i.p.v. string. We accepteren string, number en bigint en geven altijd
+// een getrimde string terug, zodat een numerieke owner-id niet stilzwijgend
+// verloren gaat.
 function pick(body: Record<string, unknown>, ...keys: string[]): string {
   for (const k of keys) {
     const v = body[k]
     if (typeof v === 'string' && v.trim()) return v.trim()
+    if (typeof v === 'number' && Number.isFinite(v)) return String(v)
+    if (typeof v === 'bigint') return String(v)
   }
   return ''
+}
+
+// Escape LIKE-wildcards (% en _) zodat een e-mailadres met zo'n teken bij een
+// case-insensitieve ilike-match niet per ongeluk een ander account raakt.
+function escapeLike(value: string): string {
+  return value.replace(/([\\%_])/g, '\\$1')
 }
 
 // ── DB log helper (nooit blocking, nooit fatal) ───────────────────────────────
@@ -161,21 +173,36 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     'contacteigenaar_email',
   ) || null
 
-  // ── 4. Voorlopig account aanmaken of hergebruiken ─────────────────────────
-  const { data: existing } = await supabase
+  // ── 4. Account aanmaken of bestaand bijwerken ─────────────────────────────
+  // Match op e-mailadres (case-insensitief), ONGEACHT activatiestatus. Zo maakt
+  // een later binnenkomende webhook (bv. HubSpot mét de owner, nadat het
+  // website-account al geactiveerd is) nooit een tweede account naast het
+  // bestaande. Bij meerdere treffers kiezen we het geactiveerde account, anders
+  // het meest recente, zodat de owner op het canonieke exemplaar belandt.
+  const { data: matches, error: matchError } = await supabase
     .from('demo_invest_users')
-    .select('id, email, activated_at')
-    .eq('email', email)
-    .is('activated_at', null)
-    .maybeSingle()
+    .select('id, email, activated_at, hubspot_owner_id, created_at')
+    .ilike('email', escapeLike(email))
+    .order('activated_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+
+  if (matchError) {
+    console.error('[v0] account-aanmaken: lookup demo_invest_users gefaald:', matchError.message)
+    await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: `DB lookup gebruiker: ${matchError.message}`, activatielink: null, http_status: 500 })
+    return new Response(`Database error: ${matchError.message}`, { status: 500, headers: CORS_HEADERS })
+  }
+
+  const existing = matches?.[0] ?? null
 
   let userId: string
   let outcome: 'created' | 'reused'
+  let existingOwnerId: string | null = null
 
   if (existing) {
     userId = existing.id
     outcome = 'reused'
-    console.log(`[v0] account-aanmaken: bestaand niet-geactiveerd account hergebruikt voor ${email} (id=${userId})`)
+    existingOwnerId = (existing.hubspot_owner_id as string | null)?.trim() || null
+    console.log(`[v0] account-aanmaken: bestaand account hergebruikt voor ${email} (id=${userId}, geactiveerd=${Boolean(existing.activated_at)})`)
   } else {
     const newId = crypto.randomUUID()
     const { error: insertError } = await supabase
@@ -201,8 +228,15 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     console.log(`[v0] account-aanmaken: nieuw voorlopig account aangemaakt voor ${email} (id=${userId})`)
   }
 
-  if (contactOwnerId) {
+  // Owner alleen invullen als die nog leeg is — nooit een bestaande owner
+  // overschrijven, en nooit activatie/trial/wat-dan-ook resetten. Zo kan een
+  // latere HubSpot-webhook de owner alsnog aanvullen op een al geactiveerd
+  // account, zonder de rest aan te raken.
+  if (contactOwnerId && !existingOwnerId) {
     await updateCallUserState(supabase, userId, { contact_owner_email: contactOwnerId })
+    console.log(`[v0] account-aanmaken: hubspot_owner_id gezet op ${contactOwnerId} voor ${email} (id=${userId})`)
+  } else if (contactOwnerId && existingOwnerId) {
+    console.log(`[v0] account-aanmaken: owner al aanwezig (${existingOwnerId}) voor ${email}, niet overschreven`)
   }
 
   // ── 5. Invite ophalen of aanmaken (nooit twee actieve invites per user) ────
