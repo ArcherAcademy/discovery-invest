@@ -69,6 +69,9 @@ export default function AdminPage() {
   const [sortField, setSortField] = useState<'email' | 'videos' | 'days'>('videos')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [filterEmail, setFilterEmail] = useState('')
+  const [onlyWithVideos, setOnlyWithVideos] = useState(false)
+  const [createdFrom, setCreatedFrom] = useState('')
+  const [createdTo, setCreatedTo] = useState('')
   const [historyFilter, setHistoryFilter] = useState<{ email: string; workflow: string; periode: 'vandaag' | 'week' | 'alles' }>({ email: '', workflow: '', periode: 'alles' })
   const [evaluatorRunning, setEvaluatorRunning] = useState(false)
   const [evaluatorResult, setEvaluatorResult] = useState<{ usersProcessed: number; triggered: number; suppressed: number } | null>(null)
@@ -272,8 +275,21 @@ export default function AdminPage() {
     return new Date(d).toLocaleString('nl-BE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
   }
 
+  // 'createdTo' is inclusief: we tellen tot het einde van de gekozen dag,
+  // anders zou een account dat op de einddatum is aangemaakt wegvallen.
+  const createdToEnd = createdTo ? new Date(`${createdTo}T23:59:59.999`).getTime() : null
+  const createdFromStart = createdFrom ? new Date(`${createdFrom}T00:00:00`).getTime() : null
+
   const sortedUsers = [...users]
     .filter(u => u.email?.toLowerCase().includes(filterEmail.toLowerCase()))
+    .filter(u => !onlyWithVideos || (u.funnel?.videos_completed_count ?? 0) >= 1)
+    .filter(u => {
+      if (createdFromStart === null && createdToEnd === null) return true
+      const created = new Date(u.created_at).getTime()
+      if (createdFromStart !== null && created < createdFromStart) return false
+      if (createdToEnd !== null && created > createdToEnd) return false
+      return true
+    })
     .sort((a, b) => {
       let diff = 0
       if (sortField === 'email') diff = (a.email ?? '').localeCompare(b.email ?? '')
@@ -1023,14 +1039,66 @@ export default function AdminPage() {
       {/* Users table */}
       {tab === 'users' && (
         <div className="space-y-4">
-          <input
-            type="text"
-            placeholder="Filter op e-mail..."
-            value={filterEmail}
-            onChange={e => setFilterEmail(e.target.value)}
-            className="rounded-xl px-3.5 py-2.5 text-sm border outline-none w-full max-w-xs"
-            style={{ background: '#ffffff', borderColor: '#e8ecf4', color: '#0d0f14' }}
-          />
+          <div className="flex flex-wrap items-end gap-3">
+            <input
+              type="text"
+              placeholder="Filter op e-mail..."
+              value={filterEmail}
+              onChange={e => setFilterEmail(e.target.value)}
+              className="rounded-xl px-3.5 py-2.5 text-sm border outline-none w-full max-w-xs"
+              style={{ background: '#ffffff', borderColor: '#e8ecf4', color: '#0d0f14' }}
+            />
+
+            <button
+              type="button"
+              onClick={() => setOnlyWithVideos(v => !v)}
+              className="rounded-xl px-3.5 py-2.5 text-sm border font-medium transition-colors"
+              style={{
+                background: onlyWithVideos ? 'rgba(37,0,245,0.1)' : '#ffffff',
+                borderColor: onlyWithVideos ? '#2500F5' : '#e8ecf4',
+                color: onlyWithVideos ? '#2500F5' : 'rgba(13,15,20,0.6)',
+              }}
+              aria-pressed={onlyWithVideos}
+            >
+              Minstens 1 video bekeken
+            </button>
+
+            <div className="flex items-end gap-2">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium" style={{ color: 'rgba(13,15,20,0.5)' }}>Aangemaakt van</span>
+                <input
+                  type="date"
+                  value={createdFrom}
+                  max={createdTo || undefined}
+                  onChange={e => setCreatedFrom(e.target.value)}
+                  className="rounded-xl px-3 py-2.5 text-sm border outline-none"
+                  style={{ background: '#ffffff', borderColor: '#e8ecf4', color: '#0d0f14' }}
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium" style={{ color: 'rgba(13,15,20,0.5)' }}>tot</span>
+                <input
+                  type="date"
+                  value={createdTo}
+                  min={createdFrom || undefined}
+                  onChange={e => setCreatedTo(e.target.value)}
+                  className="rounded-xl px-3 py-2.5 text-sm border outline-none"
+                  style={{ background: '#ffffff', borderColor: '#e8ecf4', color: '#0d0f14' }}
+                />
+              </label>
+              {(createdFrom || createdTo) && (
+                <button
+                  type="button"
+                  onClick={() => { setCreatedFrom(''); setCreatedTo('') }}
+                  className="rounded-xl px-3 py-2.5 text-sm border transition-colors hover:opacity-80"
+                  style={{ background: '#ffffff', borderColor: '#e8ecf4', color: 'rgba(13,15,20,0.6)' }}
+                  title="Datumfilter wissen"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
 
           <div className="rounded-2xl border overflow-hidden relative" style={{ background: '#ffffff', borderColor: '#e8ecf4' }}>
             <div className="sm:hidden pointer-events-none absolute right-0 top-0 bottom-0 w-6 z-10" style={{ background: 'linear-gradient(to right, transparent, #ffffff)' }} />
