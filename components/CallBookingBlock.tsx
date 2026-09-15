@@ -296,8 +296,8 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
       {trigger}
       <Dialog.Root open={open} onOpenChange={handleOpenChange}>
         <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 min-h-dvh bg-foreground/45 backdrop-blur-sm transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0" />
-          <Dialog.Viewport className="fixed inset-0 flex items-end justify-center sm:items-center sm:p-6">
+          <Dialog.Backdrop className="fixed inset-0 z-50 min-h-dvh bg-foreground/45 backdrop-blur-sm transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0" />
+          <Dialog.Viewport className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
             <Dialog.Popup className="flex h-[94dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-card text-card-foreground shadow-2xl transition duration-200 data-ending-style:translate-y-4 data-ending-style:opacity-0 data-starting-style:translate-y-4 data-starting-style:opacity-0 sm:h-[min(860px,calc(100dvh-3rem))] sm:max-w-5xl sm:rounded-2xl">
               <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-4 py-3 sm:px-6 sm:py-4">
                 <div className="min-w-0">
