@@ -43,9 +43,9 @@ function toGCalStamp(date: Date) {
 function buildGoogleCalendarUrl(start: Date, end: Date) {
   const params = new URLSearchParams({
     action: 'TEMPLATE',
-    text: 'Persoonlijk adviesgesprek · Archer Invest',
+    text: 'Persoonlijk oriëntatiegesprek · Archer Invest',
     dates: `${toGCalStamp(start)}/${toGCalStamp(end)}`,
-    details: 'Je persoonlijk adviesgesprek met Archer Invest.',
+    details: 'Je persoonlijk oriëntatiegesprek met Archer Invest.',
   })
   return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
@@ -92,7 +92,7 @@ export function SidebarCallStatus({ onNavigate }: { onNavigate?: () => void }) {
       >
         <CalendarCheck size={14} className="shrink-0" />
         <span className="flex-1 min-w-0">
-          <span className="block text-xs font-semibold leading-tight">Adviesgesprek</span>
+          <span className="block text-xs font-semibold leading-tight">Oriëntatiegesprek</span>
           <span className="block text-[10px] leading-tight" style={{ color: 'rgba(37,0,245,0.7)' }}>
             {validStart
               ? `${formatShortDate(validStart, timeZone)} · ${formatTime(validStart, timeZone)}`
@@ -113,7 +113,7 @@ export function SidebarCallStatus({ onNavigate }: { onNavigate?: () => void }) {
                     Ingepland
                   </span>
                   <Dialog.Title className="mt-2.5 text-lg font-bold text-balance">
-                    Je adviesgesprek
+                    Je oriëntatiegesprek
                   </Dialog.Title>
                 </div>
                 <Dialog.Close

@@ -241,7 +241,7 @@ export default function TrajectPage() {
               Jouw bonusmateriaal
             </h2>
             <p className="text-xs leading-5" style={{ color: 'rgba(13,15,20,0.5)' }}>
-              Na alle 6 kernvideo&apos;s krijg je toegang tot je bonusmateriaal én kun je een persoonlijk adviesgesprek inplannen.
+              Na alle 6 kernvideo&apos;s krijg je toegang tot je bonusmateriaal én kun je een persoonlijk oriëntatiegesprek inplannen.
             </p>
           </div>
           {!allCoreCompleted && (
@@ -349,7 +349,7 @@ export default function TrajectPage() {
                 </div>
                 <div className="flex flex-col gap-2">
                   <Dialog.Title className="text-2xl font-bold tracking-tight text-balance">
-                    Je bonus én adviesgesprek zijn vrijgespeeld
+                    Je bonus én oriëntatiegesprek zijn vrijgespeeld
                   </Dialog.Title>
                   <Dialog.Description className="text-sm leading-6 text-muted-foreground">
                     Je hebt alle 6 kernvideo&apos;s bekeken. Daarmee heb je nu twee waardevolle onderdelen vrijgespeeld.
@@ -372,7 +372,7 @@ export default function TrajectPage() {
                     <CalendarDays size={18} />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <p className="text-sm font-bold">Je persoonlijk adviesgesprek</p>
+                    <p className="text-sm font-bold">Je persoonlijk oriëntatiegesprek</p>
                     <p className="text-sm leading-5 text-muted-foreground">Plan meteen een vrijblijvend gesprek en bespreek je persoonlijke situatie met een adviseur.</p>
                   </div>
                 </div>
@@ -381,7 +381,7 @@ export default function TrajectPage() {
               <div className="flex flex-col gap-2 sm:flex-row-reverse">
                 <Button onClick={openBookingFromUnlockDialog} size="lg" className="w-full rounded-full sm:flex-1">
                   <CalendarDays data-icon="inline-start" />
-                  Plan mijn adviesgesprek
+                  Plan mijn oriëntatiegesprek
                 </Button>
                 <Button onClick={viewUnlockedBonus} variant="outline" size="lg" className="w-full rounded-full sm:flex-1">
                   <Gift data-icon="inline-start" />
@@ -393,7 +393,7 @@ export default function TrajectPage() {
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Persoonlijk adviesgesprek — vrijgespeeld na 6/6 */}
+      {/* Persoonlijk oriëntatiegesprek — vrijgespeeld na 6/6 */}
       <CallBookingBlock unlocked={allCoreCompleted} openRequest={bookingOpenRequest} />
 
     </div>

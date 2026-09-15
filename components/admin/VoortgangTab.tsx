@@ -191,7 +191,7 @@ function IdealeKlantPanel({ user }: { user: UserRow }) {
       done: !!user.all_completed_at,
     },
     {
-      label: 'Adviesgesprek geopend',
+      label: 'Oriëntatiegesprek geopend',
       sub: user.call_clicked_at
         ? `Boekingslink geklikt op ${formatDateTime(user.call_clicked_at)}`
         : user.call_opened_at
@@ -200,7 +200,7 @@ function IdealeKlantPanel({ user }: { user: UserRow }) {
       done: !!user.call_opened_at,
     },
     {
-      label: 'Adviesgesprek geboekt',
+      label: 'Oriëntatiegesprek geboekt',
       sub: user.call_booked_at
         ? `Geboekt op ${formatDateTime(user.call_booked_at)}`
         : user.call_clicked_at
