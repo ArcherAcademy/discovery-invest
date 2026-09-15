@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { Clock, Settings, LogOut, Home, PlaySquare, CalendarDays, GraduationCap, ShieldCheck, ClipboardList, Lock, Menu, X } from 'lucide-react'
 import { useApp } from './app-context'
+import CallBookingBlock from './CallBookingBlock'
 import { t } from '@/lib/i18n'
 
 interface NavItem {
@@ -16,7 +17,7 @@ interface NavItem {
   external?: boolean
 }
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({ onNavigate, onCallOpen }: { onNavigate?: () => void; onCallOpen: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
   const { user, trialDaysLeft, isExpired, isAdminOrMentor, locale } = useApp()
@@ -110,8 +111,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   )
                 })}
 
-                {/* Quiz item — only shown in overview group */}
+                {/* Quiz and vermogens call — only shown in overview group */}
                 {group.label === tr.nav.overview && (
+                  <>
                   <li key="quiz">
                     {allCoreCompleted ? (
                       <Link
@@ -151,6 +153,24 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                       </div>
                     )}
                   </li>
+                  <li key="vermogens-call">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onNavigate?.()
+                        onCallOpen()
+                      }}
+                      disabled={!allCoreCompleted}
+                      className="flex w-full items-center gap-2.5 rounded-full px-3 py-3 text-left text-sm font-medium transition-all duration-150 disabled:cursor-not-allowed sm:py-2"
+                      style={{ color: allCoreCompleted ? 'rgba(13,15,20,0.65)' : 'rgba(13,15,20,0.3)' }}
+                    >
+                      <span style={{ opacity: allCoreCompleted ? 0.6 : 0.4 }}>
+                        {allCoreCompleted ? <CalendarDays size={16} /> : <Lock size={16} />}
+                      </span>
+                      Vermogens call
+                    </button>
+                  </li>
+                  </>
                 )}
               </ul>
             </div>
@@ -225,7 +245,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
  * Tapping the hamburger opens a full-height slide-in drawer with the same
  * nav content as the desktop sidebar.
  */
-function MobileTopbar() {
+function MobileTopbar({ onCallOpen }: { onCallOpen: () => void }) {
   const [open, setOpen] = useState(false)
 
   // Lock body scroll while the drawer is open, and close on route change.
@@ -280,7 +300,7 @@ function MobileTopbar() {
               </button>
             </div>
             <div className="flex flex-col flex-1 min-h-0 -mt-2">
-              <SidebarContent onNavigate={() => setOpen(false)} />
+              <SidebarContent onNavigate={() => setOpen(false)} onCallOpen={onCallOpen} />
             </div>
           </aside>
         </div>
@@ -290,18 +310,27 @@ function MobileTopbar() {
 }
 
 export function Sidebar() {
+  const { allCoreCompleted } = useApp()
+  const [bookingOpenRequest, setBookingOpenRequest] = useState(0)
+
+  function openBooking() {
+    setBookingOpenRequest(current => current + 1)
+  }
+
   return (
     <>
       {/* Mobile: fixed topbar + slide-in drawer, no static layout space reserved */}
-      <MobileTopbar />
+      <MobileTopbar onCallOpen={openBooking} />
 
       {/* Desktop / tablet: static sidebar */}
       <aside
         className="hidden sm:flex flex-col h-full w-[220px] shrink-0"
         style={{ background: '#ffffff', borderRight: '1px solid #e8ecf4' }}
       >
-        <SidebarContent />
+        <SidebarContent onCallOpen={openBooking} />
       </aside>
+
+      <CallBookingBlock unlocked={allCoreCompleted} variant="dialog-only" openRequest={bookingOpenRequest} />
     </>
   )
 }

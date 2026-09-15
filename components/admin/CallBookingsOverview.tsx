@@ -76,7 +76,7 @@ export function CallBookingsOverview() {
               <CalendarClock size={19} aria-hidden="true" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-balance">Ingeplande adviescalls</h2>
+              <h2 className="text-lg font-bold text-balance">Ingeplande vermogens calls</h2>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
                 Zie meteen wie een call heeft geboekt en wanneer het gesprek plaatsvindt.
               </p>

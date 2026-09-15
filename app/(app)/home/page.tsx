@@ -222,7 +222,7 @@ export default function HomePage() {
                 VRIJSPELEN & ONTGRENDELEN
               </p>
               <p className="text-xs" style={{ color: 'rgba(13,15,20,0.45)' }}>
-                Kijk alle 6 kernvideo&apos;s en speel je bonus + persoonlijk adviesgesprek vrij
+                Kijk alle 6 kernvideo&apos;s en speel je bonus en de vermogens call vrij
               </p>
             </div>
 
@@ -312,7 +312,7 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* Step 3 — persoonlijk adviesgesprek */}
+                {/* Step 3 — vermogens call */}
                 <div className="flex-1">
                   <div
                     className="rounded-xl p-4 border-2 relative overflow-hidden"
@@ -335,7 +335,7 @@ export default function HomePage() {
                         style={{ background: allCoreCompleted ? '#2500F5' : '#f0f3fb', color: allCoreCompleted ? '#fff' : 'rgba(13,15,20,0.3)' }}>
                         {allCoreCompleted ? <CalendarDays size={14} /> : '3'}
                       </div>
-                      <span className="text-xs font-semibold" style={{ color: allCoreCompleted ? '#0d0f14' : 'rgba(13,15,20,0.3)' }}>Adviesgesprek</span>
+                      <span className="text-xs font-semibold" style={{ color: allCoreCompleted ? '#0d0f14' : 'rgba(13,15,20,0.3)' }}>Vermogens call</span>
                     </div>
                     <div className="h-1.5 rounded-full mb-3" style={{ background: allCoreCompleted ? '#2500F5' : '#f0f3fb' }} />
                     <CallBookingBlock unlocked={allCoreCompleted} variant="milestone" />

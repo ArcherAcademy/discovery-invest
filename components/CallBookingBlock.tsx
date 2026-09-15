@@ -15,7 +15,7 @@ interface BookingResponse {
 
 interface CallBookingBlockProps {
   unlocked: boolean
-  variant?: 'card' | 'milestone'
+  variant?: 'card' | 'milestone' | 'dialog-only'
   openRequest?: number
 }
 
@@ -187,8 +187,10 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
   }
 
   if (!unlocked) {
+    if (variant === 'dialog-only') return null
+
     if (variant === 'milestone') {
-      return <span className="text-xs text-muted-foreground">Persoonlijk met je adviseur</span>
+      return <span className="text-xs text-muted-foreground">Vermogens call</span>
     }
 
     return (
@@ -198,7 +200,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
             <Lock size={17} />
           </div>
           <div>
-            <p className="text-sm font-semibold text-foreground/60">Persoonlijk adviesgesprek</p>
+            <p className="text-sm font-semibold text-foreground/60">Vermogens call</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">Vrijgespeeld zodra je alle 6 kernvideo&apos;s hebt voltooid.</p>
           </div>
         </div>
@@ -206,7 +208,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
     )
   }
 
-  if (user?.call_booked && !open) {
+  if (user?.call_booked && !open && variant !== 'dialog-only') {
     if (variant === 'milestone') {
       return (
         <div className="flex items-center gap-2 text-xs font-semibold text-primary">
@@ -220,7 +222,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
       <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-4 text-card-foreground">
         <CheckCircle2 size={20} className="shrink-0 text-primary" />
         <div>
-          <p className="text-sm font-semibold">Je adviesgesprek is ingepland</p>
+          <p className="text-sm font-semibold">Je vermogens call is ingepland</p>
           <p className="mt-0.5 text-xs text-muted-foreground">Je ontvangt de afspraakbevestiging per e-mail.</p>
         </div>
       </div>
@@ -228,7 +230,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
   }
 
   const unavailable = !isLoading && (error || !data?.available || !data.booking_url)
-  const trigger = variant === 'milestone' ? (
+  const trigger = variant === 'dialog-only' ? null : variant === 'milestone' ? (
     <Button onClick={() => handleOpenChange(true)} disabled={isLoading || unavailable} size="sm" className="w-full rounded-lg text-xs font-bold">
       {isLoading ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : <CalendarDays data-icon="inline-start" />}
       {isLoading ? 'Agenda laden' : unavailable ? 'Agenda niet beschikbaar' : 'Kies een moment'}
@@ -242,7 +244,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
             <CalendarDays size={18} />
           </div>
           <div>
-            <p className="text-sm font-bold text-foreground">Plan je persoonlijk adviesgesprek</p>
+            <p className="text-sm font-bold text-foreground">Plan je vermogens call</p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
               Kies rechtstreeks een moment in de agenda{data?.owner_name ? ` van ${data.owner_name}` : ''}. Je blijft gewoon in Archer.
             </p>
@@ -286,7 +288,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
                       <CheckCircle2 size={28} />
                     </div>
                     <div className="flex max-w-md flex-col gap-2">
-                      <h2 className="text-xl font-bold text-balance">Je adviesgesprek staat ingepland</h2>
+                      <h2 className="text-xl font-bold text-balance">Je vermogens call staat ingepland</h2>
                       <p className="text-sm leading-6 text-muted-foreground">We hebben je boeking geregistreerd. HubSpot stuurt de afspraakbevestiging en alle praktische info per e-mail.</p>
                     </div>
                     <Dialog.Close className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
@@ -324,7 +326,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
                     <iframe
                       key={frameKey}
                       src={getEmbedUrl(data.booking_url)}
-                      title="Plan je persoonlijk adviesgesprek"
+                      title="Plan je vermogens call"
                       className="h-full w-full border-0 bg-card"
                       onLoad={() => setFrameLoaded(true)}
                       onError={() => setStatus('error')}
