@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { updateCallUserState } from '@/lib/call-booking-data'
 
 // ── CORS helpers ──────────────────────────────────────────────────────────────
 // Allow any origin so both the Lovable marketing site and HubSpot can call this.
@@ -148,6 +149,17 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   }
 
   const name = [voornaam, achternaam].filter(Boolean).join(' ') || email.split('@')[0]
+  const contactOwnerId = pick(
+    body,
+    'hubspot_owner_id',
+    'contact_owner_id',
+    'owner_id',
+    'contacteigenaar_id',
+    'contact_owner_email',
+    'hubspot_owner_email',
+    'owner_email',
+    'contacteigenaar_email',
+  ) || null
 
   // ── 4. Voorlopig account aanmaken of hergebruiken ─────────────────────────
   const { data: existing } = await supabase
@@ -187,6 +199,10 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     userId = newId
     outcome = 'created'
     console.log(`[v0] account-aanmaken: nieuw voorlopig account aangemaakt voor ${email} (id=${userId})`)
+  }
+
+  if (contactOwnerId) {
+    await updateCallUserState(supabase, userId, { contact_owner_email: contactOwnerId })
   }
 
   // ── 5. Invite ophalen of aanmaken (nooit twee actieve invites per user) ────

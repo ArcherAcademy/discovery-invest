@@ -2,12 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
-import { MapPin, Clock, Copy, Check, ExternalLink } from 'lucide-react'
-import { useApp } from '@/components/app-context'
+import { MapPin, Clock, ExternalLink } from 'lucide-react'
 import type { DemoEvent } from '@/lib/types'
 
-
-const KORTINGSCODE = 'Free-discovery-invest'
 const EVENTBRITE_URL =
   'https://www.eventbrite.be/e/krijg-grip-op-je-geld-en-de-handvatten-om-het-te-laten-groeien-tickets-1995064585882?aff=oddtdtcreator&utm_source=archer&utm_medium=event-page&utm_campaign=content-network'
 
@@ -100,59 +97,6 @@ const VIDEOS = [
   },
 ]
 
-function KortingscodeBlock() {
-  const [copied, setCopied] = useState(false)
-  function copyCode() {
-    navigator.clipboard.writeText(KORTINGSCODE).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2200)
-    })
-  }
-  return (
-    <div
-      className="rounded-xl px-4 py-4 flex flex-col gap-3"
-      style={{ background: 'rgba(37,0,245,0.05)', border: '1.5px solid rgba(37,0,245,0.18)' }}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-bold tracking-[0.13em]" style={{ color: '#2500F5' }}>
-          VRIJGESPEELD
-        </p>
-        <span
-          className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full"
-          style={{ background: 'rgba(37,0,245,0.1)', color: '#2500F5' }}
-        >
-          Eenmalig
-        </span>
-      </div>
-      <p className="text-xs" style={{ color: 'rgba(13,15,20,0.6)' }}>
-        Jouw kortingscode. Gebruik deze op Eventbrite om je ticket gratis te maken.
-      </p>
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-        <div
-          className="flex-1 min-w-0 px-3 py-2.5 rounded-lg font-mono text-sm font-bold tracking-wide select-all whitespace-nowrap overflow-x-auto"
-          style={{ background: '#fff', border: '1px solid rgba(37,0,245,0.2)', color: '#2500F5' }}
-        >
-          {KORTINGSCODE}
-        </div>
-        <button
-          onClick={copyCode}
-          className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-semibold shrink-0 transition-all"
-          style={{
-            background: copied ? 'rgba(37,0,245,0.08)' : '#f0f3fb',
-            color: copied ? '#2500F5' : '#0d0f14',
-            border: '1px solid',
-            borderColor: copied ? 'rgba(37,0,245,0.2)' : '#e8ecf4',
-          }}
-          aria-label="Kopieer kortingscode"
-        >
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-          {copied ? 'Gekopieerd' : 'Kopieer'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function EventVideoPlayer() {
   const [active, setActive] = useState(0)
 
@@ -195,8 +139,6 @@ function EventVideoPlayer() {
 }
 
 export default function EventsPage() {
-  const { allCoreCompleted, coreCompleted } = useApp()
-
   const [events, setEvents] = useState<DemoEvent[]>(FALLBACK_EVENTS)
 
   useEffect(() => {
@@ -209,47 +151,9 @@ export default function EventsPage() {
     load()
   }, [])
 
-  const remaining = 6 - Math.min(coreCompleted, 6)
-
   return (
     <>
       <div className="max-w-3xl mx-auto pb-16">
-
-        {/* ── Spotlight ─────────────────────────────────────────── */}
-        {!allCoreCompleted && (
-          <div
-            className="rounded-2xl mb-8 px-7 py-5"
-            style={{ background: '#f0f3fb', border: '1px solid #e8ecf4' }}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold tracking-[0.15em] mb-1" style={{ color: '#2500F5' }}>
-                  INVEST-AVOND
-                </p>
-                <h1 className="text-lg font-extrabold text-balance mb-0.5" style={{ color: '#0d0f14' }}>
-                  Kijk alle 6 video&apos;s en ontvang je gratis-code.
-                </h1>
-                <p className="text-sm" style={{ color: 'rgba(13,15,20,0.52)' }}>
-                  Nog {remaining} video{remaining === 1 ? '' : "'s"} te gaan. Daarna speel je een gratis plek vrij voor de Invest-avond in de Handelsbeurs Antwerpen.
-                </p>
-              </div>
-              <div className="shrink-0 flex flex-col items-end gap-1 pt-0.5">
-                <span className="text-2xl font-extrabold tabular-nums" style={{ color: '#2500F5' }}>{coreCompleted}/6</span>
-                <span className="text-[10px] font-semibold" style={{ color: 'rgba(13,15,20,0.38)' }}>video&apos;s gezien</span>
-              </div>
-            </div>
-            <div className="flex gap-1.5 mt-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-1 flex-1 rounded-full transition-all duration-500"
-                  style={{ background: i < coreCompleted ? '#2500F5' : '#d1d9f0' }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* ── Event card ──────────────────────────────────────── */}
         <div className="mb-10 space-y-4">
           {events.map((event) => {
@@ -350,12 +254,6 @@ export default function EventsPage() {
                     {event.description}
                   </p>
 
-                  {/* Kortingscode block — alleen voor 6/6 */}
-                  {allCoreCompleted && (
-                    <KortingscodeBlock />
-                  )}
-
-                  {/* CTA — altijd naar Eventbrite */}
                   <a
                     href={meta.eventbriteUrl}
                     target="_blank"
@@ -363,16 +261,9 @@ export default function EventsPage() {
                     className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-semibold transition-opacity hover:opacity-85"
                     style={{ background: '#2500F5', color: '#fff' }}
                   >
-                    {allCoreCompleted ? 'Reserveer je gratis plaats op Eventbrite' : 'Reserveer je plaats op Eventbrite'}
+                    Reserveer je plaats op Eventbrite
                     <ExternalLink size={13} />
                   </a>
-
-                  {/* Nudge voor wie nog niet op 6/6 zit */}
-                  {!allCoreCompleted && (
-                    <p className="text-center text-xs" style={{ color: 'rgba(13,15,20,0.4)' }}>
-                      Kijk alle 6 video&apos;s en ontvang een code om gratis binnen te gaan.
-                    </p>
-                  )}
                 </div>
               </div>
             )

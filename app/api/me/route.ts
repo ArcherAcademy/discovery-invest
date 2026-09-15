@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getCallUserState } from '@/lib/call-booking-data'
 
 /**
  * GET /api/me
@@ -16,14 +17,15 @@ export async function GET(req: NextRequest) {
 
   const supabase = createAdminClient()
 
-  const [{ data: funnelData }, { data: progressData }, { data: videosData }] = await Promise.all([
+  const [{ data: funnelData }, { data: progressData }, { data: videosData }, callState] = await Promise.all([
     supabase.from('demo_invest_user_funnel').select('*').eq('user_id', user.id).maybeSingle(),
     supabase.from('demo_invest_video_progress').select('*').eq('user_id', user.id),
     supabase.from('demo_invest_videos').select('*').order('order_no'),
+    getCallUserState(supabase, user.id),
   ])
 
   return NextResponse.json({
-    user,
+    user: { ...user, ...callState },
     funnel: funnelData ?? null,
     progress: progressData ?? [],
     videos: videosData ?? [],

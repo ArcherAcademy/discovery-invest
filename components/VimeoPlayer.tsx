@@ -214,7 +214,7 @@ export default function VimeoPlayer({
                 <div>
                   <p className="text-white font-bold text-lg leading-tight">Alle video&apos;s bekeken</p>
                   <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                    Je bonus en gratis avond zijn vrijgespeeld.
+                    Je bonus en persoonlijk adviesgesprek zijn vrijgespeeld.
                   </p>
                 </div>
                 <button

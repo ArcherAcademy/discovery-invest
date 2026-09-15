@@ -60,6 +60,8 @@ export interface DemoEvent {
   location: string
   capacity: number
   spots_left: number
+  price_eur?: number | null
+  description?: string | null
 }
 
 export interface DemoEventBooking {

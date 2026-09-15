@@ -18,6 +18,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { HUBSPOT_CODE } from '@/lib/hubspot-codes'
+import { getCallUserState, resolveBookingLink } from '@/lib/call-booking-data'
 import type {
   DemoUser,
   DemoUserFunnel,
@@ -117,17 +118,30 @@ async function attemptFire(
     { data: freshProgressRows },
     { data: freshBookingRows },
     { data: freshEventsRows },
+    { data: followUpDisabled },
   ] = await Promise.all([
     supabase.from('demo_invest_users').select('*').eq('id', userId).single(),
     supabase.from('demo_invest_user_funnel').select('*').eq('user_id', userId).limit(1),
     supabase.from('demo_invest_video_progress').select('*').eq('user_id', userId),
     supabase.from('demo_invest_event_bookings').select('*').eq('user_id', userId).eq('status', 'booked'),
     supabase.from('demo_invest_events').select('*'),
+    supabase.from('demo_invest_trigger_sent').select('id').eq('user_id', userId).eq('workflow_naam', '__automatische_opvolging_uit__').maybeSingle(),
   ])
 
   const user = freshUser as DemoUser | null
   if (!user) {
     await logDecision(supabase, userId, '', workflow, 'onderdrukt', 'gebruiker niet gevonden', null, {})
+    return 'suppressed'
+  }
+
+  if (followUpDisabled) {
+    await supabase
+      .from('demo_invest_trigger_sent')
+      .delete()
+      .eq('user_id', userId)
+      .eq('workflow_naam', workflow.naam)
+
+    await logDecision(supabase, userId, user.email, workflow, 'onderdrukt', 'automatische opvolging uitgeschakeld', null, {})
     return 'suppressed'
   }
 
@@ -473,12 +487,18 @@ async function attemptFire(
       .eq('user_id', userId)
       .eq('workflow_naam', workflow.naam)
   } else {
-    const hubspotCode = HUBSPOT_CODE[workflow.naam] ?? workflow.naam
-    const outboundBody = JSON.stringify({
-      workflow: hubspotCode,
-      email:    user.email,
-      naam:     user.name ?? '',
-    })
+  const hubspotCode = HUBSPOT_CODE[workflow.naam] ?? workflow.naam
+  const callState = await getCallUserState(supabase, user.id)
+  const booking = await resolveBookingLink(supabase, callState.contact_owner_email)
+  const outboundBody = JSON.stringify({
+  workflow: hubspotCode,
+  email:    user.email,
+  naam:     user.name ?? '',
+  contact_owner_email: callState.contact_owner_email,
+  appointment_url: booking?.booking_url ?? null,
+  appointment_owner_name: booking?.owner_name ?? null,
+  appointment_link_is_fallback: booking?.is_fallback ?? null,
+  })
     try {
       const res = await fetch(centralUrl, {
         method:  'POST',

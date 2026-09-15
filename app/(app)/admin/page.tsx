@@ -4,11 +4,14 @@ import { useEffect, useState } from 'react'
 import { useApp } from '@/components/app-context'
 import { useRouter } from 'next/navigation'
 import { t } from '@/lib/i18n'
-import { Users, TrendingUp, Trophy, CalendarDays, Clock, ChevronDown, ChevronUp, ToggleLeft, ToggleRight, RefreshCw, Copy, Check, Trash2, X, Send, MailWarning, Search, ShieldCheck, UserPlus, UserMinus, Download } from 'lucide-react'
+import { Users, TrendingUp, Trophy, CalendarDays, Clock, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ToggleLeft, ToggleRight, RefreshCw, Copy, Check, Trash2, X, Send, MailWarning, Search, ShieldCheck, UserPlus, UserMinus, Download } from 'lucide-react'
 import { WORKFLOWS } from '@/lib/workflow-engine'
 import { HUBSPOT_CODES_ORDERED } from '@/lib/hubspot-codes'
 import { VoortgangTab } from '@/components/admin/VoortgangTab'
 import { InhaalrondeModal } from '@/components/admin/InhaalrondeModal'
+import { UserFollowUpControl } from '@/components/admin/UserFollowUpControl'
+import { BookingLinksTab } from '@/components/admin/BookingLinksTab'
+import { CallBookingsOverview } from '@/components/admin/CallBookingsOverview'
 import type { DemoUser, DemoUserFunnel, DemoWebhookLog, DemoTriggerLog, DemoWebhookConfig, AccountWebhookLog, DemoQuizSubmission } from '@/lib/types'
 import { QUIZ_QUESTIONS } from '@/lib/quiz-data'
 import { hasPermanentAccess, isTrialExpired, trialDaysRemaining } from '@/lib/access'
@@ -26,6 +29,23 @@ type AccountStatus = 'aangemaakt' | 'geactiveerd' | 'zonder_link'
 
 type Tab = 'overview' | 'accounts' | 'users' | 'mentors' | 'webhooks' | 'workflows' | 'history' | 'account_logs' | 'voortgang'
 
+const ACCOUNTS_PER_PAGE = 50
+
+function getVisibleAccountPages(currentPage: number, pageCount: number): Array<number | 'ellipsis-start' | 'ellipsis-end'> {
+  if (pageCount <= 7) return Array.from({ length: pageCount }, (_, index) => index + 1)
+
+  const pages: Array<number | 'ellipsis-start' | 'ellipsis-end'> = [1]
+  if (currentPage > 4) pages.push('ellipsis-start')
+
+  const rangeStart = Math.max(2, currentPage - 1)
+  const rangeEnd = Math.min(pageCount - 1, currentPage + 1)
+  for (let page = rangeStart; page <= rangeEnd; page += 1) pages.push(page)
+
+  if (currentPage < pageCount - 3) pages.push('ellipsis-end')
+  pages.push(pageCount)
+  return pages
+}
+
 export default function AdminPage() {
   const { user, locale } = useApp()
   const router = useRouter()
@@ -33,6 +53,8 @@ export default function AdminPage() {
 
   const [tab, setTab] = useState<Tab>('overview')
   const [users, setUsers] = useState<AdminUser[]>([])
+  const [accountTotal, setAccountTotal] = useState(0)
+  const [accountPage, setAccountPage] = useState(1)
   const [webhookLog, setWebhookLog] = useState<DemoWebhookLog[]>([])
   const [triggerLog, setTriggerLog] = useState<DemoTriggerLog[]>([])
   const [webhookConfig, setWebhookConfig] = useState<DemoWebhookConfig[]>([])
@@ -149,7 +171,9 @@ export default function AdminPage() {
         const d = await r.json()
         if (d.users && d.funnels) {
           const funnelMap = new Map((d.funnels as DemoUserFunnel[]).map((f: DemoUserFunnel) => [f.user_id, f]))
-          setUsers((d.users as DemoUser[]).map((u: DemoUser) => ({ ...u, funnel: funnelMap.get(u.id) })))
+          const refreshedUsers = (d.users as DemoUser[]).map((u: DemoUser) => ({ ...u, funnel: funnelMap.get(u.id) }))
+          setUsers(refreshedUsers)
+          setAccountTotal(typeof d.accountTotal === 'number' ? d.accountTotal : refreshedUsers.length)
         }
         if (d.invites) setInvites(d.invites as DemoInvite[])
       }
@@ -195,6 +219,7 @@ export default function AdminPage() {
         const funnelMap = new Map((d.funnels as DemoUserFunnel[]).map((f: DemoUserFunnel) => [f.user_id, f]))
         const combined = (d.users as DemoUser[]).map((u: DemoUser) => ({ ...u, funnel: funnelMap.get(u.id) }))
         setUsers(combined)
+        setAccountTotal(typeof d.accountTotal === 'number' ? d.accountTotal : combined.length)
       }
       if (d.logs) setWebhookLog(d.logs as DemoWebhookLog[])
       if (d.triggerLogs) setTriggerLog(d.triggerLogs as DemoTriggerLog[])
@@ -318,6 +343,7 @@ export default function AdminPage() {
       }
       // Remove from local state immediately
       setUsers(prev => prev.filter(u => u.id !== deleteConfirm.userId))
+      setAccountTotal(total => Math.max(0, total - 1))
       setDeleteConfirm(null)
     } catch {
       setDeleteError('Netwerk fout. Probeer opnieuw.')
@@ -381,6 +407,30 @@ export default function AdminPage() {
     setWebhookConfig(prev => prev.map(c => c.trigger_naam === triggerNaam ? { ...c, actief: !current } : c))
   }
 
+  async function handleOwnerUpdate(userId: string, contactOwnerEmail: string) {
+    const response = await fetch('/api/admin/user-owner', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, contact_owner_email: contactOwnerEmail }),
+    })
+    if (!response.ok) return
+    setUsers(current => current.map(item => item.id === userId
+      ? { ...item, contact_owner_email: contactOwnerEmail.trim().toLowerCase() || null }
+      : item))
+  }
+
+  async function handleCallBookedUpdate(userId: string, callBooked: boolean) {
+    const response = await fetch('/api/admin/user-owner', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, call_booked: callBooked }),
+    })
+    if (!response.ok) return
+    setUsers(current => current.map(item => item.id === userId
+      ? { ...item, call_booked: callBooked, call_booked_at: callBooked ? new Date().toISOString() : null }
+      : item))
+  }
+
   // Tabs accessible to mentor (opvolg-tabs only)
   const MENTOR_TABS: Tab[] = ['overview', 'accounts', 'voortgang', 'users']
 
@@ -442,20 +492,37 @@ export default function AdminPage() {
 
       {/* Overview */}
       {tab === 'overview' && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {kpis.map((kpi) => (
-            <div
-              key={kpi.label}
-              className="p-5 rounded-2xl border"
-              style={{ background: '#ffffff', borderColor: '#e8ecf4' }}
-            >
-              <div className="flex items-center gap-2 mb-2" style={{ color: '#2500F5' }}>
-                {kpi.icon}
+        <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+            {kpis.map((kpi) => (
+              <div
+                key={kpi.label}
+                className="rounded-2xl border p-5"
+                style={{ background: '#ffffff', borderColor: '#e8ecf4' }}
+              >
+                <div className="mb-2 flex items-center gap-2" style={{ color: '#2500F5' }}>
+                  {kpi.icon}
+                </div>
+                <p className="text-2xl font-bold" style={{ color: '#0d0f14' }}>{kpi.value}</p>
+                <p className="mt-0.5 text-xs" style={{ color: 'rgba(13,15,20,0.45)' }}>{kpi.label}</p>
               </div>
-              <p className="text-2xl font-bold" style={{ color: '#0d0f14' }}>{kpi.value}</p>
-              <p className="text-xs mt-0.5" style={{ color: 'rgba(13,15,20,0.45)' }}>{kpi.label}</p>
-            </div>
-          ))}
+            ))}
+          </div>
+
+          <CallBookingsOverview />
+
+          {isAdmin && (
+            <section className="flex flex-col gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#2500F5' }}>Instellingen</p>
+                <h2 className="mt-1 text-xl font-bold text-balance" style={{ color: '#0d0f14' }}>Beheer boekingslinks</h2>
+                <p className="mt-1 text-sm leading-6" style={{ color: 'rgba(13,15,20,0.55)' }}>
+                  Beheer hier welke persoonlijke HubSpot-agenda bij elke contacteigenaar hoort.
+                </p>
+              </div>
+              <BookingLinksTab />
+            </section>
+          )}
         </div>
       )}
 
@@ -613,11 +680,22 @@ export default function AdminPage() {
           .filter(u => {
             const s = getAccountStatus(u)
             const statusOk = !accountsFilter.status || s === accountsFilter.status
-            const q = accountsFilter.query.toLowerCase()
+            const q = accountsFilter.query.trim().toLowerCase()
             const queryOk = !q || (u.email ?? '').toLowerCase().includes(q) || (u.name ?? '').toLowerCase().includes(q)
             return statusOk && queryOk
           })
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .sort((a, b) => {
+            const createdDifference = new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            return createdDifference || b.id.localeCompare(a.id)
+          })
+        const pageCount = Math.max(1, Math.ceil(filtered.length / ACCOUNTS_PER_PAGE))
+        const activePage = Math.min(accountPage, pageCount)
+        const pageStart = (activePage - 1) * ACCOUNTS_PER_PAGE
+        const visibleAccounts = filtered.slice(pageStart, pageStart + ACCOUNTS_PER_PAGE)
+        const rangeStart = filtered.length === 0 ? 0 : pageStart + 1
+        const rangeEnd = Math.min(pageStart + ACCOUNTS_PER_PAGE, filtered.length)
+        const visiblePages = getVisibleAccountPages(activePage, pageCount)
+        const isFiltered = Boolean(accountsFilter.status || accountsFilter.query.trim())
 
         return (
           <div className="space-y-5">
@@ -651,7 +729,10 @@ export default function AdminPage() {
                 ]).map(opt => (
                   <button
                     key={opt.value}
-                    onClick={() => setAccountsFilter(f => ({ ...f, status: opt.value }))}
+                    onClick={() => {
+                      setAccountsFilter(f => ({ ...f, status: opt.value }))
+                      setAccountPage(1)
+                    }}
                     className="px-3 py-2 text-xs font-medium transition-all"
                     style={accountsFilter.status === opt.value
                       ? { background: '#2500F5', color: '#fff' }
@@ -666,11 +747,16 @@ export default function AdminPage() {
                 type="text"
                 placeholder="Zoek op naam of e-mail..."
                 value={accountsFilter.query}
-                onChange={e => setAccountsFilter(f => ({ ...f, query: e.target.value }))}
+                onChange={e => {
+                  setAccountsFilter(f => ({ ...f, query: e.target.value }))
+                  setAccountPage(1)
+                }}
                 className="rounded-xl px-3 py-2 text-xs border outline-none"
                 style={{ background: '#fff', borderColor: '#e8ecf4', color: '#0d0f14', minWidth: 220 }}
               />
-              <span className="text-xs" style={{ color: 'rgba(13,15,20,0.4)' }}>{filtered.length} accounts</span>
+              <span className="text-xs" style={{ color: 'rgba(13,15,20,0.4)' }}>
+                {isFiltered ? `${filtered.length} van ${accountTotal}` : accountTotal} accounts
+              </span>
               <button
                 type="button"
                 onClick={handleAccountsExport}
@@ -695,13 +781,13 @@ export default function AdminPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e8ecf4', background: '#F5F8FF' }}>
-                      {['Naam', 'E-mail', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Verleng trial', ''].map(h => (
+                      {['Naam', 'E-mail', 'Contacteigenaar', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
                         <th key={h} className="px-4 py-3 text-left font-semibold" style={{ color: 'rgba(13,15,20,0.45)' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map(u => {
+                    {visibleAccounts.map(u => {
                       const status = getAccountStatus(u)
                       const cfg = statusConfig[status]
                       const days = trialDaysLeft(u)
@@ -718,6 +804,19 @@ export default function AdminPage() {
 
                           {/* E-mail */}
                           <td className="px-4 py-3" style={{ color: 'rgba(13,15,20,0.6)' }}>{u.email}</td>
+
+                          {/* HubSpot-contacteigenaar */}
+                          <td className="px-4 py-3 min-w-48">
+                            <input
+                              type="email"
+                              defaultValue={u.contact_owner_email ?? ''}
+                              onBlur={event => handleOwnerUpdate(u.id, event.currentTarget.value)}
+                              placeholder="adviseur@bedrijf.be"
+                              aria-label={`Contacteigenaar voor ${u.email}`}
+                              className="w-full rounded-lg border px-2 py-1.5 text-[11px] outline-none focus:ring-2"
+                              style={{ borderColor: '#e8ecf4', color: '#0d0f14', background: '#fafbff' }}
+                            />
+                          </td>
 
                           {/* Status badge */}
                           <td className="px-4 py-3 whitespace-nowrap">
@@ -777,6 +876,38 @@ export default function AdminPage() {
                             }
                           </td>
 
+                          {/* Persoonlijke adviescall */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleCallBookedUpdate(u.id, !u.call_booked)}
+                              className="rounded-full px-2.5 py-1 text-[10px] font-semibold transition-opacity hover:opacity-75"
+                              style={u.call_booked
+                                ? { background: 'rgba(22,163,74,0.1)', color: '#16a34a' }
+                                : u.call_clicked_at
+                                  ? { background: 'rgba(37,0,245,0.08)', color: '#2500F5' }
+                                  : { background: '#f0f3fb', color: 'rgba(13,15,20,0.45)' }}
+                            >
+                              {u.call_booked ? 'Geboekt' : u.call_clicked_at ? 'Geklikt' : u.call_opened_at ? 'Gezien' : 'Niet gezien'}
+                            </button>
+                          </td>
+
+                          {/* Automatische opvolging */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {u.role === 'user' ? (
+                              <UserFollowUpControl
+                                userId={u.id}
+                                actief={u.opvolging_actief}
+                                compact
+                                onChange={actief => setUsers(current => current.map(item =>
+                                  item.id === u.id ? { ...item, opvolging_actief: actief } : item
+                                ))}
+                              />
+                            ) : (
+                              <span className="text-[10px]" style={{ color: 'rgba(13,15,20,0.35)' }}>Niet van toepassing</span>
+                            )}
+                          </td>
+
                           {/* Extend trial */}
                           <td className="px-4 py-3 whitespace-nowrap">
                             {permanent ? (
@@ -831,7 +962,7 @@ export default function AdminPage() {
                     })}
                     {filtered.length === 0 && (
                       <tr>
-                        <td colSpan={10} className="px-4 py-8 text-center text-xs" style={{ color: 'rgba(13,15,20,0.35)' }}>
+                        <td colSpan={13} className="px-4 py-8 text-center text-xs" style={{ color: 'rgba(13,15,20,0.35)' }}>
                           Geen accounts gevonden
                         </td>
                       </tr>
@@ -840,6 +971,51 @@ export default function AdminPage() {
                 </table>
               </div>
             </div>
+
+            <nav className="flex flex-col gap-3 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between" style={{ background: '#ffffff', borderColor: '#e8ecf4' }} aria-label="Accountpagina's">
+              <p className="text-xs font-medium" style={{ color: 'rgba(13,15,20,0.55)' }} aria-live="polite">
+                {rangeStart}–{rangeEnd} van {filtered.length} {isFiltered ? `gevonden accounts (${accountTotal} totaal)` : 'accounts'}
+              </p>
+              <div className="flex flex-wrap items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setAccountPage(page => Math.max(1, page - 1))}
+                  disabled={activePage === 1}
+                  className="inline-flex size-8 items-center justify-center rounded-lg border transition-opacity hover:opacity-70 disabled:cursor-not-allowed disabled:opacity-30"
+                  style={{ borderColor: '#e8ecf4', color: '#2500F5', background: '#ffffff' }}
+                  aria-label="Vorige accountpagina"
+                >
+                  <ChevronLeft size={15} aria-hidden="true" />
+                </button>
+                {visiblePages.map(page => typeof page === 'number' ? (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => setAccountPage(page)}
+                    className="inline-flex size-8 items-center justify-center rounded-lg text-xs font-semibold transition-opacity hover:opacity-75"
+                    style={page === activePage
+                      ? { background: '#2500F5', color: '#ffffff' }
+                      : { background: '#f0f3fb', color: 'rgba(13,15,20,0.65)' }}
+                    aria-label={`Ga naar accountpagina ${page}`}
+                    aria-current={page === activePage ? 'page' : undefined}
+                  >
+                    {page}
+                  </button>
+                ) : (
+                  <span key={page} className="inline-flex size-8 items-center justify-center text-xs" style={{ color: 'rgba(13,15,20,0.4)' }} aria-hidden="true">…</span>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setAccountPage(page => Math.min(pageCount, page + 1))}
+                  disabled={activePage === pageCount}
+                  className="inline-flex size-8 items-center justify-center rounded-lg border transition-opacity hover:opacity-70 disabled:cursor-not-allowed disabled:opacity-30"
+                  style={{ borderColor: '#e8ecf4', color: '#2500F5', background: '#ffffff' }}
+                  aria-label="Volgende accountpagina"
+                >
+                  <ChevronRight size={15} aria-hidden="true" />
+                </button>
+              </div>
+            </nav>
           </div>
         )
       })()}
@@ -1567,9 +1743,9 @@ export default function AdminPage() {
         <div className="rounded-2xl border overflow-hidden relative" style={{ background: '#ffffff', borderColor: '#e8ecf4' }}>
             <div className="sm:hidden pointer-events-none absolute right-0 top-0 bottom-0 w-6 z-10" style={{ background: 'linear-gradient(to right, transparent, #ffffff)' }} />
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr style={{ borderBottom: '1px solid #e8ecf4', background: '#F5F8FF' }}>
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 z-10">
+                    <tr style={{ borderBottom: '1px solid #e8ecf4', background: '#F5F8FF' }}>
                   {[tr.admin.timestamp, tr.admin.eventType, tr.admin.user, tr.admin.status, tr.admin.payload].map((h) => (
                     <th key={h} className="px-4 py-3 text-left font-semibold" style={{ color: 'rgba(13,15,20,0.45)' }}>{h}</th>
                   ))}

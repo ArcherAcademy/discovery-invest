@@ -12,20 +12,35 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient()
 
-  const { data: user } = await supabase
+  const normalizedEmail = (email as string).toLowerCase().trim()
+  const { data: users, error: userError } = await supabase
     .from('demo_invest_users')
     .select('id, email, password_hash, activated_at, role')
-    .eq('email', (email as string).toLowerCase().trim())
+    .ilike('email', normalizedEmail)
     .not('password_hash', 'is', null)
+    .neq('password_hash', '')
     .order('activated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
 
-  if (!user || !(user as DemoUser & { password_hash: string }).password_hash) {
-    return NextResponse.json({ ok: false, error: 'Ongeldige e-mail of wachtwoord.' }, { status: 401 })
+  if (userError) {
+    console.error('[v0] login: gebruiker ophalen gefaald:', userError.message)
+    return NextResponse.json({ ok: false, error: 'Inloggen mislukt. Probeer het opnieuw.' }, { status: 500 })
   }
 
-  const typedUser = user as DemoUser & { password_hash: string }
+  const candidates = (users ?? []) as Array<DemoUser & { password_hash: string }>
+  let typedUser: (DemoUser & { password_hash: string }) | null = null
+
+  // Historische imports kunnen meerdere records met hetzelfde e-mailadres bevatten.
+  // Controleer daarom elk bruikbaar wachtwoordhash in plaats van willekeurig één record te kiezen.
+  for (const candidate of candidates) {
+    if (await verifyPassword(password, candidate.password_hash)) {
+      typedUser = candidate
+      break
+    }
+  }
+
+  if (!typedUser) {
+    return NextResponse.json({ ok: false, error: 'Ongeldige e-mail of wachtwoord.' }, { status: 401 })
+  }
 
   // Admins bypass the activated_at check — they are set up directly in the DB
   if (!typedUser.activated_at && typedUser.role !== 'admin') {
@@ -33,11 +48,6 @@ export async function POST(req: NextRequest) {
       { ok: false, error: 'Dit account is nog niet geactiveerd. Gebruik de activatielink uit je e-mail.' },
       { status: 403 }
     )
-  }
-
-  const valid = await verifyPassword(password, typedUser.password_hash)
-  if (!valid) {
-    return NextResponse.json({ ok: false, error: 'Ongeldige e-mail of wachtwoord.' }, { status: 401 })
   }
 
   await supabase

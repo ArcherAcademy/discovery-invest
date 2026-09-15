@@ -2,9 +2,8 @@
 
 import { useRef, useState } from 'react'
 import Link from 'next/link'
-import { Play, ChevronRight, Lock, CheckCircle2, GraduationCap, CalendarDays, Pause, Volume2, VolumeX, Clock, Zap } from 'lucide-react'
-import GratisClaimBlock from '@/components/GratisClaimBlock'
-import GratisClaimPopup from '@/components/GratisClaimPopup'
+import { Play, ChevronRight, CheckCircle2, GraduationCap, CalendarDays, Pause, Volume2, VolumeX, Clock, Zap, Lock } from 'lucide-react'
+import CallBookingBlock from '@/components/CallBookingBlock'
 import { useApp } from '@/components/app-context'
 import { t } from '@/lib/i18n'
 
@@ -116,7 +115,7 @@ export default function HomePage() {
 
   return (
     <>
-    <GratisClaimPopup allCoreCompleted={allCoreCompleted} />
+
     <div className="max-w-6xl mx-auto space-y-5">
 
       {/* ── HERO ─────────────────────────────────────────────── */}
@@ -223,7 +222,7 @@ export default function HomePage() {
                 VRIJSPELEN & ONTGRENDELEN
               </p>
               <p className="text-xs" style={{ color: 'rgba(13,15,20,0.45)' }}>
-                Kijk alle 6 kernvideo&apos;s en speel je bonus + gratis avond vrij
+                Kijk alle 6 kernvideo&apos;s en speel je bonus + persoonlijk adviesgesprek vrij
               </p>
             </div>
 
@@ -313,7 +312,7 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* Step 3 — Invest-avond */}
+                {/* Step 3 — persoonlijk adviesgesprek */}
                 <div className="flex-1">
                   <div
                     className="rounded-xl p-4 border-2 relative overflow-hidden"
@@ -334,14 +333,12 @@ export default function HomePage() {
                     <div className="flex items-center gap-2 mb-3">
                       <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
                         style={{ background: allCoreCompleted ? '#2500F5' : '#f0f3fb', color: allCoreCompleted ? '#fff' : 'rgba(13,15,20,0.3)' }}>
-                        {allCoreCompleted ? <CheckCircle2 size={14} /> : '3'}
+                        {allCoreCompleted ? <CalendarDays size={14} /> : '3'}
                       </div>
-                      <span className="text-xs font-semibold" style={{ color: allCoreCompleted ? '#0d0f14' : 'rgba(13,15,20,0.3)' }}>Invest-avond</span>
+                      <span className="text-xs font-semibold" style={{ color: allCoreCompleted ? '#0d0f14' : 'rgba(13,15,20,0.3)' }}>Adviesgesprek</span>
                     </div>
-                    <div className="h-1.5 rounded-full mb-2" style={{ background: allCoreCompleted ? '#2500F5' : '#f0f3fb' }} />
-                    <span className="text-[11px]" style={{ color: allCoreCompleted ? '#2500F5' : 'rgba(13,15,20,0.3)' }}>
-                      {allCoreCompleted ? 'Vrijgespeeld!' : 'Gratis t.w.v. €97'}
-                    </span>
+                    <div className="h-1.5 rounded-full mb-3" style={{ background: allCoreCompleted ? '#2500F5' : '#f0f3fb' }} />
+                    <CallBookingBlock unlocked={allCoreCompleted} variant="milestone" />
                   </div>
                 </div>
 
@@ -445,7 +442,10 @@ export default function HomePage() {
 
           {/* Events card */}
           <Link
-            href="/events"
+            href="https://workshops.archerinvest.be"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Open Archer Invest workshops in een nieuw tabblad"
             className="flex items-center gap-3 p-4 rounded-xl border transition-all hover:shadow-md group"
             style={{ background: '#fff', borderColor: '#e8ecf4', boxShadow: '0 1px 3px rgba(13,15,20,0.05)' }}
           >
@@ -484,23 +484,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Gratis Invest-avond reward */}
-          {allCoreCompleted ? (
-            <GratisClaimBlock variant="compact" />
-          ) : (
-            <div
-              className="flex items-center justify-between p-4 rounded-xl border"
-              style={{ background: '#fafbff', borderColor: '#e8ecf4' }}
-            >
-              <div>
-                <p className="text-sm font-semibold" style={{ color: 'rgba(13,15,20,0.35)' }}>Gratis Invest-avond</p>
-                <p className="text-xs" style={{ color: 'rgba(13,15,20,0.32)' }}>
-                  Vrijgespeeld bij 6/6 video&apos;s
-                </p>
-              </div>
-              <Lock size={13} style={{ color: 'rgba(13,15,20,0.25)' }} />
-            </div>
-          )}
         </div>
       </div>
     </div>
