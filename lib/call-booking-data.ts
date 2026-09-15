@@ -35,6 +35,10 @@ export interface CallUserState {
   call_clicked_at: string | null
   call_booked: boolean
   call_booked_at: string | null
+  /** Het geboekte afspraaktijdstip zelf (uit demo_invest_webhook_log), niet het moment van boeken. */
+  call_start_at: string | null
+  call_end_at: string | null
+  call_timezone: string | null
 }
 
 export interface BookingLinkResult {
@@ -86,6 +90,9 @@ const EMPTY_USER_STATE: CallUserState = {
   call_clicked_at: null,
   call_booked: false,
   call_booked_at: null,
+  call_start_at: null,
+  call_end_at: null,
+  call_timezone: null,
 }
 
 function toBookingLink(row: BookingLinkRow): BookingLink {
@@ -109,6 +116,9 @@ function stateFromMarkers(ownerId: string | null, markers: CallMarkerRow[]): Cal
     call_clicked_at: markerTime(CALL_CLICKED_MARKER),
     call_booked: Boolean(bookedAt),
     call_booked_at: bookedAt,
+    call_start_at: null,
+    call_end_at: null,
+    call_timezone: null,
   }
 }
 
@@ -176,7 +186,27 @@ export async function getCallUserState(supabase: SupabaseClient, userId: string)
   if (markerError) throw markerError
   if (!user) return EMPTY_USER_STATE
 
-  return stateFromMarkers(user.hubspot_owner_id ?? null, (markers ?? []) as CallMarkerRow[])
+  const state = stateFromMarkers(user.hubspot_owner_id ?? null, (markers ?? []) as CallMarkerRow[])
+  if (!state.call_booked) return state
+
+  // Verrijk met het effectieve afspraaktijdstip uit de meest recente boeking.
+  const { data: log, error: logError } = await supabase
+    .from('demo_invest_webhook_log')
+    .select('payload_json')
+    .eq('user_id', userId)
+    .eq('event_type', 'call.booked')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (logError) throw logError
+
+  const payload = (log?.payload_json ?? null) as Partial<CallBookingPayload> | null
+  state.call_start_at = normalizedDate(payload?.start_at)
+  state.call_end_at = normalizedDate(payload?.end_at)
+  state.call_timezone = normalizedText(payload?.timezone, 80)
+
+  return state
 }
 
 async function setMarker(

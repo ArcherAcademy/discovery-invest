@@ -54,6 +54,25 @@ function getEmbedUrl(bookingUrl: string) {
   return url.toString()
 }
 
+function formatAppointment(startAt: string | null | undefined, timezone?: string | null) {
+  if (!startAt) return null
+  const date = new Date(startAt)
+  if (Number.isNaN(date.getTime())) return null
+
+  const timeZone = timezone || 'Europe/Brussels'
+  try {
+    const datePart = new Intl.DateTimeFormat('nl-BE', {
+      weekday: 'long', day: 'numeric', month: 'long', timeZone,
+    }).format(date)
+    const timePart = new Intl.DateTimeFormat('nl-BE', {
+      hour: '2-digit', minute: '2-digit', timeZone,
+    }).format(date)
+    return { datePart, timePart }
+  } catch {
+    return null
+  }
+}
+
 function isAllowedHubSpotOrigin(origin: string) {
   try {
     const url = new URL(origin)
@@ -207,11 +226,15 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
   }
 
   if (user?.call_booked && !open) {
+    const appointment = formatAppointment(user.call_start_at, user.call_timezone)
+
     if (variant === 'milestone') {
       return (
         <div className="flex items-center gap-2 text-xs font-semibold text-primary">
-          <CheckCircle2 size={14} />
-          Gesprek ingepland
+          <CheckCircle2 size={14} className="shrink-0" />
+          <span className="first-letter:uppercase">
+            {appointment ? `${appointment.datePart} om ${appointment.timePart}` : 'Gesprek ingepland'}
+          </span>
         </div>
       )
     }
@@ -221,7 +244,16 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
         <CheckCircle2 size={20} className="shrink-0 text-primary" />
         <div>
           <p className="text-sm font-semibold">Je adviesgesprek is ingepland</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">Je ontvangt de afspraakbevestiging per e-mail.</p>
+          {appointment ? (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground first-letter:uppercase">{appointment.datePart}</span>
+              {' om '}
+              <span className="font-semibold text-foreground">{appointment.timePart}</span>
+              {' · bevestiging per e-mail'}
+            </p>
+          ) : (
+            <p className="mt-0.5 text-xs text-muted-foreground">Je ontvangt de afspraakbevestiging per e-mail.</p>
+          )}
         </div>
       </div>
     )
