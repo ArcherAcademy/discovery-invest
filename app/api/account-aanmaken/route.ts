@@ -219,13 +219,41 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
       })
 
     if (insertError) {
-      console.error('[v0] account-aanmaken: insert demo_invest_users gefaald:', insertError.message, insertError.details)
-      await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
-      return new Response(`Database error: ${insertError.message}`, { status: 500, headers: CORS_HEADERS })
+      // Unieke index op lower(email): bij twee (bijna) gelijktijdige webhooks
+      // voor hetzelfde adres — precies het website + HubSpot-scenario — kan deze
+      // insert botsen (Postgres unique_violation, code 23505). Val dan terug op
+      // het intussen aangemaakte account in plaats van te falen: zo ontstaat er
+      // nooit een dubbel én gaat de owner van deze webhook niet verloren.
+      if (insertError.code === '23505') {
+        const { data: raced } = await supabase
+          .from('demo_invest_users')
+          .select('id, activated_at, hubspot_owner_id')
+          .ilike('email', escapeLike(email))
+          .order('activated_at', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (raced) {
+          userId = raced.id
+          outcome = 'reused'
+          existingOwnerId = (raced.hubspot_owner_id as string | null)?.trim() || null
+          console.log(`[v0] account-aanmaken: insert-botsing opgevangen, bestaand account hergebruikt voor ${email} (id=${userId})`)
+        } else {
+          console.error('[v0] account-aanmaken: unique_violation maar geen bestaand account gevonden voor', email)
+          await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
+          return new Response(`Database error: ${insertError.message}`, { status: 500, headers: CORS_HEADERS })
+        }
+      } else {
+        console.error('[v0] account-aanmaken: insert demo_invest_users gefaald:', insertError.message, insertError.details)
+        await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
+        return new Response(`Database error: ${insertError.message}`, { status: 500, headers: CORS_HEADERS })
+      }
+    } else {
+      userId = newId
+      outcome = 'created'
+      console.log(`[v0] account-aanmaken: nieuw voorlopig account aangemaakt voor ${email} (id=${userId})`)
     }
-    userId = newId
-    outcome = 'created'
-    console.log(`[v0] account-aanmaken: nieuw voorlopig account aangemaakt voor ${email} (id=${userId})`)
   }
 
   // Owner alleen invullen als die nog leeg is — nooit een bestaande owner
