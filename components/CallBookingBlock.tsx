@@ -217,7 +217,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
             <Lock size={17} />
           </div>
           <div>
-            <p className="text-sm font-semibold text-foreground/60">Persoonlijk adviesgesprek</p>
+            <p className="text-sm font-semibold text-foreground/60">Persoonlijk oriëntatiegesprek</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">Vrijgespeeld zodra je alle 6 kernvideo&apos;s hebt voltooid.</p>
           </div>
         </div>
@@ -243,7 +243,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
       <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-4 text-card-foreground">
         <CheckCircle2 size={20} className="shrink-0 text-primary" />
         <div>
-          <p className="text-sm font-semibold">Je adviesgesprek is ingepland</p>
+          <p className="text-sm font-semibold">Je oriëntatiegesprek is ingepland</p>
           {appointment ? (
             <p className="mt-0.5 text-xs text-muted-foreground">
               <span className="font-semibold text-foreground first-letter:uppercase">{appointment.datePart}</span>
@@ -274,7 +274,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
             <CalendarDays size={18} />
           </div>
           <div>
-            <p className="text-sm font-bold text-foreground">Plan je persoonlijk adviesgesprek</p>
+            <p className="text-sm font-bold text-foreground">Plan je persoonlijk oriëntatiegesprek</p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
               Kies rechtstreeks een moment in de agenda{data?.owner_name ? ` van ${data.owner_name}` : ''}. Je blijft gewoon in Archer.
             </p>
@@ -318,7 +318,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
                       <CheckCircle2 size={28} />
                     </div>
                     <div className="flex max-w-md flex-col gap-2">
-                      <h2 className="text-xl font-bold text-balance">Je adviesgesprek staat ingepland</h2>
+                      <h2 className="text-xl font-bold text-balance">Je oriëntatiegesprek staat ingepland</h2>
                       <p className="text-sm leading-6 text-muted-foreground">We hebben je boeking geregistreerd. HubSpot stuurt de afspraakbevestiging en alle praktische info per e-mail.</p>
                     </div>
                     <Dialog.Close className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
@@ -356,7 +356,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
                     <iframe
                       key={frameKey}
                       src={getEmbedUrl(data.booking_url)}
-                      title="Plan je persoonlijk adviesgesprek"
+                      title="Plan je persoonlijk oriëntatiegesprek"
                       className="h-full w-full border-0 bg-card"
                       onLoad={() => setFrameLoaded(true)}
                       onError={() => setStatus('error')}

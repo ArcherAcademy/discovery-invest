@@ -161,7 +161,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       {/* Trial countdown + profile */}
       <div className="px-3 pb-4 space-y-3 border-t" style={{ borderColor: '#e8ecf4', paddingTop: '12px' }}>
-        {/* Ingepland adviesgesprek — clean calendar-popup */}
+        {/* Ingepland oriëntatiegesprek — clean calendar-popup */}
         <SidebarCallStatus onNavigate={onNavigate} />
 
         {/* Trial pill */}
