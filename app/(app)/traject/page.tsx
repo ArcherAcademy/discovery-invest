@@ -5,7 +5,12 @@ import Link from 'next/link'
 import { Dialog } from '@base-ui/react/dialog'
 import { CalendarDays, CheckCircle2, FileText, Gift, Lock, Play, Clock, X } from 'lucide-react'
 import { useApp } from '@/components/app-context'
+<<<<<<< HEAD
 import CallBookingBlock from '@/components/CallBookingBlock'
+=======
+import GratisClaimBlock from '@/components/GratisClaimBlock'
+import GratisClaimPopup from '@/components/GratisClaimPopup'
+>>>>>>> d07dbb592d769ac5132e83f8175d00cab89db11a
 import PdfThumbnail from '@/components/PdfThumbnail'
 import { Button } from '@/components/ui/button'
 

@@ -11,17 +11,11 @@ export interface DemoUser {
   role: UserRole
   locale: Locale
   whatsapp_opt_in: boolean
-  opvolging_actief?: boolean
   created_at: string
   activated_at: string | null
   trial_started_at: string | null
   trial_expires_at: string | null
   last_activity_at: string | null
-  contact_owner_email: string | null
-  call_opened_at: string | null
-  call_clicked_at: string | null
-  call_booked: boolean
-  call_booked_at: string | null
 }
 
 export interface DemoVideo {

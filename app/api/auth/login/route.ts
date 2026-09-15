@@ -16,10 +16,18 @@ export async function POST(req: NextRequest) {
   const { data: users, error: userError } = await supabase
     .from('demo_invest_users')
     .select('id, email, password_hash, activated_at, role')
+<<<<<<< HEAD
     .ilike('email', normalizedEmail)
     .not('password_hash', 'is', null)
     .neq('password_hash', '')
     .order('activated_at', { ascending: false })
+=======
+    .eq('email', (email as string).toLowerCase().trim())
+    .not('password_hash', 'is', null)
+    .order('activated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+>>>>>>> d07dbb592d769ac5132e83f8175d00cab89db11a
 
   if (userError) {
     console.error('[v0] login: gebruiker ophalen gefaald:', userError.message)

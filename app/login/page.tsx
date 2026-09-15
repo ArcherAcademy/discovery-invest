@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Image from 'next/image'
 
 export default function LoginPage() {
@@ -8,11 +8,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [isHydrated, setIsHydrated] = useState(false)
-
-  useEffect(() => {
-    setIsHydrated(true)
-  }, [])
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -87,13 +82,7 @@ export default function LoginPage() {
             boxShadow: '0 8px 48px rgba(0,0,0,0.4)',
           }}
         >
-          {isHydrated ? (
-          <form
-            onSubmit={handleLogin}
-            className="flex flex-col gap-4"
-            data-lpignore="true"
-            data-1p-ignore="true"
-          >
+          <form onSubmit={handleLogin} className="flex flex-col gap-4" suppressHydrationWarning>
 
             {/* Email */}
             <div className="flex flex-col gap-1.5" suppressHydrationWarning>
@@ -106,8 +95,6 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
-                data-lpignore="true"
-                data-1p-ignore="true"
                 placeholder="naam@voorbeeld.nl"
                 className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all"
                 style={{
@@ -149,8 +136,6 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
-                data-lpignore="true"
-                data-1p-ignore="true"
                 placeholder="••••••••"
                 className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all"
                 style={{
@@ -194,9 +179,6 @@ export default function LoginPage() {
               {loading ? 'Inloggen...' : 'Inloggen'}
             </button>
           </form>
-          ) : (
-            <div className="h-52" aria-hidden="true" />
-          )}
 
           {/* Divider */}
           <div className="flex items-center gap-3 my-4">

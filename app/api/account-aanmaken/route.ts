@@ -149,6 +149,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   }
 
   const name = [voornaam, achternaam].filter(Boolean).join(' ') || email.split('@')[0]
+<<<<<<< HEAD
   const contactOwnerId = pick(
     body,
     'hubspot_owner_id',
@@ -160,6 +161,8 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     'owner_email',
     'contacteigenaar_email',
   ) || null
+=======
+>>>>>>> d07dbb592d769ac5132e83f8175d00cab89db11a
 
   // ── 4. Voorlopig account aanmaken of hergebruiken ─────────────────────────
   const { data: existing } = await supabase
