@@ -333,14 +333,27 @@ export default function HomePage() {
                     <div className="flex items-center gap-2 mb-3">
                       <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
                         style={{ background: allCoreCompleted ? '#2500F5' : '#f0f3fb', color: allCoreCompleted ? '#fff' : 'rgba(13,15,20,0.3)' }}>
-                        {allCoreCompleted ? <CheckCircle2 size={14} /> : '3'}
+                        {allCoreCompleted ? <CalendarDays size={14} /> : '3'}
                       </div>
                       <span className="text-xs font-semibold" style={{ color: allCoreCompleted ? '#0d0f14' : 'rgba(13,15,20,0.3)' }}>Adviesgesprek</span>
                     </div>
-                    <div className="h-1.5 rounded-full mb-2" style={{ background: allCoreCompleted ? '#2500F5' : '#f0f3fb' }} />
-                    <span className="text-[11px]" style={{ color: allCoreCompleted ? '#2500F5' : 'rgba(13,15,20,0.3)' }}>
-                      {allCoreCompleted ? 'Plan je moment' : 'Persoonlijk met je adviseur'}
-                    </span>
+                    <div className="h-1.5 rounded-full mb-3" style={{ background: allCoreCompleted ? '#2500F5' : '#f0f3fb' }} />
+                    {allCoreCompleted ? (
+                      <a
+                        href="/api/call-booking/click"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-opacity hover:opacity-85"
+                        style={{ background: '#2500F5', color: '#fff' }}
+                      >
+                        Boek je adviesgesprek
+                        <ChevronRight size={12} />
+                      </a>
+                    ) : (
+                      <span className="text-[11px]" style={{ color: 'rgba(13,15,20,0.3)' }}>
+                        Persoonlijk met je adviseur
+                      </span>
+                    )}
                   </div>
                 </div>
 
