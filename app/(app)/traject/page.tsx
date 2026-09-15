@@ -336,8 +336,8 @@ export default function TrajectPage() {
 
       <Dialog.Root open={unlockDialogOpen} onOpenChange={setUnlockDialogOpen}>
         <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 min-h-dvh bg-foreground/45 backdrop-blur-sm transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0" />
-          <Dialog.Viewport className="fixed inset-0 flex items-end justify-center p-3 sm:items-center sm:p-6">
+          <Dialog.Backdrop className="fixed inset-0 z-50 min-h-dvh bg-foreground/45 backdrop-blur-sm transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0" />
+          <Dialog.Viewport className="fixed inset-0 z-50 flex items-end justify-center p-3 sm:items-center sm:p-6">
             <Dialog.Popup className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col gap-6 overflow-y-auto rounded-2xl border border-border bg-card p-5 text-card-foreground shadow-2xl transition duration-200 data-ending-style:translate-y-4 data-ending-style:opacity-0 data-starting-style:translate-y-4 data-starting-style:opacity-0 sm:p-7">
               <Dialog.Close className="absolute right-4 top-4 flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" aria-label="Melding sluiten">
                 <X size={18} />
