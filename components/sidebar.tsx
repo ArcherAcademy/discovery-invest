@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { Clock, Settings, LogOut, Home, PlaySquare, CalendarDays, GraduationCap, ShieldCheck, ClipboardList, Lock, Menu, X } from 'lucide-react'
 import { useApp } from './app-context'
+import { SidebarCallStatus } from './SidebarCallStatus'
 import { t } from '@/lib/i18n'
 
 interface NavItem {
@@ -160,6 +161,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       {/* Trial countdown + profile */}
       <div className="px-3 pb-4 space-y-3 border-t" style={{ borderColor: '#e8ecf4', paddingTop: '12px' }}>
+        {/* Ingepland adviesgesprek — clean calendar-popup */}
+        <SidebarCallStatus onNavigate={onNavigate} />
+
         {/* Trial pill */}
         {isAdminOrMentor ? (
           <div
