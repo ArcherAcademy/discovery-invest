@@ -5,7 +5,6 @@ import Image from 'next/image'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -17,7 +16,7 @@ export default function LoginPage() {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email }),
     })
 
     let data: { ok: boolean; error?: string } = { ok: false }
@@ -96,47 +95,6 @@ export default function LoginPage() {
                 required
                 autoComplete="email"
                 placeholder="naam@voorbeeld.nl"
-                className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all"
-                style={{
-                  background: 'rgba(255,255,255,0.1)',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  color: '#fff',
-                  caretColor: '#fff',
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#2500F5'
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37,0,245,0.2)'
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'
-                  e.currentTarget.style.boxShadow = 'none'
-                }}
-              />
-            </div>
-
-            {/* Password */}
-            <div className="flex flex-col gap-1.5" suppressHydrationWarning>
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.85)' }}>
-                  Wachtwoord
-                </label>
-                <a
-                  href="#"
-                  className="text-sm transition-colors"
-                  style={{ color: 'rgba(255,255,255,0.5)' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = '#fff')}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.5)')}
-                >
-                  Vergeten?
-                </a>
-              </div>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-                placeholder="••••••••"
                 className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all"
                 style={{
                   background: 'rgba(255,255,255,0.1)',
