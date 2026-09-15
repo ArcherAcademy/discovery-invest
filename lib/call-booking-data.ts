@@ -287,47 +287,72 @@ export async function getAllCallUserStates(supabase: SupabaseClient): Promise<Ma
   ]))
 }
 
+interface ResolveBookingLinkRow {
+  hubspot_owner_id: string | null
+  naam: string | null
+  booking_url: string | null
+  is_default: boolean | null
+}
+
+/**
+ * Bepaalt welke boekingsagenda een gebruiker te zien krijgt bij 6/6.
+ *
+ * Strikte, waterdichte routing:
+ *  - owner-ID wordt als string exact vergeleken (spaties getrimd);
+ *  - matcht die owner een actieve accountmanager → toon ALLEEN diens agenda;
+ *  - lege owner, onbekende owner, of geen match → altijd de round-robin
+ *    (is_default = true), nooit een leeg of kapot scherm.
+ *
+ * De functie gooit nooit: alle actieve links worden in één query opgehaald en
+ * in JS gematcht, zodat dubbele rijen geen .maybeSingle()-fout (500) geven en
+ * een DB-hik altijd op de fallback uitkomt.
+ */
 export async function resolveBookingLink(
   supabase: SupabaseClient,
   contactOwnerEmail: string | null | undefined,
 ): Promise<BookingLinkResult | null> {
-  const ownerId = contactOwnerEmail?.trim() || null
+  const ownerId = typeof contactOwnerEmail === 'string' ? contactOwnerEmail.trim() : ''
 
-  if (ownerId) {
+  let activeLinks: ResolveBookingLinkRow[] = []
+  try {
     const { data, error } = await supabase
       .from('demo_invest_boekingslinks')
-      .select('hubspot_owner_id, naam, booking_url')
+      .select('hubspot_owner_id, naam, booking_url, is_default')
       .eq('actief', true)
-      .eq('hubspot_owner_id', ownerId)
-      .maybeSingle()
-
+      .order('created_at')
     if (error) throw error
-    if (data) {
-      return {
-        booking_url: data.booking_url,
-        owner_email: data.hubspot_owner_id,
-        owner_name: data.naam,
-        is_fallback: false,
-      }
-    }
+    activeLinks = (data ?? []) as ResolveBookingLinkRow[]
+  } catch (err) {
+    console.error('[call-booking] kon boekingslinks niet laden:', err)
+    return null
   }
 
-  const { data: fallback, error } = await supabase
-    .from('demo_invest_boekingslinks')
-    .select('hubspot_owner_id, naam, booking_url')
-    .eq('actief', true)
-    .eq('is_default', true)
-    .maybeSingle()
+  const isUsable = (link: ResolveBookingLinkRow) =>
+    typeof link.booking_url === 'string' && link.booking_url.trim() !== ''
 
-  if (error) throw error
-  if (!fallback) return null
+  const toResult = (link: ResolveBookingLinkRow, isFallback: boolean): BookingLinkResult => ({
+    booking_url: link.booking_url!.trim(),
+    owner_email: link.hubspot_owner_id,
+    owner_name: link.naam,
+    is_fallback: isFallback,
+  })
 
-  return {
-    booking_url: fallback.booking_url,
-    owner_email: fallback.hubspot_owner_id,
-    owner_name: fallback.naam,
-    is_fallback: true,
+  // Exacte owner-match op string (getrimd), enkel bij een niet-lege owner.
+  if (ownerId) {
+    const match = activeLinks.find(
+      link =>
+        isUsable(link) &&
+        typeof link.hubspot_owner_id === 'string' &&
+        link.hubspot_owner_id.trim() === ownerId,
+    )
+    if (match) return toResult(match, false)
   }
+
+  // Geen (geldige) owner-match → altijd round-robin (is_default = true).
+  const fallback = activeLinks.find(link => link.is_default === true && isUsable(link))
+  if (fallback) return toResult(fallback, true)
+
+  return null
 }
 
 function normalizedText(value: unknown, maxLength: number): string | null {
