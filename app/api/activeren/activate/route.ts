@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { hashPassword, createSession, applySessionCookie } from '@/lib/auth'
+import { createSession, applySessionCookie } from '@/lib/auth'
 import { fireInstant } from '@/lib/workflow-engine'
 import type { DemoUser } from '@/lib/types'
 
@@ -13,13 +13,10 @@ async function sha256hex(raw: string): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
-  const { token, password } = await req.json()
+  const { token } = await req.json()
 
-  if (!token || !password) {
-    return NextResponse.json({ ok: false, error: 'Token en wachtwoord zijn vereist.' }, { status: 400 })
-  }
-  if (typeof password !== 'string' || password.length < 8) {
-    return NextResponse.json({ ok: false, error: 'Wachtwoord moet minstens 8 tekens bevatten.' }, { status: 400 })
+  if (!token) {
+    return NextResponse.json({ ok: false, error: 'Token is vereist.' }, { status: 400 })
   }
 
   const tokenHash = await sha256hex(token)
@@ -37,24 +34,24 @@ export async function POST(req: NextRequest) {
   }
 
   if (invite.used_at) {
-    // If the invite is already used, check whether the account actually has a
-    // password_hash. If it does, the user is fully activated — create a new
-    // session so they land on /home immediately. If it does not, a prior
-    // attempt failed mid-way, so allow the activation to proceed.
+    // If the invite is already used, check whether the account was actually
+    // activated. If it was, the user is fully activated — create a new session
+    // so they land on /home immediately. If not, a prior attempt failed
+    // mid-way, so allow the activation to proceed.
     const { data: existingUser } = await supabase
       .from('demo_invest_users')
-      .select('password_hash')
+      .select('activated_at')
       .eq('id', invite.user_id)
       .maybeSingle()
 
-    if (existingUser?.password_hash) {
+    if (existingUser?.activated_at) {
       const rawToken = await createSession(invite.user_id)
       const redirectUrl = new URL('/home', req.url)
       const response = NextResponse.redirect(redirectUrl, { status: 303 })
       applySessionCookie(response, rawToken)
       return response
     }
-    // No password_hash yet — fall through to complete activation
+    // Not activated yet — fall through to complete activation
   }
 
   // Geen vervalcheck meer: een activatielink blijft geldig tot hij gebruikt is.
@@ -71,17 +68,12 @@ export async function POST(req: NextRequest) {
 
   const isPasswordReset = Boolean(userBeforeActivation?.activated_at)
 
-  // ── 2. Hash wachtwoord server-side ────────────────────────────────────────
-  const passwordHash = await hashPassword(password)
-
-  // ── 3. Profiel activeren of bestaand wachtwoord herstellen ───────────────
+  // ── 2. Profiel activeren (geen wachtwoord meer, alleen e-mail) ────────────
   const userUpdate = isPasswordReset
     ? {
-        password_hash: passwordHash,
         last_activity_at: now.toISOString(),
       }
     : {
-        password_hash: passwordHash,
         activated_at: now.toISOString(),
         trial_started_at: now.toISOString(),
         trial_expires_at: trialExpires.toISOString(),
@@ -98,11 +90,11 @@ export async function POST(req: NextRequest) {
     // Some DB configurations fire a side-effect after a successful write.
     const { data: checkUser } = await supabase
       .from('demo_invest_users')
-      .select('password_hash')
+      .select('activated_at')
       .eq('id', userId)
       .maybeSingle()
 
-    if (!checkUser?.password_hash) {
+    if (!checkUser?.activated_at) {
       return NextResponse.json(
         { ok: false, error: 'Activatie mislukt. Neem contact op via info@archerinvest.nl.' },
         { status: 500 }

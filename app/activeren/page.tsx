@@ -15,12 +15,8 @@ function ActiverenForm() {
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteName, setInviteName] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
-  const [password, setPassword] = useState('')
-  const [passwordConfirm, setPasswordConfirm] = useState('')
   const [loading, setLoading] = useState(false)
   const [formError, setFormError] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirm, setShowConfirm] = useState(false)
 
   useEffect(() => {
     if (!token) {
@@ -60,22 +56,12 @@ function ActiverenForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setFormError('')
-
-    if (password.length < 8) {
-      setFormError('Kies een wachtwoord van minstens 8 tekens.')
-      return
-    }
-    if (password !== passwordConfirm) {
-      setFormError('De wachtwoorden komen niet overeen.')
-      return
-    }
-
     setLoading(true)
 
     const res = await fetch('/api/activeren/activate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, password }),
+      body: JSON.stringify({ token }),
       redirect: 'manual',
     })
 
@@ -134,7 +120,7 @@ function ActiverenForm() {
         <div className="mb-6 text-center">
           <h1 className="text-2xl font-bold text-white tracking-tight">
             {phase === 'loading' && 'Even geduld\u2026'}
-            {phase === 'form' && 'Kies je wachtwoord'}
+            {phase === 'form' && 'Activeer je account'}
             {phase === 'error' && 'Link ongeldig'}
             {phase === 'success' && 'Account geactiveerd!'}
             {phase === 'redirecting' && 'Je hebt al een account'}
@@ -148,7 +134,7 @@ function ActiverenForm() {
                 <p className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>{inviteEmail}</p>
               )}
               {!inviteName && !inviteEmail && (
-                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>Stel je wachtwoord in om te beginnen</p>
+                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>Activeer je account om te beginnen</p>
               )}
             </div>
           )}
@@ -233,87 +219,10 @@ function ActiverenForm() {
           {/* Form */}
           {phase === 'form' && (
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              {/* Password field */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                  Wachtwoord
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    required
-                    autoComplete="new-password"
-                    placeholder="Minimaal 8 tekens"
-                    className="w-full rounded-xl px-4 py-3 pr-11 text-sm outline-none transition-all"
-                    style={{
-                      background: 'rgba(255,255,255,0.07)',
-                      border: '1px solid rgba(255,255,255,0.12)',
-                      color: '#fff',
-                      caretColor: '#fff',
-                    }}
-                    onFocus={e => {
-                      e.currentTarget.style.borderColor = '#2500F5'
-                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37,0,245,0.2)'
-                    }}
-                    onBlur={e => {
-                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'
-                      e.currentTarget.style.boxShadow = 'none'
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs"
-                    style={{ color: 'rgba(255,255,255,0.4)' }}
-                    tabIndex={-1}
-                  >
-                    {showPassword ? 'Verberg' : 'Toon'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Confirm field */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                  Herhaal wachtwoord
-                </label>
-                <div className="relative">
-                  <input
-                    type={showConfirm ? 'text' : 'password'}
-                    value={passwordConfirm}
-                    onChange={e => setPasswordConfirm(e.target.value)}
-                    required
-                    autoComplete="new-password"
-                    placeholder="••••••••"
-                    className="w-full rounded-xl px-4 py-3 pr-11 text-sm outline-none transition-all"
-                    style={{
-                      background: 'rgba(255,255,255,0.07)',
-                      border: '1px solid rgba(255,255,255,0.12)',
-                      color: '#fff',
-                      caretColor: '#fff',
-                    }}
-                    onFocus={e => {
-                      e.currentTarget.style.borderColor = '#2500F5'
-                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37,0,245,0.2)'
-                    }}
-                    onBlur={e => {
-                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'
-                      e.currentTarget.style.boxShadow = 'none'
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirm(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs"
-                    style={{ color: 'rgba(255,255,255,0.4)' }}
-                    tabIndex={-1}
-                  >
-                    {showConfirm ? 'Verberg' : 'Toon'}
-                  </button>
-                </div>
-              </div>
+              <p className="text-sm leading-relaxed text-center" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                Klik hieronder om je account te activeren. Je kunt daarna
+                inloggen met je e-mailadres.
+              </p>
 
               {formError && (
                 <p
