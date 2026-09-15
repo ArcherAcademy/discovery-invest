@@ -172,7 +172,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                   onUnlockNext={() => refresh()}
                   onAutoNext={() => {
                     if (isLastCoreVideo) {
-                      router.push('/traject')
+                      router.push('/traject?vrijgespeeld=1')
                     } else if (nextVideo) {
                       router.push(`/video/${nextVideo.id}`)
                     }
@@ -313,7 +313,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                 }
                 return (
                   <Link
-                    href="/traject"
+                    href="/traject?vrijgespeeld=1"
                     className="flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-full transition-all"
                     style={{ background: '#2500F5', color: '#fff', boxShadow: '0 4px 16px rgba(37,0,245,0.35)' }}
                   >

@@ -16,6 +16,7 @@ interface BookingResponse {
 interface CallBookingBlockProps {
   unlocked: boolean
   variant?: 'card' | 'milestone'
+  openRequest?: number
 }
 
 type BookingAction = 'opened' | 'booked'
@@ -124,7 +125,7 @@ function getSuccessfulBookingDetails(event: MessageEvent): BookingDetailsInput |
   }
 }
 
-export default function CallBookingBlock({ unlocked, variant = 'card' }: CallBookingBlockProps) {
+export default function CallBookingBlock({ unlocked, variant = 'card', openRequest = 0 }: CallBookingBlockProps) {
   const { user, refresh } = useApp()
   const { data, error, isLoading, mutate } = useSWR<BookingResponse>(unlocked ? '/api/call-booking' : null, fetcher, {
     revalidateOnFocus: false,
@@ -135,6 +136,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card' }: CallBoo
   const [frameKey, setFrameKey] = useState(0)
   const [status, setStatus] = useState<DialogStatus>('booking')
   const savingRef = useRef(false)
+  const handledOpenRequestRef = useRef(0)
 
   useEffect(() => {
     if (!open) return
@@ -170,6 +172,13 @@ export default function CallBookingBlock({ unlocked, variant = 'card' }: CallBoo
       setStatus('error')
     })
   }
+
+  useEffect(() => {
+    if (!unlocked || openRequest === 0 || handledOpenRequestRef.current === openRequest) return
+
+    handledOpenRequestRef.current = openRequest
+    handleOpenChange(true)
+  }, [openRequest, unlocked]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function retry() {
     setFrameLoaded(false)
