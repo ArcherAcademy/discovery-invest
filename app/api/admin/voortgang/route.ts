@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     { data: progress },
     { data: funnels },
     { data: quizRows },
+    { data: followUpDisabledRows },
   ] = await Promise.all([
     supabase
       .from('demo_invest_users')
@@ -38,6 +39,10 @@ export async function GET(req: NextRequest) {
     supabase
       .from('demo_invest_quiz_submissions')
       .select('user_id, submitted_at, score, answers'),
+    supabase
+      .from('demo_invest_trigger_sent')
+      .select('user_id')
+      .eq('workflow_naam', '__automatische_opvolging_uit__'),
   ])
 
   const callStates = await getAllCallUserStates(supabase)
@@ -54,6 +59,7 @@ export async function GET(req: NextRequest) {
 
   const funnelByUser = new Map((funnels ?? []).map(f => [f.user_id, f]))
   const quizByUser = new Map((quizRows ?? []).map(q => [q.user_id, q]))
+  const followUpDisabledUserIds = new Set((followUpDisabledRows ?? []).map(row => row.user_id))
 
   // ── Per-user rows ─────────────────────────────────────────────
   const userRows = (users ?? []).map(u => {
@@ -90,6 +96,7 @@ export async function GET(req: NextRequest) {
       id: u.id,
       email: u.email,
       name: u.name,
+      opvolging_actief: !followUpDisabledUserIds.has(u.id),
       activated_at: u.activated_at,
       last_activity_at: u.last_activity_at,
       ms_since_activity: msSinceActivity,
@@ -103,14 +110,11 @@ export async function GET(req: NextRequest) {
       all_completed_at: funnel?.all_completed_at ?? null,
       invest_avond_geclaimd: funnel?.invest_avond_geclaimd ?? false,
       invest_avond_verschenen: funnel?.invest_avond_verschenen ?? false,
-<<<<<<< HEAD
       contact_owner_email: callState?.contact_owner_email ?? null,
       call_opened_at: callState?.call_opened_at ?? null,
       call_clicked_at: callState?.call_clicked_at ?? null,
       call_booked: callState?.call_booked ?? false,
       call_booked_at: callState?.call_booked_at ?? null,
-=======
->>>>>>> d07dbb592d769ac5132e83f8175d00cab89db11a
       quiz_submission: quizByUser.get(u.id) ?? null,
     }
   })

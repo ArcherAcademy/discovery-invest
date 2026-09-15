@@ -2,14 +2,8 @@
 
 import { useRef, useState } from 'react'
 import Link from 'next/link'
-<<<<<<< HEAD
 import { Play, ChevronRight, CheckCircle2, GraduationCap, CalendarDays, Pause, Volume2, VolumeX, Clock, Zap, Lock } from 'lucide-react'
 import CallBookingBlock from '@/components/CallBookingBlock'
-=======
-import { Play, ChevronRight, Lock, CheckCircle2, GraduationCap, CalendarDays, Pause, Volume2, VolumeX, Clock, Zap } from 'lucide-react'
-import GratisClaimBlock from '@/components/GratisClaimBlock'
-import GratisClaimPopup from '@/components/GratisClaimPopup'
->>>>>>> d07dbb592d769ac5132e83f8175d00cab89db11a
 import { useApp } from '@/components/app-context'
 import { t } from '@/lib/i18n'
 
@@ -448,14 +442,10 @@ export default function HomePage() {
 
           {/* Events card */}
           <Link
-<<<<<<< HEAD
             href="https://workshops.archerinvest.be"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Open Archer Invest workshops in een nieuw tabblad"
-=======
-            href="/events"
->>>>>>> d07dbb592d769ac5132e83f8175d00cab89db11a
             className="flex items-center gap-3 p-4 rounded-xl border transition-all hover:shadow-md group"
             style={{ background: '#fff', borderColor: '#e8ecf4', boxShadow: '0 1px 3px rgba(13,15,20,0.05)' }}
           >
