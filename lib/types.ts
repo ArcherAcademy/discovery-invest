@@ -16,6 +16,12 @@ export interface DemoUser {
   trial_started_at: string | null
   trial_expires_at: string | null
   last_activity_at: string | null
+  // Live afgeleide call-status — samengevoegd in /api/me, staat niet in de users-tabel.
+  call_booked?: boolean
+  call_booked_at?: string | null
+  call_start_at?: string | null
+  call_end_at?: string | null
+  call_timezone?: string | null
 }
 
 export interface DemoVideo {
