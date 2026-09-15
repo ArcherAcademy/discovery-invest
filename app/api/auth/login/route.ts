@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { verifyPassword, createSession, applySessionCookie } from '@/lib/auth'
+import { createSession, applySessionCookie } from '@/lib/auth'
 import type { DemoUser } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
-  const { email, password } = await req.json()
+  const { email } = await req.json()
 
-  if (!email || !password) {
-    return NextResponse.json({ ok: false, error: 'E-mail en wachtwoord zijn vereist.' }, { status: 400 })
+  if (!email) {
+    return NextResponse.json({ ok: false, error: 'E-mailadres is vereist.' }, { status: 400 })
   }
 
   const supabase = createAdminClient()
@@ -15,10 +15,8 @@ export async function POST(req: NextRequest) {
   const normalizedEmail = (email as string).toLowerCase().trim()
   const { data: users, error: userError } = await supabase
     .from('demo_invest_users')
-    .select('id, email, password_hash, activated_at, role')
+    .select('id, email, activated_at, role')
     .ilike('email', normalizedEmail)
-    .not('password_hash', 'is', null)
-    .neq('password_hash', '')
     .order('activated_at', { ascending: false })
 
   if (userError) {
@@ -26,20 +24,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Inloggen mislukt. Probeer het opnieuw.' }, { status: 500 })
   }
 
-  const candidates = (users ?? []) as Array<DemoUser & { password_hash: string }>
-  let typedUser: (DemoUser & { password_hash: string }) | null = null
-
+  // Kies het meest recent geactiveerde account voor dit e-mailadres.
   // Historische imports kunnen meerdere records met hetzelfde e-mailadres bevatten.
-  // Controleer daarom elk bruikbaar wachtwoordhash in plaats van willekeurig één record te kiezen.
-  for (const candidate of candidates) {
-    if (await verifyPassword(password, candidate.password_hash)) {
-      typedUser = candidate
-      break
-    }
-  }
+  const candidates = (users ?? []) as DemoUser[]
+  const typedUser = candidates[0] ?? null
 
   if (!typedUser) {
-    return NextResponse.json({ ok: false, error: 'Ongeldige e-mail of wachtwoord.' }, { status: 401 })
+    return NextResponse.json({ ok: false, error: 'Geen account gevonden voor dit e-mailadres.' }, { status: 401 })
   }
 
   // Admins bypass the activated_at check — they are set up directly in the DB
