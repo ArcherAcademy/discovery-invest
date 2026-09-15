@@ -44,6 +44,42 @@ export interface BookingLinkResult {
   is_fallback: boolean
 }
 
+export interface CallBookingInput {
+  start_at?: unknown
+  end_at?: unknown
+  duration_minutes?: unknown
+  timezone?: unknown
+  subject?: unknown
+  contact_id?: unknown
+  organizer_name?: unknown
+}
+
+export interface CallBookingPayload {
+  booking_key: string
+  start_at: string | null
+  end_at: string | null
+  timezone: string | null
+  subject: string | null
+  contact_id: string | null
+  organizer_name: string | null
+  advisor_name: string | null
+  advisor_owner_id: string | null
+}
+
+export interface AdminCallBooking {
+  id: string
+  user_id: string
+  name: string | null
+  email: string
+  start_at: string | null
+  end_at: string | null
+  timezone: string | null
+  subject: string | null
+  advisor_name: string | null
+  booked_at: string
+  timing: 'upcoming' | 'past' | 'unknown'
+}
+
 const EMPTY_USER_STATE: CallUserState = {
   contact_owner_email: null,
   call_opened_at: null,
@@ -262,4 +298,163 @@ export async function resolveBookingLink(
     owner_name: fallback.naam,
     is_fallback: true,
   }
+}
+
+function normalizedText(value: unknown, maxLength: number): string | null {
+  if (typeof value !== 'string' && typeof value !== 'number') return null
+  const text = String(value).trim()
+  return text ? text.slice(0, maxLength) : null
+}
+
+function normalizedDate(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null
+
+  const numericValue = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && /^\d+$/.test(value.trim())
+      ? Number(value)
+      : null
+  const date = numericValue !== null
+    ? new Date(numericValue < 10_000_000_000 ? numericValue * 1000 : numericValue)
+    : new Date(String(value))
+
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+export function normalizeCallBookingPayload(
+  userId: string,
+  input: CallBookingInput | null,
+  booking: BookingLinkResult,
+): CallBookingPayload {
+  const startAt = normalizedDate(input?.start_at)
+  let endAt = normalizedDate(input?.end_at)
+  const rawDuration = Number(input?.duration_minutes)
+  const durationMinutes = rawDuration > 480 ? rawDuration / 60_000 : rawDuration
+  if (!endAt && startAt && Number.isFinite(durationMinutes) && durationMinutes >= 5 && durationMinutes <= 480) {
+    endAt = new Date(new Date(startAt).getTime() + durationMinutes * 60_000).toISOString()
+  }
+  if (startAt && endAt && new Date(endAt).getTime() <= new Date(startAt).getTime()) endAt = null
+
+  const contactId = normalizedText(input?.contact_id, 120)
+  const bookingKey = [userId, startAt ?? 'tijd-onbekend', contactId ?? 'contact-onbekend'].join(':')
+
+  return {
+    booking_key: bookingKey,
+    start_at: startAt,
+    end_at: endAt,
+    timezone: normalizedText(input?.timezone, 80),
+    subject: normalizedText(input?.subject, 180),
+    contact_id: contactId,
+    organizer_name: normalizedText(input?.organizer_name, 120),
+    advisor_name: booking.owner_name,
+    advisor_owner_id: booking.owner_email,
+  }
+}
+
+export async function recordCallBooking(
+  supabase: SupabaseClient,
+  userId: string,
+  payload: CallBookingPayload,
+): Promise<void> {
+  const { data: existing, error: readError } = await supabase
+    .from('demo_invest_webhook_log')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('event_type', 'call.booked')
+    .contains('payload_json', { booking_key: payload.booking_key })
+    .limit(1)
+    .maybeSingle()
+
+  if (readError) throw readError
+  if (existing) return
+
+  const { error } = await supabase.from('demo_invest_webhook_log').insert({
+    user_id: userId,
+    event_type: 'call.booked',
+    payload_json: payload,
+    response_status: 'registered',
+  })
+  if (error) throw error
+}
+
+interface CallBookingLogRow {
+  id: string
+  user_id: string
+  created_at: string
+  payload_json: Partial<CallBookingPayload> | null
+}
+
+export async function getAdminCallBookings(supabase: SupabaseClient): Promise<AdminCallBooking[]> {
+  const [{ data: users, error: usersError }, { data: logs, error: logsError }, { data: markers, error: markersError }] = await Promise.all([
+    supabase.from('demo_invest_users').select('id, name, email'),
+    supabase
+      .from('demo_invest_webhook_log')
+      .select('id, user_id, created_at, payload_json')
+      .eq('event_type', 'call.booked')
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('demo_invest_trigger_sent')
+      .select('user_id, created_at')
+      .eq('workflow_naam', CALL_BOOKED_MARKER)
+      .order('created_at', { ascending: false }),
+  ])
+
+  if (usersError) throw usersError
+  if (logsError) throw logsError
+  if (markersError) throw markersError
+
+  const usersById = new Map((users ?? []).map(user => [user.id, user]))
+  const bookingLogs = (logs ?? []) as CallBookingLogRow[]
+  const usersWithDetailedBookings = new Set(bookingLogs.map(log => log.user_id))
+  const now = Date.now()
+
+  const toAdminBooking = (
+    id: string,
+    userId: string,
+    bookedAt: string,
+    payload: Partial<CallBookingPayload> | null,
+  ): AdminCallBooking | null => {
+    const user = usersById.get(userId)
+    if (!user?.email) return null
+    const startAt = normalizedDate(payload?.start_at)
+    const timing: AdminCallBooking['timing'] = !startAt
+      ? 'unknown'
+      : new Date(startAt).getTime() >= now
+        ? 'upcoming'
+        : 'past'
+
+    return {
+      id,
+      user_id: userId,
+      name: user.name ?? null,
+      email: user.email,
+      start_at: startAt,
+      end_at: normalizedDate(payload?.end_at),
+      timezone: normalizedText(payload?.timezone, 80),
+      subject: normalizedText(payload?.subject, 180),
+      advisor_name: normalizedText(payload?.advisor_name ?? payload?.organizer_name, 120),
+      booked_at: bookedAt,
+      timing,
+    }
+  }
+
+  const detailedBookings = bookingLogs
+    .map(log => toAdminBooking(log.id, log.user_id, log.created_at, log.payload_json))
+    .filter((booking): booking is AdminCallBooking => booking !== null)
+  const legacyBookings = (markers ?? [])
+    .filter(marker => !usersWithDetailedBookings.has(marker.user_id))
+    .map(marker => toAdminBooking(`historisch-${marker.user_id}`, marker.user_id, marker.created_at, null))
+    .filter((booking): booking is AdminCallBooking => booking !== null)
+
+  return [...detailedBookings, ...legacyBookings]
+    .sort((a, b) => {
+      if (a.timing === 'upcoming' && b.timing === 'upcoming') {
+        return new Date(a.start_at!).getTime() - new Date(b.start_at!).getTime()
+      }
+      if (a.timing !== b.timing) {
+        const order = { upcoming: 0, unknown: 1, past: 2 }
+        return order[a.timing] - order[b.timing]
+      }
+      return new Date(b.booked_at).getTime() - new Date(a.booked_at).getTime()
+    })
 }

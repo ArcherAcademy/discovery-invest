@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/auth'
-import { getCallUserState, resolveBookingLink, updateCallUserState } from '@/lib/call-booking-data'
+import {
+  getCallUserState,
+  normalizeCallBookingPayload,
+  recordCallBooking,
+  resolveBookingLink,
+  updateCallUserState,
+  type CallBookingInput,
+} from '@/lib/call-booking-data'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const HUBSPOT_MEETING_HOST = /^meetings(?:-[a-z0-9]+)?\.hubspot\.com$/i
@@ -59,23 +66,28 @@ export async function POST(req: NextRequest) {
   const result = await getAvailableBooking(req)
   if ('error' in result) return result.error
 
-  const body = await req.json().catch(() => null) as { action?: unknown } | null
+  const body = await req.json().catch(() => null) as { action?: unknown; booking?: CallBookingInput } | null
   if (body?.action !== 'opened' && body?.action !== 'booked') {
     return NextResponse.json({ error: 'Ongeldige actie' }, { status: 400 })
   }
 
   const now = new Date().toISOString()
-  const state = body.action === 'opened'
-    ? await updateCallUserState(result.supabase, result.user.id, {
-        call_opened_at: result.callState.call_opened_at ?? now,
-        call_clicked_at: result.callState.call_clicked_at ?? now,
+  if (body.action === 'opened') {
+    const state = await updateCallUserState(result.supabase, result.user.id, {
+      call_opened_at: result.callState.call_opened_at ?? now,
+      call_clicked_at: result.callState.call_clicked_at ?? now,
+    })
+    return NextResponse.json({ ok: true, call_booked: state.call_booked, call_booked_at: state.call_booked_at })
+  }
+
+  const payload = normalizeCallBookingPayload(result.user.id, body.booking ?? null, result.booking)
+  await recordCallBooking(result.supabase, result.user.id, payload)
+  const state = result.callState.call_booked
+    ? result.callState
+    : await updateCallUserState(result.supabase, result.user.id, {
+        call_booked: true,
+        call_booked_at: now,
       })
-    : result.callState.call_booked
-      ? result.callState
-      : await updateCallUserState(result.supabase, result.user.id, {
-          call_booked: true,
-          call_booked_at: now,
-        })
 
   return NextResponse.json({ ok: true, call_booked: state.call_booked, call_booked_at: state.call_booked_at })
 }

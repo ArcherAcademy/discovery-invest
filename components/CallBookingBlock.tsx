@@ -27,11 +27,21 @@ const fetcher = async (url: string): Promise<BookingResponse> => {
   return response.json()
 }
 
-async function registerBookingAction(action: BookingAction) {
+interface BookingDetailsInput {
+  start_at?: string | number
+  end_at?: string | number
+  duration_minutes?: string | number
+  timezone?: string | number
+  subject?: string | number
+  contact_id?: string | number
+  organizer_name?: string | number
+}
+
+async function registerBookingAction(action: BookingAction, booking?: BookingDetailsInput) {
   const response = await fetch('/api/call-booking', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ action, booking }),
   })
   if (!response.ok) throw new Error('De boekingsstatus kon niet worden bijgewerkt')
   return response.json()
@@ -52,19 +62,66 @@ function isAllowedHubSpotOrigin(origin: string) {
   }
 }
 
-function isSuccessfulBookingMessage(event: MessageEvent) {
-  if (!isAllowedHubSpotOrigin(event.origin)) return false
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
 
-  let payload = event.data
+function findScalar(root: unknown, keys: string[], depth = 0): string | number | undefined {
+  const record = asRecord(root)
+  if (!record || depth > 6) return undefined
+  const wanted = new Set(keys.map(key => key.toLowerCase()))
+
+  for (const [key, value] of Object.entries(record)) {
+    if (wanted.has(key.toLowerCase()) && (typeof value === 'string' || typeof value === 'number')) return value
+  }
+  for (const value of Object.values(record)) {
+    const found = findScalar(value, keys, depth + 1)
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+
+function getSuccessfulBookingDetails(event: MessageEvent): BookingDetailsInput | null {
+  if (!isAllowedHubSpotOrigin(event.origin)) return null
+
+  let payload: unknown = event.data
   if (typeof payload === 'string') {
     try {
       payload = JSON.parse(payload)
     } catch {
-      return false
+      return null
     }
   }
 
-  return Boolean(payload && typeof payload === 'object' && payload.meetingBookSucceeded === true)
+  const message = asRecord(payload)
+  if (message?.meetingBookSucceeded !== true) return null
+  const meetingsPayload = asRecord(message.meetingsPayload)
+  const bookingResponse = asRecord(meetingsPayload?.bookingResponse)
+  const postResponse = asRecord(bookingResponse?.postResponse)
+  const bookingEvent = asRecord(bookingResponse?.event)
+  const timerange = asRecord(postResponse?.timerange)
+  const organizer = asRecord(postResponse?.organizer)
+  const searchRoot = bookingResponse ?? meetingsPayload ?? message
+
+  return {
+    start_at: findScalar(timerange, ['start'])
+      ?? findScalar(bookingEvent, ['dateTime', 'date_time'])
+      ?? findScalar(searchRoot, ['startTime', 'start_time', 'startAt', 'start_at']),
+    end_at: findScalar(timerange, ['end'])
+      ?? findScalar(searchRoot, ['endTime', 'end_time', 'endAt', 'end_at']),
+    duration_minutes: findScalar(bookingEvent, ['duration'])
+      ?? findScalar(searchRoot, ['durationMinutes', 'duration_minutes']),
+    timezone: findScalar(bookingEvent, ['timezone', 'timeZone', 'time_zone'])
+      ?? findScalar(searchRoot, ['timezone', 'timeZone', 'time_zone']),
+    subject: findScalar(bookingEvent, ['subject', 'title', 'meetingName', 'meeting_name'])
+      ?? findScalar(searchRoot, ['subject', 'title', 'meetingName', 'meeting_name']),
+    contact_id: findScalar(postResponse?.contact, ['contactId', 'contact_id', 'userId', 'vid'])
+      ?? findScalar(searchRoot, ['contactId', 'contact_id', 'vid']),
+    organizer_name: findScalar(organizer, ['fullName', 'name'])
+      ?? findScalar(searchRoot, ['organizerName', 'organizer_name', 'hostName', 'host_name']),
+  }
 }
 
 export default function CallBookingBlock({ unlocked, variant = 'card' }: CallBookingBlockProps) {
@@ -83,12 +140,13 @@ export default function CallBookingBlock({ unlocked, variant = 'card' }: CallBoo
     if (!open) return
 
     async function handleBookingMessage(event: MessageEvent) {
-      if (savingRef.current || !isSuccessfulBookingMessage(event)) return
+      const bookingDetails = getSuccessfulBookingDetails(event)
+      if (savingRef.current || !bookingDetails) return
 
       savingRef.current = true
       setStatus('saving')
       try {
-        await registerBookingAction('booked')
+        await registerBookingAction('booked', bookingDetails)
         await Promise.all([refresh(), mutate()])
         setStatus('booked')
       } catch {

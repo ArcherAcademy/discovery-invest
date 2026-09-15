@@ -11,6 +11,7 @@ import { VoortgangTab } from '@/components/admin/VoortgangTab'
 import { InhaalrondeModal } from '@/components/admin/InhaalrondeModal'
 import { UserFollowUpControl } from '@/components/admin/UserFollowUpControl'
 import { BookingLinksTab } from '@/components/admin/BookingLinksTab'
+import { CallBookingsOverview } from '@/components/admin/CallBookingsOverview'
 import type { DemoUser, DemoUserFunnel, DemoWebhookLog, DemoTriggerLog, DemoWebhookConfig, AccountWebhookLog, DemoQuizSubmission } from '@/lib/types'
 import { QUIZ_QUESTIONS } from '@/lib/quiz-data'
 import { hasPermanentAccess, isTrialExpired, trialDaysRemaining } from '@/lib/access'
@@ -26,7 +27,7 @@ interface DemoInvite {
 
 type AccountStatus = 'aangemaakt' | 'geactiveerd' | 'zonder_link'
 
-type Tab = 'overview' | 'accounts' | 'users' | 'mentors' | 'webhooks' | 'workflows' | 'history' | 'account_logs' | 'voortgang' | 'booking_links'
+type Tab = 'overview' | 'accounts' | 'users' | 'mentors' | 'webhooks' | 'workflows' | 'history' | 'account_logs' | 'voortgang'
 
 const ACCOUNTS_PER_PAGE = 50
 
@@ -439,7 +440,6 @@ export default function AdminPage() {
     { id: 'voortgang', label: 'Voortgang' },
     { id: 'users', label: tr.admin.users },
     { id: 'mentors', label: 'Mentoren' },
-    { id: 'booking_links', label: 'Boekingslinks' },
     { id: 'workflows', label: 'Workflows' },
     { id: 'history', label: 'Trigger-history' },
     { id: 'webhooks', label: tr.admin.webhookLog },
@@ -492,24 +492,39 @@ export default function AdminPage() {
 
       {/* Overview */}
       {tab === 'overview' && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {kpis.map((kpi) => (
-            <div
-              key={kpi.label}
-              className="p-5 rounded-2xl border"
-              style={{ background: '#ffffff', borderColor: '#e8ecf4' }}
-            >
-              <div className="flex items-center gap-2 mb-2" style={{ color: '#2500F5' }}>
-                {kpi.icon}
+        <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+            {kpis.map((kpi) => (
+              <div
+                key={kpi.label}
+                className="rounded-2xl border p-5"
+                style={{ background: '#ffffff', borderColor: '#e8ecf4' }}
+              >
+                <div className="mb-2 flex items-center gap-2" style={{ color: '#2500F5' }}>
+                  {kpi.icon}
+                </div>
+                <p className="text-2xl font-bold" style={{ color: '#0d0f14' }}>{kpi.value}</p>
+                <p className="mt-0.5 text-xs" style={{ color: 'rgba(13,15,20,0.45)' }}>{kpi.label}</p>
               </div>
-              <p className="text-2xl font-bold" style={{ color: '#0d0f14' }}>{kpi.value}</p>
-              <p className="text-xs mt-0.5" style={{ color: 'rgba(13,15,20,0.45)' }}>{kpi.label}</p>
-            </div>
-          ))}
+            ))}
+          </div>
+
+          <CallBookingsOverview />
+
+          {isAdmin && (
+            <section className="flex flex-col gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#2500F5' }}>Instellingen</p>
+                <h2 className="mt-1 text-xl font-bold text-balance" style={{ color: '#0d0f14' }}>Beheer boekingslinks</h2>
+                <p className="mt-1 text-sm leading-6" style={{ color: 'rgba(13,15,20,0.55)' }}>
+                  Beheer hier welke persoonlijke HubSpot-agenda bij elke contacteigenaar hoort.
+                </p>
+              </div>
+              <BookingLinksTab />
+            </section>
+          )}
         </div>
       )}
-
-      {tab === 'booking_links' && isAdmin && <BookingLinksTab />}
 
       {/* Mentorenbeheer — uitsluitend zichtbaar voor admins */}
       {tab === 'mentors' && isAdmin && (() => {

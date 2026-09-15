@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdminOrMentor } from '@/lib/auth'
+import { requireAdmin } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getBookingLinks, saveBookingLinks, type BookingLink } from '@/lib/call-booking-data'
 
 async function authorize(req: NextRequest) {
   try {
-    await requireAdminOrMentor(req)
+    await requireAdmin(req)
     return null
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unauthorized'
