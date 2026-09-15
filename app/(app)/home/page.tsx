@@ -338,22 +338,7 @@ export default function HomePage() {
                       <span className="text-xs font-semibold" style={{ color: allCoreCompleted ? '#0d0f14' : 'rgba(13,15,20,0.3)' }}>Adviesgesprek</span>
                     </div>
                     <div className="h-1.5 rounded-full mb-3" style={{ background: allCoreCompleted ? '#2500F5' : '#f0f3fb' }} />
-                    {allCoreCompleted ? (
-                      <a
-                        href="/api/call-booking/click"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-opacity hover:opacity-85"
-                        style={{ background: '#2500F5', color: '#fff' }}
-                      >
-                        Boek je adviesgesprek
-                        <ChevronRight size={12} />
-                      </a>
-                    ) : (
-                      <span className="text-[11px]" style={{ color: 'rgba(13,15,20,0.3)' }}>
-                        Persoonlijk met je adviseur
-                      </span>
-                    )}
+                    <CallBookingBlock unlocked={allCoreCompleted} variant="milestone" />
                   </div>
                 </div>
 
@@ -499,8 +484,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Persoonlijk adviesgesprek — vrijgespeeld na 6/6 */}
-          <CallBookingBlock compact unlocked={allCoreCompleted} />
         </div>
       </div>
     </div>

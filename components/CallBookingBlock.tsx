@@ -1,18 +1,25 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
-import { ArrowUpRight, CalendarDays, CheckCircle2, Lock } from 'lucide-react'
+import { Dialog } from '@base-ui/react/dialog'
+import { ArrowRight, CalendarDays, CheckCircle2, LoaderCircle, Lock, RotateCw, X } from 'lucide-react'
 import { useApp } from '@/components/app-context'
+import { Button } from '@/components/ui/button'
 
 interface BookingResponse {
   available: boolean
+  booking_url?: string
   owner_name?: string | null
 }
 
 interface CallBookingBlockProps {
-  compact?: boolean
   unlocked: boolean
+  variant?: 'card' | 'milestone'
 }
+
+type BookingAction = 'opened' | 'booked'
+type DialogStatus = 'booking' | 'saving' | 'booked' | 'error'
 
 const fetcher = async (url: string): Promise<BookingResponse> => {
   const response = await fetch(url)
@@ -20,18 +27,107 @@ const fetcher = async (url: string): Promise<BookingResponse> => {
   return response.json()
 }
 
-export default function CallBookingBlock({ compact = false, unlocked }: CallBookingBlockProps) {
-  const { user } = useApp()
-  const { data } = useSWR<BookingResponse>(unlocked ? '/api/call-booking' : null, fetcher, {
+async function registerBookingAction(action: BookingAction) {
+  const response = await fetch('/api/call-booking', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action }),
+  })
+  if (!response.ok) throw new Error('De boekingsstatus kon niet worden bijgewerkt')
+  return response.json()
+}
+
+function getEmbedUrl(bookingUrl: string) {
+  const url = new URL(bookingUrl)
+  url.searchParams.set('embed', 'true')
+  return url.toString()
+}
+
+function isAllowedHubSpotOrigin(origin: string) {
+  try {
+    const url = new URL(origin)
+    return url.protocol === 'https:' && /^meetings(?:-[a-z0-9]+)?\.hubspot\.com$/i.test(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+function isSuccessfulBookingMessage(event: MessageEvent) {
+  if (!isAllowedHubSpotOrigin(event.origin)) return false
+
+  let payload = event.data
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload)
+    } catch {
+      return false
+    }
+  }
+
+  return Boolean(payload && typeof payload === 'object' && payload.meetingBookSucceeded === true)
+}
+
+export default function CallBookingBlock({ unlocked, variant = 'card' }: CallBookingBlockProps) {
+  const { user, refresh } = useApp()
+  const { data, error, isLoading, mutate } = useSWR<BookingResponse>(unlocked ? '/api/call-booking' : null, fetcher, {
     revalidateOnFocus: false,
     shouldRetryOnError: false,
   })
+  const [open, setOpen] = useState(false)
+  const [frameLoaded, setFrameLoaded] = useState(false)
+  const [frameKey, setFrameKey] = useState(0)
+  const [status, setStatus] = useState<DialogStatus>('booking')
+  const savingRef = useRef(false)
+
+  useEffect(() => {
+    if (!open) return
+
+    async function handleBookingMessage(event: MessageEvent) {
+      if (savingRef.current || !isSuccessfulBookingMessage(event)) return
+
+      savingRef.current = true
+      setStatus('saving')
+      try {
+        await registerBookingAction('booked')
+        await Promise.all([refresh(), mutate()])
+        setStatus('booked')
+      } catch {
+        setStatus('error')
+      } finally {
+        savingRef.current = false
+      }
+    }
+
+    window.addEventListener('message', handleBookingMessage)
+    return () => window.removeEventListener('message', handleBookingMessage)
+  }, [open, refresh, mutate])
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen)
+    if (!nextOpen) return
+
+    setFrameLoaded(false)
+    setStatus('booking')
+    void registerBookingAction('opened').catch(() => {
+      setStatus('error')
+    })
+  }
+
+  function retry() {
+    setFrameLoaded(false)
+    setStatus('booking')
+    setFrameKey(current => current + 1)
+  }
 
   if (!unlocked) {
+    if (variant === 'milestone') {
+      return <span className="text-xs text-muted-foreground">Persoonlijk met je adviseur</span>
+    }
+
     return (
-      <section className={`rounded-2xl border border-border bg-muted/50 ${compact ? 'p-4' : 'p-5 sm:p-6'}`}>
+      <section className="rounded-2xl border border-border bg-muted/50 p-5 sm:p-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
             <Lock size={17} />
           </div>
           <div>
@@ -43,9 +139,16 @@ export default function CallBookingBlock({ compact = false, unlocked }: CallBook
     )
   }
 
-  if (!data?.available) return null
+  if (user?.call_booked && !open) {
+    if (variant === 'milestone') {
+      return (
+        <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+          <CheckCircle2 size={14} />
+          Gesprek ingepland
+        </div>
+      )
+    }
 
-  if (user?.call_booked) {
     return (
       <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-4 text-card-foreground">
         <CheckCircle2 size={20} className="shrink-0 text-primary" />
@@ -57,30 +160,115 @@ export default function CallBookingBlock({ compact = false, unlocked }: CallBook
     )
   }
 
-  return (
-    <section className={`rounded-2xl border border-primary/15 bg-primary/[0.04] ${compact ? 'p-4' : 'p-5 sm:p-6'}`}>
+  const unavailable = !isLoading && (error || !data?.available || !data.booking_url)
+  const trigger = variant === 'milestone' ? (
+    <Button onClick={() => handleOpenChange(true)} disabled={isLoading || unavailable} size="sm" className="w-full rounded-lg text-xs font-bold">
+      {isLoading ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : <CalendarDays data-icon="inline-start" />}
+      {isLoading ? 'Agenda laden' : unavailable ? 'Agenda niet beschikbaar' : 'Kies een moment'}
+      {!isLoading && !unavailable && <ArrowRight data-icon="inline-end" />}
+    </Button>
+  ) : (
+    <section className="rounded-2xl border border-primary/15 bg-primary/[0.04] p-5 sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <CalendarDays size={18} />
           </div>
           <div>
             <p className="text-sm font-bold text-foreground">Plan je persoonlijk adviesgesprek</p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              Je hebt het traject afgerond. Kies rechtstreeks een moment in de agenda{data.owner_name ? ` van ${data.owner_name}` : ''}.
+              Kies rechtstreeks een moment in de agenda{data?.owner_name ? ` van ${data.owner_name}` : ''}. Je blijft gewoon in Archer.
             </p>
           </div>
         </div>
-        <a
-          href="/api/call-booking/click"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-85"
-        >
-          Plan een gesprek
-          <ArrowUpRight size={16} />
-        </a>
+        <Button onClick={() => handleOpenChange(true)} disabled={isLoading || unavailable} size="lg" className="rounded-full px-5">
+          {isLoading ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : <CalendarDays data-icon="inline-start" />}
+          {isLoading ? 'Agenda laden' : unavailable ? 'Tijdelijk niet beschikbaar' : 'Kies een moment'}
+          {!isLoading && !unavailable && <ArrowRight data-icon="inline-end" />}
+        </Button>
       </div>
     </section>
+  )
+
+  if (!data?.booking_url) return trigger
+
+  return (
+    <>
+      {trigger}
+      <Dialog.Root open={open} onOpenChange={handleOpenChange}>
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 min-h-dvh bg-foreground/45 backdrop-blur-sm transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0" />
+          <Dialog.Viewport className="fixed inset-0 flex items-end justify-center sm:items-center sm:p-6">
+            <Dialog.Popup className="flex h-[94dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-card text-card-foreground shadow-2xl transition duration-200 data-ending-style:translate-y-4 data-ending-style:opacity-0 data-starting-style:translate-y-4 data-starting-style:opacity-0 sm:h-[min(860px,calc(100dvh-3rem))] sm:max-w-5xl sm:rounded-2xl">
+              <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-4 py-3 sm:px-6 sm:py-4">
+                <div className="min-w-0">
+                  <Dialog.Title className="text-base font-bold text-balance sm:text-lg">Kies je moment</Dialog.Title>
+                  <Dialog.Description className="mt-0.5 truncate text-sm text-muted-foreground">
+                    {data.owner_name ? `Rechtstreeks in de agenda van ${data.owner_name}` : 'Rechtstreeks in de agenda van Archer Invest'}
+                  </Dialog.Description>
+                </div>
+                <Dialog.Close className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" aria-label="Boekingsvenster sluiten">
+                  <X size={18} />
+                </Dialog.Close>
+              </header>
+
+              <div className="relative min-h-0 flex-1 bg-background">
+                {status === 'booked' ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-5 px-6 text-center">
+                    <div className="flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <CheckCircle2 size={28} />
+                    </div>
+                    <div className="flex max-w-md flex-col gap-2">
+                      <h2 className="text-xl font-bold text-balance">Je adviesgesprek staat ingepland</h2>
+                      <p className="text-sm leading-6 text-muted-foreground">We hebben je boeking geregistreerd. HubSpot stuurt de afspraakbevestiging en alle praktische info per e-mail.</p>
+                    </div>
+                    <Dialog.Close className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                      Terug naar mijn traject
+                    </Dialog.Close>
+                  </div>
+                ) : status === 'error' ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+                    <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                      <RotateCw size={22} />
+                    </div>
+                    <div className="flex max-w-sm flex-col gap-2">
+                      <h2 className="text-lg font-bold">De agenda kon niet goed laden</h2>
+                      <p className="text-sm leading-6 text-muted-foreground">Probeer de agenda opnieuw te laden. Je voortgang blijft gewoon bewaard.</p>
+                    </div>
+                    <Button onClick={retry} variant="outline">
+                      <RotateCw data-icon="inline-start" />
+                      Opnieuw proberen
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    {!frameLoaded && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background">
+                        <LoaderCircle className="animate-spin text-primary" size={28} />
+                        <p className="text-sm font-medium text-muted-foreground">Beschikbare momenten laden...</p>
+                      </div>
+                    )}
+                    {status === 'saving' && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/90 backdrop-blur-sm">
+                        <LoaderCircle className="animate-spin text-primary" size={28} />
+                        <p className="text-sm font-semibold">Je boeking wordt geregistreerd...</p>
+                      </div>
+                    )}
+                    <iframe
+                      key={frameKey}
+                      src={getEmbedUrl(data.booking_url)}
+                      title="Plan je persoonlijk adviesgesprek"
+                      className="h-full w-full border-0 bg-card"
+                      onLoad={() => setFrameLoaded(true)}
+                      onError={() => setStatus('error')}
+                    />
+                  </>
+                )}
+              </div>
+            </Dialog.Popup>
+          </Dialog.Viewport>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </>
   )
 }
