@@ -52,13 +52,31 @@ async function sha256hex(raw: string): Promise<string> {
 // een getrimde string terug, zodat een numerieke owner-id niet stilzwijgend
 // verloren gaat.
 function pick(body: Record<string, unknown>, ...keys: string[]): string {
+  const properties = body.properties
+  const hubSpotProperties = properties && typeof properties === 'object' && !Array.isArray(properties)
+    ? properties as Record<string, unknown>
+    : null
+
   for (const k of keys) {
-    const v = body[k]
-    if (typeof v === 'string' && v.trim()) return v.trim()
-    if (typeof v === 'number' && Number.isFinite(v)) return String(v)
-    if (typeof v === 'bigint') return String(v)
+    const directValue = body[k]
+    const property = hubSpotProperties?.[k]
+    const propertyValue = property && typeof property === 'object' && !Array.isArray(property)
+      ? (property as Record<string, unknown>).value
+      : property
+    const value = directValue ?? propertyValue
+
+    if (typeof value === 'string' && value.trim()) return value.trim()
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+    if (typeof value === 'bigint') return String(value)
   }
   return ''
+}
+
+function jsonResponse(body: Record<string, unknown>, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' },
+  })
 }
 
 // Escape LIKE-wildcards (% en _) zodat een e-mailadres met zo'n teken bij een
@@ -193,7 +211,14 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     && !Array.isArray(parsedPayload)
     ? parsedPayload as Record<string, unknown>
     : {}
-  const emailRaw = pick(body, 'email', 'contact_email').toLowerCase() || null
+  const isHubSpotLeadPayload = body.objectType === 'LEAD' && typeof body.portalId === 'number'
+  const respondsWithJson = acceptsJson || isHubSpotLeadPayload
+  const emailRaw = pick(
+    body,
+    'email',
+    'contact_email',
+    'hs_associated_contact_email',
+  ).toLowerCase() || null
   const payloadForLog: Record<string, unknown> = {
     ...(Object.keys(body).length > 0 ? body : { _received_json: parsedPayload }),
     _request: requestMetadata,
@@ -202,19 +227,30 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   }
   const instroom = classifyAccountSource(payloadForLog)
 
-  // ── 2. Authenticeer via webhook_secret ────────────────────────────────────
+  // ── 2. Authenticeer via body of beveiligde header ─────────────────────────
+  // HubSpots automatische LEAD-payload laat geen eigen JSON-veld toe. Daarom
+  // ondersteunen we daar ook Authorization: Bearer en X-Webhook-Secret.
   const expectedSecret = process.env.HUBSPOT_WEBHOOK_SECRET ?? ''
-  const receivedSecret = typeof body.webhook_secret === 'string' ? body.webhook_secret : ''
+  const authorization = req.headers.get('authorization') ?? ''
+  const bearerSecret = authorization.toLowerCase().startsWith('bearer ')
+    ? authorization.slice(7).trim()
+    : ''
+  const receivedSecret = pick(body, 'webhook_secret')
+    || req.headers.get('x-webhook-secret')?.trim()
+    || bearerSecret
+    || ''
 
   if (!expectedSecret) {
     console.error('[v0] HUBSPOT_WEBHOOK_SECRET is not set')
     await finalizeWebhookLog({ supabase, logId, email: emailRaw, payload_json: payloadForLog, outcome: 'error', reden: 'Server misconfiguration: HUBSPOT_WEBHOOK_SECRET niet gezet', activatielink: null, http_status: 500 })
+    if (respondsWithJson) return jsonResponse({ ok: false, error: 'Server misconfiguration' }, 500)
     return new Response('Server misconfiguration', { status: 500, headers: CORS_HEADERS })
   }
 
   if (!timingSafeEqual(receivedSecret, expectedSecret)) {
     console.warn('[v0] account-aanmaken: ongeldige webhook_secret')
     await finalizeWebhookLog({ supabase, logId, email: emailRaw, payload_json: payloadForLog, outcome: 'error', reden: 'ongeldig webhook_secret', activatielink: null, http_status: 401 })
+    if (respondsWithJson) return jsonResponse({ ok: false, error: 'Unauthorized' }, 401)
     return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS })
   }
 
@@ -226,8 +262,22 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     return new Response('Missing email', { status: 422, headers: CORS_HEADERS })
   }
 
-  let voornaam = pick(body, 'contact_first_name', 'firstname', 'first_name', 'voornaam')
-  let achternaam = pick(body, 'contact_last_name', 'lastname', 'last_name', 'achternaam')
+  let voornaam = pick(
+    body,
+    'contact_first_name',
+    'firstname',
+    'first_name',
+    'voornaam',
+    'hs_associated_contact_firstname',
+  )
+  let achternaam = pick(
+    body,
+    'contact_last_name',
+    'lastname',
+    'last_name',
+    'achternaam',
+    'hs_associated_contact_lastname',
+  )
 
   // Fallback: split dealname
   if (!voornaam && !achternaam) {
@@ -443,16 +493,10 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   console.log('[v0] account-aanmaken: succes', { email, userId, outcome, bron, activatieLink })
 
   // ── 8. Stuur activatielink terug ──────────────────────────────────────────
-  // Websites (Lovable) sturen Accept: application/json → JSON-antwoord.
-  // HubSpot-webhook verwacht plain tekst → behoud backward compat.
-  if (acceptsJson) {
-    return new Response(
-      JSON.stringify({ ok: true, activatielink: activatieLink, email, outcome }),
-      {
-        status: 200,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' },
-      }
-    )
+  // Websites en HubSpots automatische LEAD-webhook krijgen geldige JSON,
+  // zodat HubSpot `activatielink` als workflow-output kan selecteren.
+  if (respondsWithJson) {
+    return jsonResponse({ ok: true, activatielink: activatieLink, email, outcome }, 200)
   }
 
   // Plain-text fallback for HubSpot (no Accept: application/json)
