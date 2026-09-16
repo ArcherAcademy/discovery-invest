@@ -1,95 +1,130 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminOrMentor } from '@/lib/auth'
+import { classifyAccountSource } from '@/lib/account-source'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getAllCallUserStates } from '@/lib/call-booking-data'
+import { getAllCallUserStates, getBookingLinks } from '@/lib/call-booking-data'
+
+const BATCH_SIZE = 1000
+
+async function fetchAllRows<T>(
+  fetchBatch: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const rows: T[] = []
+  for (let from = 0; ; from += BATCH_SIZE) {
+    const { data, error } = await fetchBatch(from, from + BATCH_SIZE - 1)
+    if (error) throw error
+    rows.push(...(data ?? []))
+    if (!data || data.length < BATCH_SIZE) break
+  }
+  return rows
+}
 
 /**
  * GET /api/admin/data
- * Returns all admin dashboard data. Requires an active admin session.
+ * Geeft alle gegevens voor het admin-dashboard terug.
  */
 export async function GET(req: NextRequest) {
   try {
     await requireAdminOrMentor(req)
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unauthorized'
-    return NextResponse.json({ error: msg }, { status: msg === 'Forbidden' ? 403 : 401 })
+    const message = err instanceof Error ? err.message : 'Unauthorized'
+    return NextResponse.json({ error: message }, { status: message === 'Forbidden' ? 403 : 401 })
   }
 
   const supabase = createAdminClient()
 
-  const accountBatchSize = 1000
-
-  async function fetchAllUsers() {
-    const { count, error: countError } = await supabase
-      .from('demo_invest_users')
-      .select('id', { count: 'exact', head: true })
-
-    if (countError) throw countError
-
-    const rows = []
-    for (let from = 0; from < (count ?? 0); from += accountBatchSize) {
-      const { data, error } = await supabase
+  try {
+    const [{ count, error: countError }, usersData, allAccountLogs] = await Promise.all([
+      supabase.from('demo_invest_users').select('id', { count: 'exact', head: true }),
+      fetchAllRows<Record<string, unknown>>((from, to) => supabase
         .from('demo_invest_users')
         .select('*')
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
-        .range(from, from + accountBatchSize - 1)
+        .range(from, to)),
+      fetchAllRows<{
+        id: string
+        created_at: string
+        email: string | null
+        payload_json: Record<string, unknown>
+        outcome: string
+        reden: string | null
+        activatielink: string | null
+        http_status: number
+      }>((from, to) => supabase
+        .from('demo_invest_account_webhook_log')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(from, to)),
+    ])
 
-      if (error) throw error
-      rows.push(...(data ?? []))
-      if (!data || data.length < accountBatchSize) break
+    if (countError) throw countError
+
+    const [
+      { data: funnelsData },
+      { data: logsData },
+      { data: triggerData },
+      { data: configData },
+      { data: invitesData },
+      { data: quizData },
+      { data: followUpDisabledData },
+      callStates,
+      bookingLinks,
+    ] = await Promise.all([
+      supabase.from('demo_invest_user_funnel').select('*'),
+      supabase.from('demo_invest_webhook_log').select('*').order('created_at', { ascending: false }).limit(200),
+      supabase.from('demo_invest_trigger_log').select('*').order('created_at', { ascending: false }).limit(500),
+      supabase.from('demo_invest_webhook_config').select('*').order('trigger_naam'),
+      supabase.from('demo_invest_invites').select('user_id, expires_at, used_at'),
+      supabase.from('demo_invest_quiz_submissions').select('*'),
+      supabase.from('demo_invest_trigger_sent').select('user_id').eq('workflow_naam', '__automatische_opvolging_uit__'),
+      getAllCallUserStates(supabase),
+      getBookingLinks(supabase),
+    ])
+
+    const sourceByEmail = new Map<string, 'vermogenstest' | 'discovery'>()
+    for (const log of allAccountLogs) {
+      const email = log.email?.trim().toLowerCase()
+      if (!email || sourceByEmail.has(email)) continue
+      const source = classifyAccountSource(log.payload_json ?? {})
+      if (source) sourceByEmail.set(email, source)
     }
 
-    return { rows, count: count ?? rows.length }
-  }
+    const ownerNameById = new Map(
+      bookingLinks
+        .filter(link => link.actief && !link.is_default)
+        .map(link => [link.owner_email.trim(), link.naam]),
+    )
+    const followUpDisabledUserIds = new Set((followUpDisabledData ?? []).map(row => row.user_id))
+    const users = usersData.map(user => {
+      const id = String(user.id)
+      const email = String(user.email ?? '').trim().toLowerCase()
+      const callState = callStates.get(id)
+      const ownerId = callState?.contact_owner_email?.trim() || null
 
-  let usersResult
-  try {
-    usersResult = await fetchAllUsers()
+      return {
+        ...user,
+        ...callState,
+        instroom: user.instroom ?? sourceByEmail.get(email) ?? null,
+        hubspot_owner_id: ownerId,
+        owner_name: ownerId ? ownerNameById.get(ownerId) ?? null : null,
+        opvolging_actief: !followUpDisabledUserIds.has(id),
+      }
+    })
+
+    return NextResponse.json({
+      users,
+      accountTotal: count ?? users.length,
+      funnels: funnelsData ?? [],
+      logs: logsData ?? [],
+      triggerLogs: triggerData ?? [],
+      webhookConfig: configData ?? [],
+      accountLogs: allAccountLogs.slice(0, 300),
+      invites: invitesData ?? [],
+      quizSubmissions: quizData ?? [],
+    })
   } catch (error) {
-    console.error('[admin/data] Volledige accountlijst ophalen mislukt:', error)
-    return NextResponse.json({ error: 'De volledige accountlijst kon niet worden opgehaald.' }, { status: 500 })
+    console.error('[admin/data] Admin-gegevens ophalen mislukt:', error)
+    return NextResponse.json({ error: 'De admin-gegevens konden niet worden opgehaald.' }, { status: 500 })
   }
-
-  const [
-    { data: funnelsData },
-    { data: logsData },
-    { data: triggerData },
-    { data: configData },
-    { data: accountLogsData },
-    { data: invitesData },
-    { data: quizData },
-    { data: followUpDisabledData },
-  ] = await Promise.all([
-    supabase.from('demo_invest_user_funnel').select('*'),
-    supabase.from('demo_invest_webhook_log').select('*').order('created_at', { ascending: false }).limit(200),
-    supabase.from('demo_invest_trigger_log').select('*').order('created_at', { ascending: false }).limit(500),
-    supabase.from('demo_invest_webhook_config').select('*').order('trigger_naam'),
-    supabase.from('demo_invest_account_webhook_log').select('*').order('created_at', { ascending: false }).limit(300),
-    supabase.from('demo_invest_invites').select('user_id, expires_at, used_at'),
-    supabase.from('demo_invest_quiz_submissions').select('*'),
-    supabase.from('demo_invest_trigger_sent').select('user_id').eq('workflow_naam', '__automatische_opvolging_uit__'),
-  ])
-
-  const usersData = usersResult.rows
-  const callStates = await getAllCallUserStates(supabase)
-
-  const followUpDisabledUserIds = new Set((followUpDisabledData ?? []).map(row => row.user_id))
-  const users = (usersData ?? []).map(user => ({
-    ...user,
-    ...callStates.get(user.id),
-    opvolging_actief: !followUpDisabledUserIds.has(user.id),
-  }))
-
-  return NextResponse.json({
-    users,
-    accountTotal: usersResult.count,
-    funnels: funnelsData ?? [],
-    logs: logsData ?? [],
-    triggerLogs: triggerData ?? [],
-    webhookConfig: configData ?? [],
-    accountLogs: accountLogsData ?? [],
-    invites: invitesData ?? [],
-    quizSubmissions: quizData ?? [],
-  })
 }

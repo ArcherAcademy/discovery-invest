@@ -263,25 +263,38 @@ export async function updateCallUserState(
 }
 
 export async function getAllCallUserStates(supabase: SupabaseClient): Promise<Map<string, CallUserState>> {
-  const [{ data: users, error: userError }, { data: markers, error: markerError }] = await Promise.all([
-    supabase.from('demo_invest_users').select('id, hubspot_owner_id'),
-    supabase
+  const users: { id: string; hubspot_owner_id: string | null }[] = []
+  const markers: CallMarkerRow[] = []
+
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from('demo_invest_users')
+      .select('id, hubspot_owner_id')
+      .range(from, from + 999)
+    if (error) throw error
+    users.push(...(data ?? []))
+    if (!data || data.length < 1000) break
+  }
+
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
       .from('demo_invest_trigger_sent')
       .select('user_id, workflow_naam, created_at')
-      .in('workflow_naam', CALL_MARKERS),
-  ])
-
-  if (userError) throw userError
-  if (markerError) throw markerError
+      .in('workflow_naam', CALL_MARKERS)
+      .range(from, from + 999)
+    if (error) throw error
+    markers.push(...((data ?? []) as CallMarkerRow[]))
+    if (!data || data.length < 1000) break
+  }
 
   const markersByUser = new Map<string, CallMarkerRow[]>()
-  for (const marker of (markers ?? []) as CallMarkerRow[]) {
+  for (const marker of markers) {
     const current = markersByUser.get(marker.user_id) ?? []
     current.push(marker)
     markersByUser.set(marker.user_id, current)
   }
 
-  return new Map((users ?? []).map(user => [
+  return new Map(users.map(user => [
     user.id,
     stateFromMarkers(user.hubspot_owner_id ?? null, markersByUser.get(user.id) ?? []),
   ]))

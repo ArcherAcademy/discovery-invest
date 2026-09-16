@@ -3,6 +3,7 @@ export type VideoSection = 'core' | 'bonus'
 export type VideoStatus = 'not_started' | 'in_progress' | 'completed'
 export type BookingStatus = 'booked' | 'cancelled'
 export type Locale = 'nl' | 'en'
+export type AccountInstroom = 'vermogenstest' | 'discovery'
 
 export interface DemoUser {
   id: string
@@ -16,9 +17,15 @@ export interface DemoUser {
   trial_started_at: string | null
   trial_expires_at: string | null
   last_activity_at: string | null
+  instroom?: AccountInstroom | null
+  hubspot_owner_id?: string | null
+  owner_name?: string | null
   // Live afgeleide call-status — samengevoegd in /api/me, staat niet in de users-tabel.
+  call_opened_at?: string | null
+  call_clicked_at?: string | null
   call_booked?: boolean
   call_booked_at?: string | null
+  opvolging_actief?: boolean
   call_start_at?: string | null
   call_end_at?: string | null
   call_timezone?: string | null

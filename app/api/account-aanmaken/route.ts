@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { updateCallUserState } from '@/lib/call-booking-data'
+import { classifyAccountSource } from '@/lib/account-source'
 
 // ── CORS helpers ──────────────────────────────────────────────────────────────
 // Allow any origin so both the Lovable marketing site and HubSpot can call this.
@@ -122,6 +123,8 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   }
 
   const emailRaw = pick(body, 'email', 'contact_email').toLowerCase() || null
+  const payloadForLog = { ...body, _bron: bron, _origin: origin }
+  const instroom = classifyAccountSource(payloadForLog)
 
   // ── 2. Authenticeer via webhook_secret ────────────────────────────────────
   const expectedSecret = process.env.HUBSPOT_WEBHOOK_SECRET ?? ''
@@ -129,13 +132,13 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
 
   if (!expectedSecret) {
     console.error('[v0] HUBSPOT_WEBHOOK_SECRET is not set')
-    await logWebhookCall({ supabase, email: emailRaw, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: 'Server misconfiguration: HUBSPOT_WEBHOOK_SECRET niet gezet', activatielink: null, http_status: 500 })
+    await logWebhookCall({ supabase, email: emailRaw, payload_json: payloadForLog, outcome: 'error', reden: 'Server misconfiguration: HUBSPOT_WEBHOOK_SECRET niet gezet', activatielink: null, http_status: 500 })
     return new Response('Server misconfiguration', { status: 500, headers: CORS_HEADERS })
   }
 
   if (!timingSafeEqual(receivedSecret, expectedSecret)) {
     console.warn('[v0] account-aanmaken: ongeldige webhook_secret')
-    await logWebhookCall({ supabase, email: emailRaw, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: 'ongeldig webhook_secret', activatielink: null, http_status: 401 })
+    await logWebhookCall({ supabase, email: emailRaw, payload_json: payloadForLog, outcome: 'error', reden: 'ongeldig webhook_secret', activatielink: null, http_status: 401 })
     return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS })
   }
 
@@ -143,7 +146,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   const email = emailRaw
   if (!email) {
     console.warn('[v0] account-aanmaken: geen e-mailadres in payload', body)
-    await logWebhookCall({ supabase, email: null, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: 'geen e-mailadres in payload', activatielink: null, http_status: 422 })
+    await logWebhookCall({ supabase, email: null, payload_json: payloadForLog, outcome: 'error', reden: 'geen e-mailadres in payload', activatielink: null, http_status: 422 })
     return new Response('Missing email', { status: 422, headers: CORS_HEADERS })
   }
 
@@ -188,7 +191,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
 
   if (matchError) {
     console.error('[v0] account-aanmaken: lookup demo_invest_users gefaald:', matchError.message)
-    await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: `DB lookup gebruiker: ${matchError.message}`, activatielink: null, http_status: 500 })
+    await logWebhookCall({ supabase, email, payload_json: payloadForLog, outcome: 'error', reden: `DB lookup gebruiker: ${matchError.message}`, activatielink: null, http_status: 500 })
     return new Response(`Database error: ${matchError.message}`, { status: 500, headers: CORS_HEADERS })
   }
 
@@ -241,18 +244,32 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
           console.log(`[v0] account-aanmaken: insert-botsing opgevangen, bestaand account hergebruikt voor ${email} (id=${userId})`)
         } else {
           console.error('[v0] account-aanmaken: unique_violation maar geen bestaand account gevonden voor', email)
-          await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
+          await logWebhookCall({ supabase, email, payload_json: payloadForLog, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
           return new Response(`Database error: ${insertError.message}`, { status: 500, headers: CORS_HEADERS })
         }
       } else {
         console.error('[v0] account-aanmaken: insert demo_invest_users gefaald:', insertError.message, insertError.details)
-        await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
+        await logWebhookCall({ supabase, email, payload_json: payloadForLog, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
         return new Response(`Database error: ${insertError.message}`, { status: 500, headers: CORS_HEADERS })
       }
     } else {
       userId = newId
       outcome = 'created'
       console.log(`[v0] account-aanmaken: nieuw voorlopig account aangemaakt voor ${email} (id=${userId})`)
+    }
+  }
+
+  // Bron alleen invullen als die nog leeg is. Tot de migratie overal actief is,
+  // blijft een ontbrekende kolom non-fataal zodat accountcreatie nooit uitvalt.
+  if (instroom) {
+    const { error: instroomError } = await supabase
+      .from('demo_invest_users')
+      .update({ instroom })
+      .eq('id', userId)
+      .is('instroom', null)
+
+    if (instroomError && instroomError.code !== '42703') {
+      console.error('[v0] account-aanmaken: instroom opslaan mislukt:', instroomError.message)
     }
   }
 
@@ -324,13 +341,13 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
 
     if (inviteError) {
       console.error('[v0] account-aanmaken: insert demo_invest_invites gefaald:', inviteError.message)
-      await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: `DB insert invite: ${inviteError.message}`, activatielink: null, http_status: 500 })
+      await logWebhookCall({ supabase, email, payload_json: payloadForLog, outcome: 'error', reden: `DB insert invite: ${inviteError.message}`, activatielink: null, http_status: 500 })
       return new Response(`Database error: ${inviteError.message}`, { status: 500, headers: CORS_HEADERS })
     }
     console.log(`[v0] account-aanmaken: nieuwe invite aangemaakt voor ${email}`)
   }
 
-  // ── 6. Activatielink bouwen ───────────────────────────────────────────────
+  // ── 6. Activatielink bouwen ────────────────────────────────��──────────────
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
     `${req.nextUrl.protocol}//${req.nextUrl.host}`
@@ -340,7 +357,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   await logWebhookCall({
     supabase,
     email,
-    payload_json: { ...body, _bron: bron, _origin: origin },
+    payload_json: payloadForLog,
     outcome,
     reden: null,
     activatielink: activatieLink,

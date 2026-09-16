@@ -3,7 +3,8 @@ import { utils, write } from 'xlsx'
 import { requireAdminOrMentor } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hasPermanentAccess } from '@/lib/access'
-import { getAllCallUserStates } from '@/lib/call-booking-data'
+import { classifyAccountSource } from '@/lib/account-source'
+import { getAllCallUserStates, getBookingLinks } from '@/lib/call-booking-data'
 
 export const runtime = 'nodejs'
 
@@ -19,6 +20,7 @@ type ExportUser = {
   trial_started_at: string | null
   trial_expires_at: string | null
   last_activity_at: string | null
+  instroom?: 'vermogenstest' | 'discovery' | null
 }
 
 type ExportFunnel = {
@@ -45,6 +47,36 @@ function statusFor(user: ExportUser, openInviteUserIds: Set<string>) {
   return openInviteUserIds.has(user.id) ? 'Aangemaakt' : 'Zonder link'
 }
 
+async function fetchAllUsers(supabase: ReturnType<typeof createAdminClient>) {
+  const rows: ExportUser[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from('demo_invest_users')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(from, from + 999)
+    if (error) throw error
+    rows.push(...((data ?? []) as ExportUser[]))
+    if (!data || data.length < 1000) break
+  }
+  return rows
+}
+
+async function fetchAllAccountLogs(supabase: ReturnType<typeof createAdminClient>) {
+  const rows: { email: string | null; payload_json: Record<string, unknown> }[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from('demo_invest_account_webhook_log')
+      .select('email, payload_json')
+      .order('created_at', { ascending: false })
+      .range(from, from + 999)
+    if (error) throw error
+    rows.push(...(data ?? []))
+    if (!data || data.length < 1000) break
+  }
+  return rows
+}
+
 export async function GET(req: NextRequest) {
   try {
     await requireAdminOrMentor(req)
@@ -54,25 +86,38 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createAdminClient()
-  const [usersResult, funnelsResult, invitesResult, followUpDisabledResult] = await Promise.all([
-    supabase.from('demo_invest_users').select('*').order('created_at', { ascending: false }),
+  const [users, funnelsResult, invitesResult, followUpDisabledResult, accountLogs, bookingLinks] = await Promise.all([
+    fetchAllUsers(supabase),
     supabase.from('demo_invest_user_funnel').select('*'),
     supabase.from('demo_invest_invites').select('user_id, used_at'),
     supabase.from('demo_invest_trigger_sent').select('user_id').eq('workflow_naam', '__automatische_opvolging_uit__'),
+    fetchAllAccountLogs(supabase),
+    getBookingLinks(supabase),
   ])
 
-  const queryError = usersResult.error ?? funnelsResult.error ?? invitesResult.error ?? followUpDisabledResult.error
+  const queryError = funnelsResult.error ?? invitesResult.error ?? followUpDisabledResult.error
   if (queryError) {
     return NextResponse.json({ error: 'De accountgegevens konden niet worden opgehaald.' }, { status: 500 })
   }
 
-  const users = (usersResult.data ?? []) as ExportUser[]
   const callStates = await getAllCallUserStates(supabase)
   const funnels = (funnelsResult.data ?? []) as ExportFunnel[]
   const invites = (invitesResult.data ?? []) as ExportInvite[]
   const funnelsByUser = new Map(funnels.map(funnel => [funnel.user_id, funnel]))
   const openInviteUserIds = new Set(invites.filter(invite => !invite.used_at).map(invite => invite.user_id))
   const followUpDisabledUserIds = new Set((followUpDisabledResult.data ?? []).map(row => row.user_id))
+  const sourceByEmail = new Map<string, 'vermogenstest' | 'discovery'>()
+  for (const log of accountLogs) {
+    const email = log.email?.trim().toLowerCase()
+    if (!email || sourceByEmail.has(email)) continue
+    const source = classifyAccountSource(log.payload_json ?? {})
+    if (source) sourceByEmail.set(email, source)
+  }
+  const ownerNameById = new Map(
+    bookingLinks
+      .filter(link => link.actief && !link.is_default)
+      .map(link => [link.owner_email.trim(), link.naam]),
+  )
 
   const rows = users.map(user => {
     const funnel = funnelsByUser.get(user.id)
@@ -88,7 +133,19 @@ export async function GET(req: NextRequest) {
       'Trial gestart': excelDate(user.trial_started_at),
       'Trial verloopt': hasPermanentAccess(user.role) ? 'Onbeperkt' : excelDate(user.trial_expires_at),
       'Laatste activiteit': excelDate(user.last_activity_at),
-      'Contacteigenaar e-mail': callState?.contact_owner_email ?? '',
+      Instroom: user.instroom === 'vermogenstest'
+        ? 'Vermogenstest'
+        : user.instroom === 'discovery'
+          ? 'Discovery'
+          : sourceByEmail.get(user.email.trim().toLowerCase()) === 'vermogenstest'
+            ? 'Vermogenstest'
+            : sourceByEmail.get(user.email.trim().toLowerCase()) === 'discovery'
+              ? 'Discovery'
+              : 'Onbekend',
+      Accountmanager: callState?.contact_owner_email
+        ? ownerNameById.get(callState.contact_owner_email.trim()) ?? 'Onbekend'
+        : 'Round robin',
+      'HubSpot owner-ID': callState?.contact_owner_email ?? '',
       'Adviescall gezien op': excelDate(callState?.call_opened_at ?? null),
       'Adviescall geklikt op': excelDate(callState?.call_clicked_at ?? null),
       'Adviescall geboekt': callState?.call_booked ? 'Ja' : 'Nee',

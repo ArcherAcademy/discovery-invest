@@ -15,6 +15,7 @@ import { CallBookingsOverview } from '@/components/admin/CallBookingsOverview'
 import type { DemoUser, DemoUserFunnel, DemoWebhookLog, DemoTriggerLog, DemoWebhookConfig, AccountWebhookLog, DemoQuizSubmission } from '@/lib/types'
 import { QUIZ_QUESTIONS } from '@/lib/quiz-data'
 import { hasPermanentAccess, isTrialExpired, trialDaysRemaining } from '@/lib/access'
+import { accountSourceLabel } from '@/lib/account-source'
 
 interface AdminUser extends DemoUser {
   funnel?: DemoUserFunnel
@@ -72,6 +73,8 @@ export default function AdminPage() {
   const [onlyWithVideos, setOnlyWithVideos] = useState(false)
   const [createdFrom, setCreatedFrom] = useState('')
   const [createdTo, setCreatedTo] = useState('')
+  const [sourceFilter, setSourceFilter] = useState<'' | 'vermogenstest' | 'discovery'>('')
+  const [managerFilter, setManagerFilter] = useState('')
   const [historyFilter, setHistoryFilter] = useState<{ email: string; workflow: string; periode: 'vandaag' | 'week' | 'alles' }>({ email: '', workflow: '', periode: 'alles' })
   const [evaluatorRunning, setEvaluatorRunning] = useState(false)
   const [evaluatorResult, setEvaluatorResult] = useState<{ usersProcessed: number; triggered: number; suppressed: number } | null>(null)
@@ -314,6 +317,8 @@ export default function AdminPage() {
   const geactiveerd = users.filter(u => getAccountStatus(u) === 'geactiveerd').length
   const zonderLinkAccounts = users.filter(u => getAccountStatus(u) === 'zonder_link').length
   const activatiegraad = users.length > 0 ? Math.round((geactiveerd / users.length) * 100) : 0
+  const vermogenstestAccounts = users.filter(u => u.instroom === 'vermogenstest').length
+  const discoveryAccounts = users.filter(u => u.instroom === 'discovery').length
 
   function toggleSort(field: typeof sortField) {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -413,18 +418,6 @@ export default function AdminPage() {
       body: JSON.stringify({ trigger_naam: triggerNaam, actief: !current }),
     })
     setWebhookConfig(prev => prev.map(c => c.trigger_naam === triggerNaam ? { ...c, actief: !current } : c))
-  }
-
-  async function handleOwnerUpdate(userId: string, contactOwnerEmail: string) {
-    const response = await fetch('/api/admin/user-owner', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, contact_owner_email: contactOwnerEmail }),
-    })
-    if (!response.ok) return
-    setUsers(current => current.map(item => item.id === userId
-      ? { ...item, contact_owner_email: contactOwnerEmail.trim().toLowerCase() || null }
-      : item))
   }
 
   async function handleCallBookedUpdate(userId: string, callBooked: boolean) {
@@ -691,13 +684,16 @@ export default function AdminPage() {
             const q = accountsFilter.query.trim().toLowerCase()
             const queryOk = !q || (u.email ?? '').toLowerCase().includes(q) || (u.name ?? '').toLowerCase().includes(q)
             const videosOk = !onlyWithVideos || (u.funnel?.videos_completed_count ?? 0) >= 1
+            const sourceOk = !sourceFilter || u.instroom === sourceFilter
+            const managerOk = !managerFilter
+              || (managerFilter === '__round_robin__' ? !u.hubspot_owner_id : u.owner_name === managerFilter)
             let dateOk = true
             if (createdFromStart !== null || createdToEnd !== null) {
               const created = new Date(u.created_at).getTime()
               if (createdFromStart !== null && created < createdFromStart) dateOk = false
               if (createdToEnd !== null && created > createdToEnd) dateOk = false
             }
-            return statusOk && queryOk && videosOk && dateOk
+            return statusOk && queryOk && videosOk && sourceOk && managerOk && dateOk
           })
           .sort((a, b) => {
             const createdDifference = new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -710,17 +706,20 @@ export default function AdminPage() {
         const rangeStart = filtered.length === 0 ? 0 : pageStart + 1
         const rangeEnd = Math.min(pageStart + ACCOUNTS_PER_PAGE, filtered.length)
         const visiblePages = getVisibleAccountPages(activePage, pageCount)
-        const isFiltered = Boolean(accountsFilter.status || accountsFilter.query.trim() || onlyWithVideos || createdFrom || createdTo)
+        const managerOptions = Array.from(new Set(users.map(u => u.owner_name).filter((name): name is string => Boolean(name)))).sort()
+        const isFiltered = Boolean(accountsFilter.status || accountsFilter.query.trim() || onlyWithVideos || sourceFilter || managerFilter || createdFrom || createdTo)
 
         return (
           <div className="space-y-5">
             {/* Telkaarten */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
               {[
                 { label: 'Aangemaakt, niet geactiveerd', value: aangemaakt, bg: 'rgba(37,0,245,0.06)', color: '#2500F5', border: 'rgba(37,0,245,0.12)' },
                 { label: 'Geactiveerd', value: geactiveerd, bg: 'rgba(34,197,94,0.07)', color: '#16a34a', border: 'rgba(34,197,94,0.18)' },
                 { label: 'Zonder openstaande link', value: zonderLinkAccounts, bg: '#f7f8fc', color: 'rgba(13,15,20,0.45)', border: '#e8ecf4' },
                 { label: 'Activatiegraad', value: `${activatiegraad}%`, bg: '#ffffff', color: '#0d0f14', border: '#e8ecf4' },
+                { label: 'Vermogenstest', value: vermogenstestAccounts, bg: 'rgba(37,0,245,0.06)', color: '#2500F5', border: 'rgba(37,0,245,0.12)' },
+                { label: 'Discovery', value: discoveryAccounts, bg: '#ffffff', color: '#0d0f14', border: '#e8ecf4' },
               ].map(card => (
                 <div
                   key={card.label}
@@ -769,6 +768,28 @@ export default function AdminPage() {
                 className="rounded-xl px-3 py-2 text-xs border outline-none"
                 style={{ background: '#fff', borderColor: '#e8ecf4', color: '#0d0f14', minWidth: 220 }}
               />
+              <select
+                value={sourceFilter}
+                onChange={event => { setSourceFilter(event.target.value as typeof sourceFilter); setAccountPage(1) }}
+                aria-label="Filter op instroom"
+                className="rounded-xl border px-3 py-2 text-xs outline-none"
+                style={{ background: '#fff', borderColor: '#e8ecf4', color: '#0d0f14' }}
+              >
+                <option value="">Alle instroom</option>
+                <option value="vermogenstest">Vermogenstest</option>
+                <option value="discovery">Discovery</option>
+              </select>
+              <select
+                value={managerFilter}
+                onChange={event => { setManagerFilter(event.target.value); setAccountPage(1) }}
+                aria-label="Filter op accountmanager"
+                className="rounded-xl border px-3 py-2 text-xs outline-none"
+                style={{ background: '#fff', borderColor: '#e8ecf4', color: '#0d0f14' }}
+              >
+                <option value="">Alle accountmanagers</option>
+                <option value="__round_robin__">Round robin</option>
+                {managerOptions.map(name => <option key={name} value={name}>{name}</option>)}
+              </select>
               <button
                 type="button"
                 onClick={() => {
@@ -847,7 +868,7 @@ export default function AdminPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e8ecf4', background: '#F5F8FF' }}>
-                      {['Naam', 'E-mail', 'Contacteigenaar', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
+                      {['Naam', 'E-mail', 'Instroom', 'Accountmanager', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
                         <th key={h} className="px-4 py-3 text-left font-semibold" style={{ color: 'rgba(13,15,20,0.45)' }}>{h}</th>
                       ))}
                     </tr>
@@ -871,17 +892,30 @@ export default function AdminPage() {
                           {/* E-mail */}
                           <td className="px-4 py-3" style={{ color: 'rgba(13,15,20,0.6)' }}>{u.email}</td>
 
-                          {/* HubSpot-contacteigenaar */}
-                          <td className="px-4 py-3 min-w-48">
-                            <input
-                              type="email"
-                              defaultValue={u.contact_owner_email ?? ''}
-                              onBlur={event => handleOwnerUpdate(u.id, event.currentTarget.value)}
-                              placeholder="adviseur@bedrijf.be"
-                              aria-label={`Contacteigenaar voor ${u.email}`}
-                              className="w-full rounded-lg border px-2 py-1.5 text-[11px] outline-none focus:ring-2"
-                              style={{ borderColor: '#e8ecf4', color: '#0d0f14', background: '#fafbff' }}
-                            />
+                          {/* Instroom */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span
+                              className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                              style={u.instroom === 'vermogenstest'
+                                ? { background: 'rgba(37,0,245,0.09)', color: '#2500F5' }
+                                : u.instroom === 'discovery'
+                                  ? { background: '#f0f3fb', color: '#0d0f14' }
+                                  : { background: '#f7f8fc', color: 'rgba(13,15,20,0.4)' }}
+                            >
+                              {accountSourceLabel(u.instroom)}
+                            </span>
+                          </td>
+
+                          {/* Accountmanager */}
+                          <td className="min-w-44 px-4 py-3 whitespace-nowrap">
+                            <span className="block font-semibold" style={{ color: '#0d0f14' }}>
+                              {u.owner_name || (u.hubspot_owner_id ? 'Onbekend' : 'Round robin')}
+                            </span>
+                            {u.hubspot_owner_id && (
+                              <span className="mt-0.5 block font-mono text-[10px]" style={{ color: 'rgba(13,15,20,0.38)' }}>
+                                ID {u.hubspot_owner_id}
+                              </span>
+                            )}
                           </td>
 
                           {/* Status badge */}
@@ -1028,7 +1062,7 @@ export default function AdminPage() {
                     })}
                     {filtered.length === 0 && (
                       <tr>
-                        <td colSpan={13} className="px-4 py-8 text-center text-xs" style={{ color: 'rgba(13,15,20,0.35)' }}>
+                        <td colSpan={14} className="px-4 py-8 text-center text-xs" style={{ color: 'rgba(13,15,20,0.35)' }}>
                           Geen accounts gevonden
                         </td>
                       </tr>
