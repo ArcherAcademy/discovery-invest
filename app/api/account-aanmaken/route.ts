@@ -67,28 +67,68 @@ function escapeLike(value: string): string {
   return value.replace(/([\\%_])/g, '\\$1')
 }
 
-// ── DB log helper (nooit blocking, nooit fatal) ───────────────────────────────
-async function logWebhookCall(opts: {
+// ── DB-loghelpers (nooit blocking, nooit fatal) ──────────────────────────────
+type WebhookOutcome = 'created' | 'reused' | 'error'
+
+async function startWebhookLog(opts: {
   supabase: ReturnType<typeof createAdminClient>
+  payload_json: Record<string, unknown>
+}): Promise<string | null> {
+  try {
+    const { data, error } = await opts.supabase
+      .from('demo_invest_account_webhook_log')
+      .insert({
+        email: null,
+        payload_json: opts.payload_json,
+        outcome: 'error',
+        reden: 'verwerking gestart',
+        activatielink: null,
+        http_status: 102,
+      })
+      .select('id')
+      .single()
+
+    if (error) {
+      console.error('[v0] account-aanmaken: eerste webhookopslag mislukt (non-fatal):', error.message)
+      return null
+    }
+
+    return data.id as string
+  } catch (err) {
+    console.error('[v0] account-aanmaken: eerste webhookopslag mislukt (non-fatal):', err)
+    return null
+  }
+}
+
+async function finalizeWebhookLog(opts: {
+  supabase: ReturnType<typeof createAdminClient>
+  logId: string | null
   email: string | null
   payload_json: Record<string, unknown>
-  outcome: 'created' | 'reused' | 'error'
+  outcome: WebhookOutcome
   reden: string | null
   activatielink: string | null
   http_status: number
 }) {
   try {
-    await opts.supabase.from('demo_invest_account_webhook_log').insert({
+    const values = {
       email: opts.email,
       payload_json: opts.payload_json,
       outcome: opts.outcome,
       reden: opts.reden,
       activatielink: opts.activatielink,
       http_status: opts.http_status,
-    })
+    }
+
+    const { error } = opts.logId
+      ? await opts.supabase.from('demo_invest_account_webhook_log').update(values).eq('id', opts.logId)
+      : await opts.supabase.from('demo_invest_account_webhook_log').insert(values)
+
+    if (error) {
+      console.error('[v0] account-aanmaken: webhooklog finaliseren mislukt (non-fatal):', error.message)
+    }
   } catch (err) {
-    // Log fout mag de flow NOOIT breken
-    console.error('[v0] account-aanmaken: loggen mislukt (non-fatal):', err)
+    console.error('[v0] account-aanmaken: webhooklog finaliseren mislukt (non-fatal):', err)
   }
 }
 
@@ -105,15 +145,17 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   const bron = acceptsJson ? 'website' : 'hubspot'
 
   const rawPayload = await req.text()
-  let body: Record<string, unknown>
-
-  try {
-    body = JSON.parse(rawPayload)
-  } catch {
-    return new Response('Invalid JSON', { status: 400, headers: CORS_HEADERS })
+  const requestMetadata = {
+    raw_body: rawPayload,
+    content_type: req.headers.get('content-type'),
+    content_length: req.headers.get('content-length'),
+    user_agent: req.headers.get('user-agent'),
+    received_at: new Date().toISOString(),
+    method: req.method,
+    url: req.url,
   }
 
-  // ── 1. Admin-client zo vroeg mogelijk — nodig voor logging ────────────────
+  // ── 1. Admin-client en bronopslag vóór parsing/authenticatie ──────────────
   let supabase: ReturnType<typeof createAdminClient>
   try {
     supabase = createAdminClient()
@@ -122,8 +164,42 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     return new Response('Server misconfiguration', { status: 500 })
   }
 
+  const initialPayloadForLog: Record<string, unknown> = {
+    _request: requestMetadata,
+    _bron: bron,
+    _origin: origin,
+  }
+  const logId = await startWebhookLog({ supabase, payload_json: initialPayloadForLog })
+
+  let parsedPayload: unknown
+  try {
+    parsedPayload = JSON.parse(rawPayload)
+  } catch {
+    await finalizeWebhookLog({
+      supabase,
+      logId,
+      email: null,
+      payload_json: initialPayloadForLog,
+      outcome: 'error',
+      reden: 'ongeldige JSON',
+      activatielink: null,
+      http_status: 400,
+    })
+    return new Response('Invalid JSON', { status: 400, headers: CORS_HEADERS })
+  }
+
+  const body: Record<string, unknown> = parsedPayload !== null
+    && typeof parsedPayload === 'object'
+    && !Array.isArray(parsedPayload)
+    ? parsedPayload as Record<string, unknown>
+    : {}
   const emailRaw = pick(body, 'email', 'contact_email').toLowerCase() || null
-  const payloadForLog = { ...body, _bron: bron, _origin: origin }
+  const payloadForLog: Record<string, unknown> = {
+    ...(Object.keys(body).length > 0 ? body : { _received_json: parsedPayload }),
+    _request: requestMetadata,
+    _bron: bron,
+    _origin: origin,
+  }
   const instroom = classifyAccountSource(payloadForLog)
 
   // ── 2. Authenticeer via webhook_secret ────────────────────────────────────
@@ -132,13 +208,13 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
 
   if (!expectedSecret) {
     console.error('[v0] HUBSPOT_WEBHOOK_SECRET is not set')
-    await logWebhookCall({ supabase, email: emailRaw, payload_json: payloadForLog, outcome: 'error', reden: 'Server misconfiguration: HUBSPOT_WEBHOOK_SECRET niet gezet', activatielink: null, http_status: 500 })
+    await finalizeWebhookLog({ supabase, logId, email: emailRaw, payload_json: payloadForLog, outcome: 'error', reden: 'Server misconfiguration: HUBSPOT_WEBHOOK_SECRET niet gezet', activatielink: null, http_status: 500 })
     return new Response('Server misconfiguration', { status: 500, headers: CORS_HEADERS })
   }
 
   if (!timingSafeEqual(receivedSecret, expectedSecret)) {
     console.warn('[v0] account-aanmaken: ongeldige webhook_secret')
-    await logWebhookCall({ supabase, email: emailRaw, payload_json: payloadForLog, outcome: 'error', reden: 'ongeldig webhook_secret', activatielink: null, http_status: 401 })
+    await finalizeWebhookLog({ supabase, logId, email: emailRaw, payload_json: payloadForLog, outcome: 'error', reden: 'ongeldig webhook_secret', activatielink: null, http_status: 401 })
     return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS })
   }
 
@@ -146,7 +222,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   const email = emailRaw
   if (!email) {
     console.warn('[v0] account-aanmaken: geen e-mailadres in payload', body)
-    await logWebhookCall({ supabase, email: null, payload_json: payloadForLog, outcome: 'error', reden: 'geen e-mailadres in payload', activatielink: null, http_status: 422 })
+    await finalizeWebhookLog({ supabase, logId, email: null, payload_json: payloadForLog, outcome: 'error', reden: 'geen e-mailadres in payload', activatielink: null, http_status: 422 })
     return new Response('Missing email', { status: 422, headers: CORS_HEADERS })
   }
 
@@ -191,7 +267,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
 
   if (matchError) {
     console.error('[v0] account-aanmaken: lookup demo_invest_users gefaald:', matchError.message)
-    await logWebhookCall({ supabase, email, payload_json: payloadForLog, outcome: 'error', reden: `DB lookup gebruiker: ${matchError.message}`, activatielink: null, http_status: 500 })
+    await finalizeWebhookLog({ supabase, logId, email, payload_json: payloadForLog, outcome: 'error', reden: `DB lookup gebruiker: ${matchError.message}`, activatielink: null, http_status: 500 })
     return new Response(`Database error: ${matchError.message}`, { status: 500, headers: CORS_HEADERS })
   }
 
@@ -244,12 +320,12 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
           console.log(`[v0] account-aanmaken: insert-botsing opgevangen, bestaand account hergebruikt voor ${email} (id=${userId})`)
         } else {
           console.error('[v0] account-aanmaken: unique_violation maar geen bestaand account gevonden voor', email)
-          await logWebhookCall({ supabase, email, payload_json: payloadForLog, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
+          await finalizeWebhookLog({ supabase, logId, email, payload_json: payloadForLog, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
           return new Response(`Database error: ${insertError.message}`, { status: 500, headers: CORS_HEADERS })
         }
       } else {
         console.error('[v0] account-aanmaken: insert demo_invest_users gefaald:', insertError.message, insertError.details)
-        await logWebhookCall({ supabase, email, payload_json: payloadForLog, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
+        await finalizeWebhookLog({ supabase, logId, email, payload_json: payloadForLog, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
         return new Response(`Database error: ${insertError.message}`, { status: 500, headers: CORS_HEADERS })
       }
     } else {
@@ -341,7 +417,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
 
     if (inviteError) {
       console.error('[v0] account-aanmaken: insert demo_invest_invites gefaald:', inviteError.message)
-      await logWebhookCall({ supabase, email, payload_json: payloadForLog, outcome: 'error', reden: `DB insert invite: ${inviteError.message}`, activatielink: null, http_status: 500 })
+      await finalizeWebhookLog({ supabase, logId, email, payload_json: payloadForLog, outcome: 'error', reden: `DB insert invite: ${inviteError.message}`, activatielink: null, http_status: 500 })
       return new Response(`Database error: ${inviteError.message}`, { status: 500, headers: CORS_HEADERS })
     }
     console.log(`[v0] account-aanmaken: nieuwe invite aangemaakt voor ${email}`)
@@ -354,8 +430,9 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   const activatieLink = `${appUrl.replace(/\/$/, '')}/activeren?token=${rawToken}`
 
   // ── 7. Log succes ─────────────────────────────────────────────────────────
-  await logWebhookCall({
+  await finalizeWebhookLog({
     supabase,
+    logId,
     email,
     payload_json: payloadForLog,
     outcome,

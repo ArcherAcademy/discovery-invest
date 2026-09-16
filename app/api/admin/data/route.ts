@@ -14,7 +14,11 @@ function sanitizeWebhookPayload(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value).map(([key, nestedValue]) => [
       key,
-      SENSITIVE_PAYLOAD_KEY.test(key) ? '[verborgen]' : sanitizeWebhookPayload(nestedValue),
+      key === 'raw_body'
+        ? '[ruwe body beveiligd opgeslagen]'
+        : SENSITIVE_PAYLOAD_KEY.test(key)
+          ? '[verborgen]'
+          : sanitizeWebhookPayload(nestedValue),
     ]),
   )
 }
