@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminOrMentor } from '@/lib/auth'
-import { classifyAccountSource } from '@/lib/account-source'
+import { buildAccountSourceByEmail } from '@/lib/account-source'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getAllCallUserStates, getBookingLinks } from '@/lib/call-booking-data'
 
@@ -82,13 +82,7 @@ export async function GET(req: NextRequest) {
       getBookingLinks(supabase),
     ])
 
-    const sourceByEmail = new Map<string, 'vermogenstest' | 'discovery'>()
-    for (const log of allAccountLogs) {
-      const email = log.email?.trim().toLowerCase()
-      if (!email || sourceByEmail.has(email)) continue
-      const source = classifyAccountSource(log.payload_json ?? {})
-      if (source) sourceByEmail.set(email, source)
-    }
+    const sourceByEmail = buildAccountSourceByEmail(allAccountLogs)
 
     const ownerNameById = new Map(
       bookingLinks
@@ -105,7 +99,7 @@ export async function GET(req: NextRequest) {
       return {
         ...user,
         ...callState,
-        instroom: user.instroom ?? sourceByEmail.get(email) ?? null,
+        instroom: sourceByEmail.get(email) ?? null,
         hubspot_owner_id: ownerId,
         owner_name: ownerId ? ownerNameById.get(ownerId) ?? null : null,
         opvolging_actief: !followUpDisabledUserIds.has(id),

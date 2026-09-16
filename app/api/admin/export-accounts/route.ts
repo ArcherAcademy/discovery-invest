@@ -3,7 +3,7 @@ import { utils, write } from 'xlsx'
 import { requireAdminOrMentor } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hasPermanentAccess } from '@/lib/access'
-import { classifyAccountSource } from '@/lib/account-source'
+import { buildAccountSourceByEmail } from '@/lib/account-source'
 import { getAllCallUserStates, getBookingLinks } from '@/lib/call-booking-data'
 
 export const runtime = 'nodejs'
@@ -63,11 +63,11 @@ async function fetchAllUsers(supabase: ReturnType<typeof createAdminClient>) {
 }
 
 async function fetchAllAccountLogs(supabase: ReturnType<typeof createAdminClient>) {
-  const rows: { email: string | null; payload_json: Record<string, unknown> }[] = []
+  const rows: { created_at: string; email: string | null; payload_json: Record<string, unknown> }[] = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase
       .from('demo_invest_account_webhook_log')
-      .select('email, payload_json')
+      .select('created_at, email, payload_json')
       .order('created_at', { ascending: false })
       .range(from, from + 999)
     if (error) throw error
@@ -106,13 +106,7 @@ export async function GET(req: NextRequest) {
   const funnelsByUser = new Map(funnels.map(funnel => [funnel.user_id, funnel]))
   const openInviteUserIds = new Set(invites.filter(invite => !invite.used_at).map(invite => invite.user_id))
   const followUpDisabledUserIds = new Set((followUpDisabledResult.data ?? []).map(row => row.user_id))
-  const sourceByEmail = new Map<string, 'vermogenstest' | 'discovery'>()
-  for (const log of accountLogs) {
-    const email = log.email?.trim().toLowerCase()
-    if (!email || sourceByEmail.has(email)) continue
-    const source = classifyAccountSource(log.payload_json ?? {})
-    if (source) sourceByEmail.set(email, source)
-  }
+  const sourceByEmail = buildAccountSourceByEmail(accountLogs)
   const ownerNameById = new Map(
     bookingLinks
       .filter(link => link.actief && !link.is_default)
@@ -133,15 +127,11 @@ export async function GET(req: NextRequest) {
       'Trial gestart': excelDate(user.trial_started_at),
       'Trial verloopt': hasPermanentAccess(user.role) ? 'Onbeperkt' : excelDate(user.trial_expires_at),
       'Laatste activiteit': excelDate(user.last_activity_at),
-      Instroom: user.instroom === 'vermogenstest'
+      Instroom: sourceByEmail.get(user.email.trim().toLowerCase()) === 'vermogenstest'
         ? 'Vermogenstest'
-        : user.instroom === 'discovery'
+        : sourceByEmail.get(user.email.trim().toLowerCase()) === 'discovery'
           ? 'Discovery'
-          : sourceByEmail.get(user.email.trim().toLowerCase()) === 'vermogenstest'
-            ? 'Vermogenstest'
-            : sourceByEmail.get(user.email.trim().toLowerCase()) === 'discovery'
-              ? 'Discovery'
-              : 'Onbekend',
+          : 'Onbekend',
       Accountmanager: callState?.contact_owner_email
         ? ownerNameById.get(callState.contact_owner_email.trim()) ?? 'Onbekend'
         : 'Round robin',
