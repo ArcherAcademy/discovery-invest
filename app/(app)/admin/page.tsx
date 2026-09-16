@@ -12,7 +12,7 @@ import { InhaalrondeModal } from '@/components/admin/InhaalrondeModal'
 import { UserFollowUpControl } from '@/components/admin/UserFollowUpControl'
 import { BookingLinksTab } from '@/components/admin/BookingLinksTab'
 import { CallBookingsOverview } from '@/components/admin/CallBookingsOverview'
-import type { DemoUser, DemoUserFunnel, DemoWebhookLog, DemoTriggerLog, DemoWebhookConfig, AccountWebhookLog, DemoQuizSubmission } from '@/lib/types'
+import type { DemoUser, DemoUserFunnel, DemoWebhookLog, DemoTriggerLog, DemoWebhookConfig, AccountWebhookLog, LatestAccountWebhooks, DemoQuizSubmission } from '@/lib/types'
 import { QUIZ_QUESTIONS } from '@/lib/quiz-data'
 import { hasPermanentAccess, isTrialExpired, trialDaysRemaining } from '@/lib/access'
 import { accountSourceLabel } from '@/lib/account-source'
@@ -62,7 +62,12 @@ export default function AdminPage() {
   const [invites, setInvites] = useState<DemoInvite[]>([])
   const [accountsFilter, setAccountsFilter] = useState<{ query: string; status: '' | AccountStatus }>({ query: '', status: '' })
   const [accountLogs, setAccountLogs] = useState<AccountWebhookLog[]>([])
-  const [accountLogsFilter, setAccountLogsFilter] = useState<{ email: string; outcome: '' | 'created' | 'reused' | 'error' }>({ email: '', outcome: '' })
+  const [latestAccountWebhooks, setLatestAccountWebhooks] = useState<LatestAccountWebhooks>({ discovery: null, vermogenstest: null })
+  const [accountLogsFilter, setAccountLogsFilter] = useState<{
+    email: string
+    outcome: '' | 'created' | 'reused' | 'error'
+    instroom: '' | 'discovery' | 'vermogenstest' | 'unknown'
+  }>({ email: '', outcome: '', instroom: '' })
   const [quizSubmissions, setQuizSubmissions] = useState<DemoQuizSubmission[]>([])
   const [copiedLink, setCopiedLink] = useState<string | null>(null)
   const [expandedUser, setExpandedUser] = useState<string | null>(null)
@@ -231,6 +236,7 @@ export default function AdminPage() {
       if (d.triggerLogs) setTriggerLog(d.triggerLogs as DemoTriggerLog[])
       if (d.webhookConfig) setWebhookConfig(d.webhookConfig as DemoWebhookConfig[])
       if (d.accountLogs) setAccountLogs(d.accountLogs as AccountWebhookLog[])
+      if (d.latestAccountWebhooks) setLatestAccountWebhooks(d.latestAccountWebhooks as LatestAccountWebhooks)
       if (d.invites) setInvites(d.invites as DemoInvite[])
       if (d.quizSubmissions) setQuizSubmissions(d.quizSubmissions as DemoQuizSubmission[])
     }
@@ -444,7 +450,7 @@ export default function AdminPage() {
     { id: 'workflows', label: 'Workflows' },
     { id: 'history', label: 'Trigger-history' },
     { id: 'webhooks', label: tr.admin.webhookLog },
-    { id: 'account_logs', label: 'Aanmaken logs' },
+    { id: 'account_logs', label: 'Webhook-invoer' },
   ]
 
   const TABS = isMentor ? ALL_TABS.filter(t => MENTOR_TABS.includes(t.id)) : ALL_TABS
@@ -474,7 +480,7 @@ export default function AdminPage() {
       </div>
 
       {/* Tabs — horizontally scrollable strip on mobile, equal-width on larger screens */}
-      <div className="flex gap-1 p-1 rounded-xl overflow-x-auto sm:overflow-x-visible" style={{ background: '#f0f3fb', border: '1px solid #e8ecf4' }}>
+      <div className="flex gap-1 p-1 rounded-xl overflow-x-auto" style={{ background: '#f0f3fb', border: '1px solid #e8ecf4' }}>
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -1662,13 +1668,26 @@ export default function AdminPage() {
         )
       })()}
 
-      {/* Account-aanmaken logs tab */}
+      {/* Webhook-invoer tab */}
       {tab === 'account_logs' && (() => {
         const filtered = accountLogs.filter(l => {
           const emailOk = !accountLogsFilter.email || (l.email ?? '').toLowerCase().includes(accountLogsFilter.email.toLowerCase())
           const outcomeOk = !accountLogsFilter.outcome || l.outcome === accountLogsFilter.outcome
-          return emailOk && outcomeOk
+          const sourceOk = !accountLogsFilter.instroom
+            || (accountLogsFilter.instroom === 'unknown' ? !l.instroom : l.instroom === accountLogsFilter.instroom)
+          return emailOk && outcomeOk && sourceOk
         })
+
+        const latestCards = [
+          { source: 'discovery' as const, label: 'Discovery', log: latestAccountWebhooks.discovery },
+          { source: 'vermogenstest' as const, label: 'Vermogenstest', log: latestAccountWebhooks.vermogenstest },
+        ]
+
+        function sourceColors(source: AccountWebhookLog['instroom']) {
+          if (source === 'discovery') return { background: 'rgba(37,0,245,0.08)', color: '#2500F5' }
+          if (source === 'vermogenstest') return { background: 'rgba(34,197,94,0.1)', color: '#16a34a' }
+          return { background: '#f0f3fb', color: 'rgba(13,15,20,0.45)' }
+        }
 
         async function copyLink(link: string) {
           await navigator.clipboard.writeText(link)
@@ -1677,7 +1696,68 @@ export default function AdminPage() {
         }
 
         return (
-          <div className="space-y-4">
+          <div className="flex flex-col gap-5">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#2500F5' }}>Ontvangen invoer</p>
+              <h2 className="mt-1 text-xl font-bold text-balance" style={{ color: '#0d0f14' }}>Nieuwste webhook per instroombron</h2>
+              <p className="mt-1 text-sm leading-6" style={{ color: 'rgba(13,15,20,0.55)' }}>
+                Alle aangeleverde velden zijn zichtbaar; beveiligingsgeheimen worden gemaskeerd. Dit overzicht ververst automatisch elke 30 seconden.
+              </p>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              {latestCards.map(({ source, label, log }) => (
+                <article key={source} className="flex min-w-0 flex-col gap-4 rounded-2xl border p-5" style={{ background: '#ffffff', borderColor: '#e8ecf4' }}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex flex-col gap-1">
+                      <span className="w-fit rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider" style={sourceColors(source)}>
+                        {label}
+                      </span>
+                      <h3 className="text-base font-bold" style={{ color: '#0d0f14' }}>Nieuwste ontvangen webhook</h3>
+                    </div>
+                    {log && (
+                      <span className="text-xs whitespace-nowrap" style={{ color: 'rgba(13,15,20,0.45)' }}>
+                        {formatDateTime(log.created_at)}
+                      </span>
+                    )}
+                  </div>
+
+                  {log ? (
+                    <>
+                      <dl className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="flex min-w-0 flex-col gap-1">
+                          <dt style={{ color: 'rgba(13,15,20,0.45)' }}>E-mail</dt>
+                          <dd className="truncate font-semibold" style={{ color: '#0d0f14' }} title={log.email ?? undefined}>{log.email ?? '—'}</dd>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <dt style={{ color: 'rgba(13,15,20,0.45)' }}>Uitkomst</dt>
+                          <dd className="font-semibold" style={{ color: log.outcome === 'error' ? '#ef4444' : '#16a34a' }}>{log.outcome}</dd>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <dt style={{ color: 'rgba(13,15,20,0.45)' }}>HTTP-status</dt>
+                          <dd className="font-semibold" style={{ color: log.http_status < 300 ? '#16a34a' : '#ef4444' }}>{log.http_status}</dd>
+                        </div>
+                        <div className="flex min-w-0 flex-col gap-1">
+                          <dt style={{ color: 'rgba(13,15,20,0.45)' }}>Reden</dt>
+                          <dd className="truncate font-semibold" style={{ color: '#0d0f14' }} title={log.reden ?? undefined}>{log.reden ?? '—'}</dd>
+                        </div>
+                      </dl>
+                      <div className="min-w-0">
+                        <p className="mb-2 text-xs font-semibold" style={{ color: 'rgba(13,15,20,0.55)' }}>Volledige payload</p>
+                        <pre className="max-h-80 overflow-auto rounded-xl border p-4 text-[11px] leading-relaxed" style={{ background: '#F5F8FF', borderColor: '#e8ecf4', color: '#2500F5' }}>
+                          {JSON.stringify(log.payload_json, null, 2)}
+                        </pre>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="rounded-xl border p-4 text-sm" style={{ background: '#F5F8FF', borderColor: '#e8ecf4', color: 'rgba(13,15,20,0.55)' }}>
+                      Nog geen herkenbare webhook ontvangen.
+                    </p>
+                  )}
+                </article>
+              ))}
+            </div>
+
             {/* Filters */}
             <div className="flex flex-wrap gap-3 items-center">
               {/* Outcome filter */}
@@ -1693,6 +1773,28 @@ export default function AdminPage() {
                     onClick={() => setAccountLogsFilter(f => ({ ...f, outcome: opt.value }))}
                     className="px-3 py-2 text-xs font-medium transition-all"
                     style={accountLogsFilter.outcome === opt.value
+                      ? { background: '#2500F5', color: '#fff' }
+                      : { background: '#fff', color: 'rgba(13,15,20,0.55)' }
+                    }
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Instroombronfilter */}
+              <div className="flex rounded-xl overflow-hidden border" style={{ borderColor: '#e8ecf4' }}>
+                {([
+                  { value: '', label: 'Alle bronnen' },
+                  { value: 'discovery', label: 'Discovery' },
+                  { value: 'vermogenstest', label: 'Vermogenstest' },
+                  { value: 'unknown', label: 'Onbekend' },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setAccountLogsFilter(filter => ({ ...filter, instroom: opt.value }))}
+                    className="px-3 py-2 text-xs font-medium transition-all"
+                    style={accountLogsFilter.instroom === opt.value
                       ? { background: '#2500F5', color: '#fff' }
                       : { background: '#fff', color: 'rgba(13,15,20,0.55)' }
                     }
@@ -1722,7 +1824,7 @@ export default function AdminPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e8ecf4', background: '#F5F8FF' }}>
-                      {['Tijdstip', 'E-mail', 'Uitkomst', 'Reden', 'HTTP', 'Payload', 'Activatielink'].map(h => (
+                      {['Tijdstip', 'Bron', 'E-mail', 'Uitkomst', 'Reden', 'HTTP', 'Payload', 'Activatielink'].map(h => (
                         <th key={h} className="px-4 py-3 text-left font-semibold" style={{ color: 'rgba(13,15,20,0.45)' }}>{h}</th>
                       ))}
                     </tr>
@@ -1735,6 +1837,13 @@ export default function AdminPage() {
                           {/* Tijdstip */}
                           <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'rgba(13,15,20,0.45)' }}>
                             {new Date(log.created_at).toLocaleString('nl-BE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+
+                          {/* Instroombron */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={sourceColors(log.instroom)}>
+                              {accountSourceLabel(log.instroom)}
+                            </span>
                           </td>
 
                           {/* E-mail */}
@@ -1827,8 +1936,8 @@ export default function AdminPage() {
                     })}
                     {filtered.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-xs" style={{ color: 'rgba(13,15,20,0.35)' }}>
-                          Geen logs gevonden
+                        <td colSpan={8} className="px-4 py-8 text-center text-xs" style={{ color: 'rgba(13,15,20,0.35)' }}>
+                          Geen webhooks gevonden
                         </td>
                       </tr>
                     )}

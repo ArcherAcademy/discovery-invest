@@ -159,4 +159,10 @@ export interface AccountWebhookLog {
   reden: string | null
   activatielink: string | null
   http_status: number
+  instroom: 'vermogenstest' | 'discovery' | null
+}
+
+export interface LatestAccountWebhooks {
+  discovery: AccountWebhookLog | null
+  vermogenstest: AccountWebhookLog | null
 }

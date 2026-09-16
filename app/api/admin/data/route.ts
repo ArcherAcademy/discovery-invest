@@ -1,10 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminOrMentor } from '@/lib/auth'
-import { buildAccountSourceByEmail } from '@/lib/account-source'
+import { buildAccountSourceByEmail, classifyAccountSource } from '@/lib/account-source'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getAllCallUserStates, getBookingLinks } from '@/lib/call-booking-data'
 
 const BATCH_SIZE = 1000
+const SENSITIVE_PAYLOAD_KEY = /secret|password|authorization|api[_-]?key|token/i
+
+function sanitizeWebhookPayload(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeWebhookPayload)
+  if (!value || typeof value !== 'object') return value
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => [
+      key,
+      SENSITIVE_PAYLOAD_KEY.test(key) ? '[verborgen]' : sanitizeWebhookPayload(nestedValue),
+    ]),
+  )
+}
 
 async function fetchAllRows<T>(
   fetchBatch: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
@@ -82,7 +95,16 @@ export async function GET(req: NextRequest) {
       getBookingLinks(supabase),
     ])
 
-    const sourceByEmail = buildAccountSourceByEmail(allAccountLogs)
+    const accountLogs = allAccountLogs.map(log => ({
+      ...log,
+      payload_json: sanitizeWebhookPayload(log.payload_json ?? {}) as Record<string, unknown>,
+      instroom: classifyAccountSource(log.payload_json ?? {}),
+    }))
+    const sourceByEmail = buildAccountSourceByEmail(accountLogs)
+    const latestAccountWebhooks = {
+      discovery: accountLogs.find(log => log.instroom === 'discovery') ?? null,
+      vermogenstest: accountLogs.find(log => log.instroom === 'vermogenstest') ?? null,
+    }
 
     const ownerNameById = new Map(
       bookingLinks
@@ -113,7 +135,8 @@ export async function GET(req: NextRequest) {
       logs: logsData ?? [],
       triggerLogs: triggerData ?? [],
       webhookConfig: configData ?? [],
-      accountLogs: allAccountLogs.slice(0, 300),
+      accountLogs: accountLogs.slice(0, 300),
+      latestAccountWebhooks,
       invites: invitesData ?? [],
       quizSubmissions: quizData ?? [],
     })
