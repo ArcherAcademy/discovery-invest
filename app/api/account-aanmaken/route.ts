@@ -4,37 +4,16 @@ import { updateCallUserState } from '@/lib/call-booking-data'
 import { classifyAccountSource } from '@/lib/account-source'
 
 // ── CORS helpers ──────────────────────────────────────────────────────────────
-// Allow any origin so both the Lovable marketing site and HubSpot can call this.
-// The endpoint is already secured by webhook_secret, so open CORS is safe here.
+// Deze webhook is bewust publiek zodat HubSpot hem zonder secret kan aanroepen.
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type',
 } as const
 
 // OPTIONS preflight — required for cross-origin POST from browsers (Lovable)
 export async function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS_HEADERS })
-}
-
-// ── Timing-attack-safe string comparison ─────────────────────────────────────
-function timingSafeEqual(a: string, b: string): boolean {
-  const encoder = new TextEncoder()
-  const bufA = encoder.encode(a)
-  const bufB = encoder.encode(b)
-  if (bufA.length !== bufB.length) {
-    // Still consume time to avoid length-based side channels
-    let diff = 0
-    for (let i = 0; i < Math.max(bufA.length, bufB.length); i++) {
-      diff |= (bufA[i] ?? 0) ^ (bufB[i] ?? 0)
-    }
-    return false
-  }
-  let result = 0
-  for (let i = 0; i < bufA.length; i++) {
-    result |= bufA[i] ^ bufB[i]
-  }
-  return result === 0
 }
 
 // ── SHA-256 hash via Web Crypto (available in Edge + Node) ───────────────────
@@ -227,34 +206,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   }
   const instroom = classifyAccountSource(payloadForLog)
 
-  // ── 2. Authenticeer via body of beveiligde header ─────────────────────────
-  // HubSpots automatische LEAD-payload laat geen eigen JSON-veld toe. Daarom
-  // ondersteunen we daar ook Authorization: Bearer en X-Webhook-Secret.
-  const expectedSecret = process.env.HUBSPOT_WEBHOOK_SECRET ?? ''
-  const authorization = req.headers.get('authorization') ?? ''
-  const bearerSecret = authorization.toLowerCase().startsWith('bearer ')
-    ? authorization.slice(7).trim()
-    : ''
-  const receivedSecret = pick(body, 'webhook_secret')
-    || req.headers.get('x-webhook-secret')?.trim()
-    || bearerSecret
-    || ''
-
-  if (!expectedSecret) {
-    console.error('[v0] HUBSPOT_WEBHOOK_SECRET is not set')
-    await finalizeWebhookLog({ supabase, logId, email: emailRaw, payload_json: payloadForLog, outcome: 'error', reden: 'Server misconfiguration: HUBSPOT_WEBHOOK_SECRET niet gezet', activatielink: null, http_status: 500 })
-    if (respondsWithJson) return jsonResponse({ ok: false, error: 'Server misconfiguration' }, 500)
-    return new Response('Server misconfiguration', { status: 500, headers: CORS_HEADERS })
-  }
-
-  if (!timingSafeEqual(receivedSecret, expectedSecret)) {
-    console.warn('[v0] account-aanmaken: ongeldige webhook_secret')
-    await finalizeWebhookLog({ supabase, logId, email: emailRaw, payload_json: payloadForLog, outcome: 'error', reden: 'ongeldig webhook_secret', activatielink: null, http_status: 401 })
-    if (respondsWithJson) return jsonResponse({ ok: false, error: 'Unauthorized' }, 401)
-    return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS })
-  }
-
-  // ── 3. Velden extraheren ──────────────────────────────────────────────────
+  // ── 2. Velden extraheren ──────────────────────────────────────────────────
   const email = emailRaw
   if (!email) {
     console.warn('[v0] account-aanmaken: geen e-mailadres in payload', body)
