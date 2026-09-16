@@ -8,6 +8,7 @@ const PUBLIC_PREFIXES = [
   '/api/auth/',
   '/api/activeren',
   '/api/account-aanmaken',
+  '/api/lead-owner',
   '/api/cron/',
   '/api/setup-db',
   '/_next',

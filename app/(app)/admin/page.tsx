@@ -874,7 +874,7 @@ export default function AdminPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e8ecf4', background: '#F5F8FF' }}>
-                      {['Naam', 'E-mail', 'Instroom', 'Accountmanager', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
+                      {['Naam', 'E-mail', 'Instroom', 'Lead owner', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
                         <th key={h} className="px-4 py-3 text-left font-semibold" style={{ color: 'rgba(13,15,20,0.45)' }}>{h}</th>
                       ))}
                     </tr>
@@ -1300,6 +1300,18 @@ export default function AdminPage() {
                                         </span>
                                       )}
                                     </>
+                                  )}
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2 pb-3 mb-3" style={{ borderBottom: '1px solid #e8ecf4' }}>
+                                  <span className="text-xs font-semibold" style={{ color: 'rgba(13,15,20,0.55)' }}>Lead owner</span>
+                                  <span className="text-xs font-semibold" style={{ color: '#0d0f14' }}>
+                                    {u.owner_name || (u.hubspot_owner_id ? 'Onbekend' : 'Round robin')}
+                                  </span>
+                                  {u.hubspot_owner_id && (
+                                    <span className="font-mono text-[10px]" style={{ color: 'rgba(13,15,20,0.4)' }}>
+                                      HubSpot-ID: {u.hubspot_owner_id}
+                                    </span>
                                   )}
                                 </div>
 

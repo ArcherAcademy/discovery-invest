@@ -113,21 +113,23 @@ export async function GET(req: NextRequest) {
     const ownerNameById = new Map(
       bookingLinks
         .filter(link => link.actief && !link.is_default)
-        .map(link => [link.owner_email.trim(), link.naam]),
+        .map(link => [link.owner_email.trim().toLowerCase(), link.naam]),
     )
     const followUpDisabledUserIds = new Set((followUpDisabledData ?? []).map(row => row.user_id))
     const users = usersData.map(user => {
       const id = String(user.id)
       const email = String(user.email ?? '').trim().toLowerCase()
       const callState = callStates.get(id)
-      const ownerId = callState?.contact_owner_email?.trim() || null
+      const ownerId = String(user.hubspot_owner_id ?? '').trim()
+        || callState?.contact_owner_email?.trim()
+        || null
 
       return {
         ...user,
         ...callState,
         instroom: sourceByEmail.get(email) ?? null,
         hubspot_owner_id: ownerId,
-        owner_name: ownerId ? ownerNameById.get(ownerId) ?? null : null,
+        owner_name: ownerId ? ownerNameById.get(ownerId.toLowerCase()) ?? 'Onbekend' : null,
         opvolging_actief: !followUpDisabledUserIds.has(id),
       }
     })
