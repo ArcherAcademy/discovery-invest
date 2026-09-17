@@ -309,12 +309,6 @@ export default function AdminPage() {
     return `${Math.floor(hours / 24)}d geleden`
   }
 
-  // Account funnel telkaarten
-  const aangemaakt = users.filter(u => getAccountStatus(u) === 'aangemaakt').length
-  const geactiveerd = users.filter(u => getAccountStatus(u) === 'geactiveerd').length
-  const zonderLinkAccounts = users.filter(u => getAccountStatus(u) === 'zonder_link').length
-  const activatiegraad = users.length > 0 ? Math.round((geactiveerd / users.length) * 100) : 0
-
   function toggleSort(field: typeof sortField) {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortField(field); setSortDir('desc') }
@@ -684,21 +678,31 @@ export default function AdminPage() {
           zonder_link: { label: 'Zonder link', bg: '#f0f3fb',             color: 'rgba(13,15,20,0.4)' },
         }
 
-        const filtered = users
-          .filter(u => {
-            const s = getAccountStatus(u)
-            const statusOk = !accountsFilter.status || s === accountsFilter.status
-            const q = accountsFilter.query.trim().toLowerCase()
-            const queryOk = !q || (u.email ?? '').toLowerCase().includes(q) || (u.name ?? '').toLowerCase().includes(q)
-            const videosOk = !onlyWithVideos || (u.funnel?.videos_completed_count ?? 0) >= 1
-            let dateOk = true
-            if (createdFromStart !== null || createdToEnd !== null) {
-              const created = new Date(u.created_at).getTime()
-              if (createdFromStart !== null && created < createdFromStart) dateOk = false
-              if (createdToEnd !== null && created > createdToEnd) dateOk = false
-            }
-            return statusOk && queryOk && videosOk && dateOk
-          })
+        // Set dat álle filters behalve de statuskeuze respecteert. De telkaarten
+        // splitsen zelf op status, dus die mag hun cijfers niet inperken — maar
+        // het tijdvak (en zoek/video-filter) moet wél doorwerken zodat de KPI's
+        // meebewegen met de gekozen periode.
+        const scopedUsers = users.filter(u => {
+          const q = accountsFilter.query.trim().toLowerCase()
+          const queryOk = !q || (u.email ?? '').toLowerCase().includes(q) || (u.name ?? '').toLowerCase().includes(q)
+          const videosOk = !onlyWithVideos || (u.funnel?.videos_completed_count ?? 0) >= 1
+          let dateOk = true
+          if (createdFromStart !== null || createdToEnd !== null) {
+            const created = new Date(u.created_at).getTime()
+            if (createdFromStart !== null && created < createdFromStart) dateOk = false
+            if (createdToEnd !== null && created > createdToEnd) dateOk = false
+          }
+          return queryOk && videosOk && dateOk
+        })
+
+        // Telkaarten (KPI's) over het gescopete set — bewegen mee met het tijdvak.
+        const aangemaakt = scopedUsers.filter(u => getAccountStatus(u) === 'aangemaakt').length
+        const geactiveerd = scopedUsers.filter(u => getAccountStatus(u) === 'geactiveerd').length
+        const zonderLinkAccounts = scopedUsers.filter(u => getAccountStatus(u) === 'zonder_link').length
+        const activatiegraad = scopedUsers.length > 0 ? Math.round((geactiveerd / scopedUsers.length) * 100) : 0
+
+        const filtered = scopedUsers
+          .filter(u => !accountsFilter.status || getAccountStatus(u) === accountsFilter.status)
           .sort((a, b) => {
             const createdDifference = new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             return createdDifference || b.id.localeCompare(a.id)
