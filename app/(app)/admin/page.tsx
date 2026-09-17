@@ -60,7 +60,8 @@ export default function AdminPage() {
   const [webhookConfig, setWebhookConfig] = useState<DemoWebhookConfig[]>([])
   const [invites, setInvites] = useState<DemoInvite[]>([])
   const [accountsFilter, setAccountsFilter] = useState<{ query: string; status: '' | AccountStatus }>({ query: '', status: '' })
-  const [tagFilter, setTagFilter] = useState<'' | 'vermogenstest' | 'website' | 'HubSpot'>('')
+  const [instroomFilter, setInstroomFilter] = useState<'' | 'vermogenstest' | 'discovery'>('')
+  const [accountManagerFilter, setAccountManagerFilter] = useState<string>('')
   const [accountLogs, setAccountLogs] = useState<AccountWebhookLog[]>([])
   const [accountLogsFilter, setAccountLogsFilter] = useState<{ email: string; outcome: '' | 'created' | 'reused' | 'error' }>({ email: '', outcome: '' })
   const [quizSubmissions, setQuizSubmissions] = useState<DemoQuizSubmission[]>([])
@@ -237,7 +238,7 @@ export default function AdminPage() {
     return () => clearInterval(interval)
   }, [user])
 
-  // Still loading context — don't redirect or render yet
+  // Still loading context �� don't redirect or render yet
   if (!user) return null
   // Confirmed non-admin/non-mentor — redirect handled by the effect above
   if (user.role !== 'admin' && user.role !== 'mentor') return null
@@ -424,18 +425,6 @@ export default function AdminPage() {
       body: JSON.stringify({ trigger_naam: triggerNaam, actief: !current }),
     })
     setWebhookConfig(prev => prev.map(c => c.trigger_naam === triggerNaam ? { ...c, actief: !current } : c))
-  }
-
-  async function handleOwnerUpdate(userId: string, contactOwnerEmail: string) {
-    const response = await fetch('/api/admin/user-owner', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, contact_owner_email: contactOwnerEmail }),
-    })
-    if (!response.ok) return
-    setUsers(current => current.map(item => item.id === userId
-      ? { ...item, contact_owner_email: contactOwnerEmail.trim().toLowerCase() || null }
-      : item))
   }
 
   async function handleCallBookedUpdate(userId: string, callBooked: boolean) {
@@ -718,16 +707,27 @@ export default function AdminPage() {
         const zonderLinkAccounts = scopedUsers.filter(u => getAccountStatus(u) === 'zonder_link').length
         const activatiegraad = scopedUsers.length > 0 ? Math.round((geactiveerd / scopedUsers.length) * 100) : 0
 
-        // Tag-tellingen over het gescopete set — tonen hoeveel accounts elke herkomst hebben.
-        const tagCounts = {
-          vermogenstest: scopedUsers.filter(u => userTags(u).includes('vermogenstest')).length,
-          website: scopedUsers.filter(u => userTags(u).includes('website')).length,
-          HubSpot: scopedUsers.filter(u => userTags(u).includes('HubSpot')).length,
-        }
+        // Instroom = herkomst van het account: wie de vermogenstest (quiz) invulde
+        // telt als 'Vermogenstest', de rest als 'Discovery'.
+        const isVermogenstest = (u: DemoUser) => userTags(u).includes('vermogenstest')
+        const vermogenstestCount = scopedUsers.filter(isVermogenstest).length
+        const discoveryCount = scopedUsers.length - vermogenstestCount
+
+        // Lijst met accountmanagers (lead owners) voor het dropdownfilter. Accounts
+        // zonder eigenaar vallen onder 'Round robin'.
+        const accountManagers = Array.from(
+          new Set(users.map(u => (u.contact_owner_email ?? '').trim().toLowerCase()).filter(Boolean))
+        ).sort()
 
         const filtered = scopedUsers
           .filter(u => !accountsFilter.status || getAccountStatus(u) === accountsFilter.status)
-          .filter(u => !tagFilter || userTags(u).includes(tagFilter))
+          .filter(u => !instroomFilter || (instroomFilter === 'vermogenstest' ? isVermogenstest(u) : !isVermogenstest(u)))
+          .filter(u => {
+            if (!accountManagerFilter) return true
+            const owner = (u.contact_owner_email ?? '').trim().toLowerCase()
+            if (accountManagerFilter === '__roundrobin__') return !owner
+            return owner === accountManagerFilter
+          })
           .sort((a, b) => {
             const createdDifference = new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             return createdDifference || b.id.localeCompare(a.id)
@@ -739,17 +739,19 @@ export default function AdminPage() {
         const rangeStart = filtered.length === 0 ? 0 : pageStart + 1
         const rangeEnd = Math.min(pageStart + ACCOUNTS_PER_PAGE, filtered.length)
         const visiblePages = getVisibleAccountPages(activePage, pageCount)
-        const isFiltered = Boolean(accountsFilter.status || accountsFilter.query.trim() || onlyWithVideos || createdFrom || createdTo || tagFilter)
+        const isFiltered = Boolean(accountsFilter.status || accountsFilter.query.trim() || onlyWithVideos || createdFrom || createdTo || instroomFilter || accountManagerFilter)
 
         return (
           <div className="space-y-5">
             {/* Telkaarten */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               {[
                 { label: 'Aangemaakt, niet geactiveerd', value: aangemaakt, bg: 'rgba(37,0,245,0.06)', color: '#2500F5', border: 'rgba(37,0,245,0.12)' },
                 { label: 'Geactiveerd', value: geactiveerd, bg: 'rgba(34,197,94,0.07)', color: '#16a34a', border: 'rgba(34,197,94,0.18)' },
                 { label: 'Zonder openstaande link', value: zonderLinkAccounts, bg: '#f7f8fc', color: 'rgba(13,15,20,0.45)', border: '#e8ecf4' },
                 { label: 'Activatiegraad', value: `${activatiegraad}%`, bg: '#ffffff', color: '#0d0f14', border: '#e8ecf4' },
+                { label: 'Vermogenstest', value: vermogenstestCount, bg: 'rgba(37,0,245,0.06)', color: '#2500F5', border: 'rgba(37,0,245,0.12)' },
+                { label: 'Discovery', value: discoveryCount, bg: '#ffffff', color: '#0d0f14', border: '#e8ecf4' },
               ].map(card => (
                 <div
                   key={card.label}
@@ -814,29 +816,36 @@ export default function AdminPage() {
               >
                 Minstens 1 video bekeken
               </button>
-              <div className="flex rounded-xl overflow-hidden border" style={{ borderColor: '#e8ecf4' }}>
-                {([
-                  { value: 'vermogenstest' as const, label: 'Vermogenstest', count: tagCounts.vermogenstest },
-                  { value: 'website' as const,       label: 'Website',       count: tagCounts.website },
-                  { value: 'HubSpot' as const,       label: 'HubSpot',       count: tagCounts.HubSpot },
-                ]).map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => {
-                      setTagFilter(f => (f === opt.value ? '' : opt.value))
-                      setAccountPage(1)
-                    }}
-                    className="px-3 py-2 text-xs font-medium transition-all"
-                    style={tagFilter === opt.value
-                      ? { background: '#2500F5', color: '#fff' }
-                      : { background: '#fff', color: 'rgba(13,15,20,0.55)' }
-                    }
-                    aria-pressed={tagFilter === opt.value}
-                  >
-                    {opt.label} <span style={{ opacity: 0.7 }}>({opt.count})</span>
-                  </button>
+              <select
+                value={instroomFilter}
+                onChange={e => {
+                  setInstroomFilter(e.target.value as '' | 'vermogenstest' | 'discovery')
+                  setAccountPage(1)
+                }}
+                className="rounded-xl px-3 py-2 text-xs border outline-none"
+                style={{ background: '#fff', borderColor: instroomFilter ? '#2500F5' : '#e8ecf4', color: instroomFilter ? '#2500F5' : 'rgba(13,15,20,0.55)' }}
+                aria-label="Filter op instroom"
+              >
+                <option value="">Alle instroom ({scopedUsers.length})</option>
+                <option value="vermogenstest">Vermogenstest ({vermogenstestCount})</option>
+                <option value="discovery">Discovery ({discoveryCount})</option>
+              </select>
+              <select
+                value={accountManagerFilter}
+                onChange={e => {
+                  setAccountManagerFilter(e.target.value)
+                  setAccountPage(1)
+                }}
+                className="rounded-xl px-3 py-2 text-xs border outline-none"
+                style={{ background: '#fff', borderColor: accountManagerFilter ? '#2500F5' : '#e8ecf4', color: accountManagerFilter ? '#2500F5' : 'rgba(13,15,20,0.55)' }}
+                aria-label="Filter op accountmanager"
+              >
+                <option value="">Alle accountmanagers</option>
+                <option value="__roundrobin__">Round robin (geen eigenaar)</option>
+                {accountManagers.map(owner => (
+                  <option key={owner} value={owner}>{owner}</option>
                 ))}
-              </div>
+              </select>
               <div className="flex items-center gap-1.5">
                 <label className="flex items-center gap-1.5">
                   <span className="text-xs" style={{ color: 'rgba(13,15,20,0.4)' }}>Aangemaakt van</span>
@@ -899,7 +908,7 @@ export default function AdminPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e8ecf4', background: '#F5F8FF' }}>
-                      {['Naam', 'E-mail', 'Contacteigenaar', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Tags', 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
+                      {['Naam', 'E-mail', 'Instroom', 'Lead owner', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
                         <th key={h} className="px-4 py-3 text-left font-semibold" style={{ color: 'rgba(13,15,20,0.45)' }}>{h}</th>
                       ))}
                     </tr>
@@ -923,17 +932,28 @@ export default function AdminPage() {
                           {/* E-mail */}
                           <td className="px-4 py-3" style={{ color: 'rgba(13,15,20,0.6)' }}>{u.email}</td>
 
-                          {/* HubSpot-contacteigenaar */}
-                          <td className="px-4 py-3 min-w-48">
-                            <input
-                              type="email"
-                              defaultValue={u.contact_owner_email ?? ''}
-                              onBlur={event => handleOwnerUpdate(u.id, event.currentTarget.value)}
-                              placeholder="adviseur@bedrijf.be"
-                              aria-label={`Contacteigenaar voor ${u.email}`}
-                              className="w-full rounded-lg border px-2 py-1.5 text-[11px] outline-none focus:ring-2"
-                              style={{ borderColor: '#e8ecf4', color: '#0d0f14', background: '#fafbff' }}
-                            />
+                          {/* Instroom / herkomst */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {(() => {
+                              const vermogenstest = isVermogenstest(u)
+                              return (
+                                <span
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                                  style={vermogenstest
+                                    ? { background: 'rgba(37,0,245,0.1)', color: '#2500F5' }
+                                    : { background: '#f0f3fb', color: 'rgba(13,15,20,0.55)' }}
+                                >
+                                  {vermogenstest ? 'Vermogenstest' : 'Discovery'}
+                                </span>
+                              )
+                            })()}
+                          </td>
+
+                          {/* Lead owner (accountmanager) — leeg = round robin */}
+                          <td className="px-4 py-3 whitespace-nowrap font-medium" style={{ color: '#0d0f14' }}>
+                            {u.contact_owner_email
+                              ? u.contact_owner_email
+                              : <span style={{ color: 'rgba(13,15,20,0.55)' }}>Round robin</span>}
                           </td>
 
                           {/* Status badge */}
@@ -984,33 +1004,6 @@ export default function AdminPage() {
                             >
                               {videos}/6
                             </span>
-                          </td>
-
-                          {/* Tags / herkomst */}
-                          <td className="px-4 py-3">
-                            {(() => {
-                              const tags = userTags(u)
-                              if (tags.length === 0) return <span className="text-[10px]" style={{ color: 'rgba(13,15,20,0.25)' }}>—</span>
-                              return (
-                                <span className="flex flex-wrap gap-1">
-                                  {tags.map(tag => {
-                                    const highlight = tag === 'vermogenstest'
-                                    return (
-                                      <span
-                                        key={tag}
-                                        className="px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap"
-                                        style={{
-                                          background: highlight ? 'rgba(37,0,245,0.1)' : '#f0f3fb',
-                                          color: highlight ? '#2500F5' : 'rgba(13,15,20,0.55)',
-                                        }}
-                                      >
-                                        {tag}
-                                      </span>
-                                    )
-                                  })}
-                                </span>
-                              )
-                            })()}
                           </td>
 
                           {/* Event geboekt */}
