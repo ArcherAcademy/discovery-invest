@@ -60,6 +60,7 @@ export default function AdminPage() {
   const [webhookConfig, setWebhookConfig] = useState<DemoWebhookConfig[]>([])
   const [invites, setInvites] = useState<DemoInvite[]>([])
   const [accountsFilter, setAccountsFilter] = useState<{ query: string; status: '' | AccountStatus }>({ query: '', status: '' })
+  const [tagFilter, setTagFilter] = useState<'' | 'vermogenstest' | 'website' | 'HubSpot'>('')
   const [accountLogs, setAccountLogs] = useState<AccountWebhookLog[]>([])
   const [accountLogsFilter, setAccountLogsFilter] = useState<{ email: string; outcome: '' | 'created' | 'reused' | 'error' }>({ email: '', outcome: '' })
   const [quizSubmissions, setQuizSubmissions] = useState<DemoQuizSubmission[]>([])
@@ -717,8 +718,16 @@ export default function AdminPage() {
         const zonderLinkAccounts = scopedUsers.filter(u => getAccountStatus(u) === 'zonder_link').length
         const activatiegraad = scopedUsers.length > 0 ? Math.round((geactiveerd / scopedUsers.length) * 100) : 0
 
+        // Tag-tellingen over het gescopete set — tonen hoeveel accounts elke herkomst hebben.
+        const tagCounts = {
+          vermogenstest: scopedUsers.filter(u => userTags(u).includes('vermogenstest')).length,
+          website: scopedUsers.filter(u => userTags(u).includes('website')).length,
+          HubSpot: scopedUsers.filter(u => userTags(u).includes('HubSpot')).length,
+        }
+
         const filtered = scopedUsers
           .filter(u => !accountsFilter.status || getAccountStatus(u) === accountsFilter.status)
+          .filter(u => !tagFilter || userTags(u).includes(tagFilter))
           .sort((a, b) => {
             const createdDifference = new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             return createdDifference || b.id.localeCompare(a.id)
@@ -730,7 +739,7 @@ export default function AdminPage() {
         const rangeStart = filtered.length === 0 ? 0 : pageStart + 1
         const rangeEnd = Math.min(pageStart + ACCOUNTS_PER_PAGE, filtered.length)
         const visiblePages = getVisibleAccountPages(activePage, pageCount)
-        const isFiltered = Boolean(accountsFilter.status || accountsFilter.query.trim() || onlyWithVideos || createdFrom || createdTo)
+        const isFiltered = Boolean(accountsFilter.status || accountsFilter.query.trim() || onlyWithVideos || createdFrom || createdTo || tagFilter)
 
         return (
           <div className="space-y-5">
@@ -805,6 +814,29 @@ export default function AdminPage() {
               >
                 Minstens 1 video bekeken
               </button>
+              <div className="flex rounded-xl overflow-hidden border" style={{ borderColor: '#e8ecf4' }}>
+                {([
+                  { value: 'vermogenstest' as const, label: 'Vermogenstest', count: tagCounts.vermogenstest },
+                  { value: 'website' as const,       label: 'Website',       count: tagCounts.website },
+                  { value: 'HubSpot' as const,       label: 'HubSpot',       count: tagCounts.HubSpot },
+                ]).map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => {
+                      setTagFilter(f => (f === opt.value ? '' : opt.value))
+                      setAccountPage(1)
+                    }}
+                    className="px-3 py-2 text-xs font-medium transition-all"
+                    style={tagFilter === opt.value
+                      ? { background: '#2500F5', color: '#fff' }
+                      : { background: '#fff', color: 'rgba(13,15,20,0.55)' }
+                    }
+                    aria-pressed={tagFilter === opt.value}
+                  >
+                    {opt.label} <span style={{ opacity: 0.7 }}>({opt.count})</span>
+                  </button>
+                ))}
+              </div>
               <div className="flex items-center gap-1.5">
                 <label className="flex items-center gap-1.5">
                   <span className="text-xs" style={{ color: 'rgba(13,15,20,0.4)' }}>Aangemaakt van</span>
