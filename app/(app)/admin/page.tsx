@@ -316,6 +316,22 @@ export default function AdminPage() {
 
   const userLogs = (userId: string) => webhookLog.filter(l => l.user_id === userId)
 
+  // Herkomst / signup-source tags per account. Data komt uit al ingeladen state:
+  //   - "vermogenstest": gebruiker heeft de quiz ingevuld (demo_invest_quiz_submissions)
+  //   - "website" / "HubSpot": _bron uit de account-aanmaken webhook-log, gematcht op e-mail
+  const userTags = (u: DemoUser): string[] => {
+    const tags: string[] = []
+    if (quizSubmissions.some(q => q.user_id === u.id)) tags.push('vermogenstest')
+    const email = (u.email ?? '').toLowerCase()
+    if (email) {
+      const log = accountLogs.find(l => (l.email ?? '').toLowerCase() === email)
+      const bron = log?.payload_json?._bron
+      if (bron === 'website') tags.push('website')
+      else if (bron === 'hubspot') tags.push('HubSpot')
+    }
+    return tags
+  }
+
   async function handleRunEvaluator() {
     setEvaluatorRunning(true)
     setEvaluatorResult(null)
@@ -572,7 +588,7 @@ export default function AdminPage() {
                   <tbody>
                     {team.map(member => (
                       <tr key={member.id} className="border-t" style={{ borderColor: '#e8ecf4' }}>
-                        <td className="px-4 py-3 font-semibold" style={{ color: '#0d0f14' }}>{member.name || '—'}</td>
+                        <td className="px-4 py-3 font-semibold" style={{ color: '#0d0f14' }}>{member.name || '���'}</td>
                         <td className="px-4 py-3" style={{ color: 'rgba(13,15,20,0.65)' }}>{member.email}</td>
                         <td className="px-4 py-3">
                           <span className="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: member.role === 'admin' ? '#0d0f14' : 'rgba(37,0,245,0.08)', color: member.role === 'admin' ? '#ffffff' : '#2500F5' }}>
@@ -1119,6 +1135,7 @@ export default function AdminPage() {
                       { key: 'bonus', label: tr.admin.bonusUnlocked },
                       { key: 'event', label: tr.admin.eventBooked },
                       { key: 'quiz', label: 'Quiz' },
+                      { key: 'tags', label: 'Tags' },
                       { key: 'expand', label: '' },
                       { key: 'delete', label: '' },
                     ].map((col) => (
@@ -1200,6 +1217,31 @@ export default function AdminPage() {
                             )}
                           </td>
                           <td className="px-4 py-3">
+                            {(() => {
+                              const tags = userTags(u)
+                              if (tags.length === 0) return <span className="text-xs" style={{ color: 'rgba(13,15,20,0.25)' }}>—</span>
+                              return (
+                                <span className="flex flex-wrap gap-1">
+                                  {tags.map((tag) => {
+                                    const highlight = tag === 'vermogenstest'
+                                    return (
+                                      <span
+                                        key={tag}
+                                        className="px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
+                                        style={{
+                                          background: highlight ? 'rgba(37,0,245,0.1)' : '#f0f3fb',
+                                          color: highlight ? '#2500F5' : 'rgba(13,15,20,0.55)',
+                                        }}
+                                      >
+                                        {tag}
+                                      </span>
+                                    )
+                                  })}
+                                </span>
+                              )
+                            })()}
+                          </td>
+                          <td className="px-4 py-3">
                             <button
                               onClick={() => setExpandedUser(isExpanded ? null : u.id)}
                               className="text-xs transition-colors"
@@ -1221,7 +1263,7 @@ export default function AdminPage() {
                         </tr>
                         {isExpanded && (
                           <tr key={`${u.id}-detail`}>
-                            <td colSpan={11} className="px-4 py-3">
+                            <td colSpan={12} className="px-4 py-3">
                               <div
                                 className="rounded-xl p-4 space-y-2"
                                 style={{ background: '#F5F8FF', border: '1px solid #e8ecf4' }}
