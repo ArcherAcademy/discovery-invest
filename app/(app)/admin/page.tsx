@@ -19,7 +19,7 @@ import { hasPermanentAccess, isTrialExpired, trialDaysRemaining } from '@/lib/ac
 interface AdminUser extends DemoUser {
   funnel?: DemoUserFunnel
   /** HubSpot owner-id (numeriek) — wordt via bookingOwners naar een naam vertaald. */
-  contact_owner_email?: string | null
+  hubspot_owner_id?: string | null
   /** Herkomst van het account, server-side bepaald uit de account-webhook page_uri. */
   instroom?: 'vermogenstest' | 'discovery'
   // Live afgeleide call-status en opvolgvlag — server-side samengevoegd in /api/admin/data.
@@ -736,7 +736,7 @@ export default function AdminPage() {
     // Lijst met accountmanagers (lead owners) voor het dropdownfilter. Accounts
     // zonder eigenaar vallen onder 'Round robin'.
     const accountManagers = Array.from(
-      new Set(users.map(u => (u.contact_owner_email ?? '').trim()).filter(Boolean))
+      new Set(users.map(u => (u.hubspot_owner_id ?? '').trim()).filter(Boolean))
     ).sort((a, b) => ownerName(a).localeCompare(ownerName(b)))
 
         const filtered = scopedUsers
@@ -744,7 +744,7 @@ export default function AdminPage() {
           .filter(u => !instroomFilter || (instroomFilter === 'vermogenstest' ? isVermogenstest(u) : !isVermogenstest(u)))
           .filter(u => {
             if (!accountManagerFilter) return true
-            const owner = (u.contact_owner_email ?? '').trim().toLowerCase()
+            const owner = (u.hubspot_owner_id ?? '').trim().toLowerCase()
             if (accountManagerFilter === '__roundrobin__') return !owner
             return owner === accountManagerFilter
           })
@@ -971,8 +971,8 @@ export default function AdminPage() {
 
                           {/* Lead owner (accountmanager) — leeg = round robin */}
                           <td className="px-4 py-3 whitespace-nowrap font-medium" style={{ color: '#0d0f14' }}>
-                            {u.contact_owner_email
-                              ? ownerName(u.contact_owner_email)
+                            {u.hubspot_owner_id
+                              ? ownerName(u.hubspot_owner_id)
                               : <span style={{ color: 'rgba(13,15,20,0.55)' }}>Round robin</span>}
                           </td>
 
