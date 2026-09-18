@@ -18,6 +18,14 @@ import { hasPermanentAccess, isTrialExpired, trialDaysRemaining } from '@/lib/ac
 
 interface AdminUser extends DemoUser {
   funnel?: DemoUserFunnel
+  /** HubSpot owner-id (numeriek) — wordt via bookingOwners naar een naam vertaald. */
+  contact_owner_email?: string | null
+  /** Herkomst van het account, server-side bepaald uit de account-webhook page_uri. */
+  instroom?: 'vermogenstest' | 'discovery'
+  // Live afgeleide call-status en opvolgvlag — server-side samengevoegd in /api/admin/data.
+  call_clicked_at?: string | null
+  call_opened_at?: string | null
+  opvolging_actief?: boolean
 }
 
 interface DemoInvite {
@@ -65,6 +73,7 @@ export default function AdminPage() {
   const [accountLogs, setAccountLogs] = useState<AccountWebhookLog[]>([])
   const [accountLogsFilter, setAccountLogsFilter] = useState<{ email: string; outcome: '' | 'created' | 'reused' | 'error' }>({ email: '', outcome: '' })
   const [quizSubmissions, setQuizSubmissions] = useState<DemoQuizSubmission[]>([])
+  const [bookingOwners, setBookingOwners] = useState<Record<string, string>>({})
   const [copiedLink, setCopiedLink] = useState<string | null>(null)
   const [expandedUser, setExpandedUser] = useState<string | null>(null)
   const [expandedPayload, setExpandedPayload] = useState<string | null>(null)
@@ -180,6 +189,7 @@ export default function AdminPage() {
           setUsers(refreshedUsers)
           setAccountTotal(typeof d.accountTotal === 'number' ? d.accountTotal : refreshedUsers.length)
         }
+        if (d.bookingOwners) setBookingOwners(d.bookingOwners as Record<string, string>)
         if (d.invites) setInvites(d.invites as DemoInvite[])
       }
     } catch {
@@ -232,6 +242,7 @@ export default function AdminPage() {
       if (d.accountLogs) setAccountLogs(d.accountLogs as AccountWebhookLog[])
       if (d.invites) setInvites(d.invites as DemoInvite[])
       if (d.quizSubmissions) setQuizSubmissions(d.quizSubmissions as DemoQuizSubmission[])
+      if (d.bookingOwners) setBookingOwners(d.bookingOwners as Record<string, string>)
     }
     load()
     const interval = setInterval(load, 30000)
@@ -707,17 +718,26 @@ export default function AdminPage() {
         const zonderLinkAccounts = scopedUsers.filter(u => getAccountStatus(u) === 'zonder_link').length
         const activatiegraad = scopedUsers.length > 0 ? Math.round((geactiveerd / scopedUsers.length) * 100) : 0
 
-        // Instroom = herkomst van het account: wie de vermogenstest (quiz) invulde
-        // telt als 'Vermogenstest', de rest als 'Discovery'.
-        const isVermogenstest = (u: DemoUser) => userTags(u).includes('vermogenstest')
-        const vermogenstestCount = scopedUsers.filter(isVermogenstest).length
-        const discoveryCount = scopedUsers.length - vermogenstestCount
+    // Instroom = herkomst van het account, server-side bepaald uit de
+    // account-aanmaken webhook: wie via de vermogenstest-pagina binnenkwam telt
+    // als 'Vermogenstest', al de rest als 'Discovery'. (Zie /api/admin/data.)
+    const isVermogenstest = (u: AdminUser) => u.instroom === 'vermogenstest'
+    const vermogenstestCount = scopedUsers.filter(isVermogenstest).length
+    const discoveryCount = scopedUsers.length - vermogenstestCount
 
-        // Lijst met accountmanagers (lead owners) voor het dropdownfilter. Accounts
-        // zonder eigenaar vallen onder 'Round robin'.
-        const accountManagers = Array.from(
-          new Set(users.map(u => (u.contact_owner_email ?? '').trim().toLowerCase()).filter(Boolean))
-        ).sort()
+    // HubSpot owner-id → accountmanagernaam. Onbekende ids vallen terug op het id
+    // zelf, zodat een ontbrekende boekingslink nooit een leeg veld oplevert.
+    const ownerName = (id?: string | null) => {
+      const key = (id ?? '').trim()
+      if (!key) return ''
+      return bookingOwners[key] ?? key
+    }
+
+    // Lijst met accountmanagers (lead owners) voor het dropdownfilter. Accounts
+    // zonder eigenaar vallen onder 'Round robin'.
+    const accountManagers = Array.from(
+      new Set(users.map(u => (u.contact_owner_email ?? '').trim()).filter(Boolean))
+    ).sort((a, b) => ownerName(a).localeCompare(ownerName(b)))
 
         const filtered = scopedUsers
           .filter(u => !accountsFilter.status || getAccountStatus(u) === accountsFilter.status)
@@ -843,7 +863,7 @@ export default function AdminPage() {
                 <option value="">Alle accountmanagers</option>
                 <option value="__roundrobin__">Round robin (geen eigenaar)</option>
                 {accountManagers.map(owner => (
-                  <option key={owner} value={owner}>{owner}</option>
+                  <option key={owner} value={owner}>{ownerName(owner)}</option>
                 ))}
               </select>
               <div className="flex items-center gap-1.5">
@@ -952,7 +972,7 @@ export default function AdminPage() {
                           {/* Lead owner (accountmanager) — leeg = round robin */}
                           <td className="px-4 py-3 whitespace-nowrap font-medium" style={{ color: '#0d0f14' }}>
                             {u.contact_owner_email
-                              ? u.contact_owner_email
+                              ? ownerName(u.contact_owner_email)
                               : <span style={{ color: 'rgba(13,15,20,0.55)' }}>Round robin</span>}
                           </td>
 
