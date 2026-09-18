@@ -89,6 +89,10 @@ export async function GET(req: NextRequest) {
       const { data, error } = await supabase
         .from('demo_invest_account_webhook_log')
         .select('email, page_uri:payload_json->>page_uri')
+        // Stabiele sortering op de primaire sleutel: zonder expliciete order kan
+        // range-paginatie over duizenden rijen rijen overslaan of dubbel tellen,
+        // waardoor accounts willekeurig verkeerd geclassificeerd zouden worden.
+        .order('id', { ascending: true })
         .range(from, from + batch - 1)
       if (error) {
         console.error('[admin/data] instroom-classificatie mislukt:', error)
