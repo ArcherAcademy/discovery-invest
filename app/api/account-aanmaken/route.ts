@@ -46,16 +46,30 @@ async function sha256hex(raw: string): Promise<string> {
 }
 
 // ── Extract field with aliases ────────────────────────────────────────────────
-// Tolerant lezen: HubSpot stuurt sommige velden (o.a. hubspot_owner_id) als
-// GETAL i.p.v. string. We accepteren string, number en bigint en geven altijd
-// een getrimde string terug, zodat een numerieke owner-id niet stilzwijgend
-// verloren gaat.
+// HubSpot stuurt waarden zowel vlak als onder `properties`, en propertywaarden
+// kunnen een `{ value }`-object zijn. Normaliseer al die vormen zodat e-mail,
+// instroom en lead owner niet stilzwijgend verloren gaan.
+function scalarText(value: unknown): string {
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (typeof value === 'bigint') return String(value)
+  if (value && typeof value === 'object' && !Array.isArray(value) && 'value' in value) {
+    return scalarText((value as { value?: unknown }).value)
+  }
+  return ''
+}
+
 function pick(body: Record<string, unknown>, ...keys: string[]): string {
-  for (const k of keys) {
-    const v = body[k]
-    if (typeof v === 'string' && v.trim()) return v.trim()
-    if (typeof v === 'number' && Number.isFinite(v)) return String(v)
-    if (typeof v === 'bigint') return String(v)
+  const properties = body.properties && typeof body.properties === 'object' && !Array.isArray(body.properties)
+    ? body.properties as Record<string, unknown>
+    : null
+
+  for (const source of [body, properties]) {
+    if (!source) continue
+    for (const key of keys) {
+      const value = scalarText(source[key])
+      if (value) return value
+    }
   }
   return ''
 }
@@ -121,7 +135,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     return new Response('Server misconfiguration', { status: 500 })
   }
 
-  const emailRaw = pick(body, 'email', 'contact_email').toLowerCase() || null
+  const emailRaw = pick(body, 'email', 'contact_email', 'hs_associated_contact_email').toLowerCase() || null
 
   // ── 2. Authenticeer via webhook_secret ────────────────────────────────────
   const expectedSecret = process.env.HUBSPOT_WEBHOOK_SECRET ?? ''
@@ -147,8 +161,8 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     return new Response('Missing email', { status: 422, headers: CORS_HEADERS })
   }
 
-  let voornaam = pick(body, 'contact_first_name', 'firstname', 'first_name', 'voornaam')
-  let achternaam = pick(body, 'contact_last_name', 'lastname', 'last_name', 'achternaam')
+  let voornaam = pick(body, 'contact_first_name', 'firstname', 'first_name', 'voornaam', 'hs_associated_contact_firstname')
+  let achternaam = pick(body, 'contact_last_name', 'lastname', 'last_name', 'achternaam', 'hs_associated_contact_lastname')
 
   // Fallback: split dealname
   if (!voornaam && !achternaam) {
@@ -161,17 +175,16 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   }
 
   const name = [voornaam, achternaam].filter(Boolean).join(' ') || email.split('@')[0]
-  const contactOwnerId = pick(
+  const contactOwnerCandidate = pick(
     body,
     'hubspot_owner_id',
     'contact_owner_id',
     'owner_id',
     'contacteigenaar_id',
-    'contact_owner_email',
-    'hubspot_owner_email',
-    'owner_email',
-    'contacteigenaar_email',
-  ) || null
+  )
+  // Een HubSpot owner-ID is numeriek. Gelijknamige marketingvelden zoals
+  // `contactowner` bevatten antwoorden als "Social media" en zijn géén owner.
+  const contactOwnerId = /^\d+$/.test(contactOwnerCandidate) ? contactOwnerCandidate : null
 
   // ── 4. Account aanmaken of bestaand bijwerken ─────────────────────────────
   // Match op e-mailadres (case-insensitief), ONGEACHT activatiestatus. Zo maakt

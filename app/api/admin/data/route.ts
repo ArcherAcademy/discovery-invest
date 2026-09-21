@@ -57,7 +57,6 @@ export async function GET(req: NextRequest) {
     { data: triggerData },
     { data: configData },
     { data: accountLogsData },
-    { data: invitesData },
     { data: quizData },
     { data: followUpDisabledData },
     { data: bookingLinksData },
@@ -67,7 +66,6 @@ export async function GET(req: NextRequest) {
     supabase.from('demo_invest_trigger_log').select('*').order('created_at', { ascending: false }).limit(500),
     supabase.from('demo_invest_webhook_config').select('*').order('trigger_naam'),
     supabase.from('demo_invest_account_webhook_log').select('*').order('created_at', { ascending: false }).limit(300),
-    supabase.from('demo_invest_invites').select('user_id, expires_at, used_at'),
     supabase.from('demo_invest_quiz_submissions').select('*'),
     supabase.from('demo_invest_trigger_sent').select('user_id').eq('workflow_naam', '__automatische_opvolging_uit__'),
     supabase.from('demo_invest_boekingslinks').select('hubspot_owner_id, naam'),
@@ -76,34 +74,67 @@ export async function GET(req: NextRequest) {
   const usersData = usersResult.rows
   const callStates = await getAllCallUserStates(supabase)
 
-  // Instroom / herkomst van het account bepalen uit de account-aanmaken webhook:
-  // wie ooit via de vermogenstest-pagina binnenkwam (page_uri bevat
-  // "vermogens-test") telt als 'Vermogenstest', al de rest als 'Discovery'.
-  // We lezen de volledige account-webhooklog in batches (niet de 300-limiet van
-  // accountLogsData hierboven) zodat elk account correct geclassificeerd wordt,
-  // en matchen op e-mailadres omdat de log geen user_id bevat.
-  const vermogenstestEmails = new Set<string>()
+  // Instroom is de eerste herkenbare ingang van een account. Classificeer alleen
+  // expliciete signalen; een ontbrekende bron als "Discovery" tonen zou de
+  // marketingcijfers kunstmatig verbeteren. Oudere logs blijven bruikbaar doordat
+  // we de volledige tabel chronologisch en in stabiele batches lezen.
+  type Instroom = 'vermogenstest' | 'discovery' | 'onbekend'
+  const instroomByEmail = new Map<string, Exclude<Instroom, 'onbekend'>>()
+
+  const scalarText = (value: unknown): string => {
+    if (typeof value === 'string') return value.trim()
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+    if (value && typeof value === 'object' && !Array.isArray(value) && 'value' in value) {
+      return scalarText((value as { value?: unknown }).value)
+    }
+    return ''
+  }
+
+  const payloadValue = (payload: Record<string, unknown>, ...keys: string[]): string => {
+    const properties = payload.properties && typeof payload.properties === 'object' && !Array.isArray(payload.properties)
+      ? payload.properties as Record<string, unknown>
+      : null
+    for (const source of [payload, properties]) {
+      if (!source) continue
+      for (const key of keys) {
+        const value = scalarText(source[key])
+        if (value) return value
+      }
+    }
+    return ''
+  }
+
+  const classifyInstroom = (payload: Record<string, unknown>): Exclude<Instroom, 'onbekend'> | null => {
+    const signal = [
+      payloadValue(payload, 'page_uri'),
+      payloadValue(payload, 'source', 'hs_lead_source', 'hs_source_form_submission'),
+    ].join(' ').toLowerCase()
+
+    if (signal.includes('vermogens-test') || signal.includes('vermogenstest')) return 'vermogenstest'
+    if (signal.includes('/demo') || signal.includes('discovery')) return 'discovery'
+    return null
+  }
+
   {
     const batch = 1000
     for (let from = 0; ; from += batch) {
       const { data, error } = await supabase
         .from('demo_invest_account_webhook_log')
-        .select('email, page_uri:payload_json->>page_uri')
-        // Stabiele sortering op de primaire sleutel: zonder expliciete order kan
-        // range-paginatie over duizenden rijen rijen overslaan of dubbel tellen,
-        // waardoor accounts willekeurig verkeerd geclassificeerd zouden worden.
+        .select('email, payload_json')
+        .in('outcome', ['created', 'reused'])
+        .order('created_at', { ascending: true })
         .order('id', { ascending: true })
         .range(from, from + batch - 1)
       if (error) {
         console.error('[admin/data] instroom-classificatie mislukt:', error)
         break
       }
-      for (const row of (data ?? []) as { email: string | null; page_uri: string | null }[]) {
-        const email = (row.email ?? '').toLowerCase()
-        const uri = (row.page_uri ?? '').toLowerCase()
-        if (email && (uri.includes('vermogens-test') || uri.includes('vermogenstest'))) {
-          vermogenstestEmails.add(email)
-        }
+      for (const row of (data ?? []) as { email: string | null; payload_json: Record<string, unknown> | null }[]) {
+        const payload = row.payload_json ?? {}
+        const email = (row.email ?? payloadValue(payload, 'email', 'contact_email', 'hs_associated_contact_email')).toLowerCase()
+        if (!email || instroomByEmail.has(email)) continue
+        const instroom = classifyInstroom(payload)
+        if (instroom) instroomByEmail.set(email, instroom)
       }
       if (!data || data.length < batch) break
     }
@@ -121,7 +152,7 @@ export async function GET(req: NextRequest) {
     ...user,
     ...callStates.get(user.id),
     opvolging_actief: !followUpDisabledUserIds.has(user.id),
-    instroom: vermogenstestEmails.has((user.email ?? '').toLowerCase()) ? 'vermogenstest' : 'discovery',
+    instroom: instroomByEmail.get((user.email ?? '').toLowerCase()) ?? 'onbekend',
   }))
 
   return NextResponse.json({
@@ -132,7 +163,6 @@ export async function GET(req: NextRequest) {
     triggerLogs: triggerData ?? [],
     webhookConfig: configData ?? [],
     accountLogs: accountLogsData ?? [],
-    invites: invitesData ?? [],
     quizSubmissions: quizData ?? [],
     bookingOwners: ownerNames,
   })

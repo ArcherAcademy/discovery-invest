@@ -31,18 +31,12 @@ type ExportFunnel = {
   invest_avond_verschenen: boolean | null
 }
 
-type ExportInvite = {
-  user_id: string
-  used_at: string | null
-}
-
 function excelDate(value: string | null) {
   return value ? new Date(value) : ''
 }
 
-function statusFor(user: ExportUser, openInviteUserIds: Set<string>) {
-  if (user.activated_at) return 'Geactiveerd'
-  return openInviteUserIds.has(user.id) ? 'Aangemaakt' : 'Zonder link'
+function statusFor(user: ExportUser) {
+  return user.activated_at ? 'Geactiveerd' : 'Aangemaakt'
 }
 
 export async function GET(req: NextRequest) {
@@ -54,14 +48,13 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createAdminClient()
-  const [usersResult, funnelsResult, invitesResult, followUpDisabledResult] = await Promise.all([
+  const [usersResult, funnelsResult, followUpDisabledResult] = await Promise.all([
     supabase.from('demo_invest_users').select('*').order('created_at', { ascending: false }),
     supabase.from('demo_invest_user_funnel').select('*'),
-    supabase.from('demo_invest_invites').select('user_id, used_at'),
     supabase.from('demo_invest_trigger_sent').select('user_id').eq('workflow_naam', '__automatische_opvolging_uit__'),
   ])
 
-  const queryError = usersResult.error ?? funnelsResult.error ?? invitesResult.error ?? followUpDisabledResult.error
+  const queryError = usersResult.error ?? funnelsResult.error ?? followUpDisabledResult.error
   if (queryError) {
     return NextResponse.json({ error: 'De accountgegevens konden niet worden opgehaald.' }, { status: 500 })
   }
@@ -69,9 +62,7 @@ export async function GET(req: NextRequest) {
   const users = (usersResult.data ?? []) as ExportUser[]
   const callStates = await getAllCallUserStates(supabase)
   const funnels = (funnelsResult.data ?? []) as ExportFunnel[]
-  const invites = (invitesResult.data ?? []) as ExportInvite[]
   const funnelsByUser = new Map(funnels.map(funnel => [funnel.user_id, funnel]))
-  const openInviteUserIds = new Set(invites.filter(invite => !invite.used_at).map(invite => invite.user_id))
   const followUpDisabledUserIds = new Set((followUpDisabledResult.data ?? []).map(row => row.user_id))
 
   const rows = users.map(user => {
@@ -80,7 +71,7 @@ export async function GET(req: NextRequest) {
     return {
       Naam: user.name || '',
       'E-mailadres': user.email,
-      Status: statusFor(user, openInviteUserIds),
+      Status: statusFor(user),
       Rol: user.role === 'admin' ? 'Admin' : user.role === 'mentor' ? 'Mentor' : 'Gebruiker',
       Toegang: hasPermanentAccess(user.role) ? 'Onbeperkt' : 'Trial',
       Aangemaakt: excelDate(user.created_at),

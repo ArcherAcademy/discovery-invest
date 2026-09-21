@@ -18,22 +18,17 @@ import { hasPermanentAccess, isTrialExpired, trialDaysRemaining } from '@/lib/ac
 
 interface AdminUser extends DemoUser {
   funnel?: DemoUserFunnel
-  /** HubSpot owner-id (numeriek) — wordt via bookingOwners naar een naam vertaald. */
+  /** Numerieke HubSpot owner-ID — wordt via bookingOwners naar een naam vertaald. */
   hubspot_owner_id?: string | null
-  /** Herkomst van het account, server-side bepaald uit de account-webhook page_uri. */
-  instroom?: 'vermogenstest' | 'discovery'
+  /** Herkomst van het account, server-side bepaald uit de eerste bekende instroom. */
+  instroom?: 'vermogenstest' | 'discovery' | 'onbekend'
   // Live afgeleide call-status en opvolgvlag — server-side samengevoegd in /api/admin/data.
   call_clicked_at?: string | null
   call_opened_at?: string | null
   opvolging_actief?: boolean
 }
 
-interface DemoInvite {
-  user_id: string
-  used_at: string | null
-}
-
-type AccountStatus = 'aangemaakt' | 'geactiveerd' | 'zonder_link'
+type AccountStatus = 'aangemaakt' | 'geactiveerd'
 
 type Tab = 'overview' | 'accounts' | 'users' | 'mentors' | 'webhooks' | 'workflows' | 'history' | 'account_logs' | 'voortgang'
 
@@ -66,9 +61,8 @@ export default function AdminPage() {
   const [webhookLog, setWebhookLog] = useState<DemoWebhookLog[]>([])
   const [triggerLog, setTriggerLog] = useState<DemoTriggerLog[]>([])
   const [webhookConfig, setWebhookConfig] = useState<DemoWebhookConfig[]>([])
-  const [invites, setInvites] = useState<DemoInvite[]>([])
   const [accountsFilter, setAccountsFilter] = useState<{ query: string; status: '' | AccountStatus }>({ query: '', status: '' })
-  const [instroomFilter, setInstroomFilter] = useState<'' | 'vermogenstest' | 'discovery'>('')
+  const [instroomFilter, setInstroomFilter] = useState<'' | 'vermogenstest' | 'discovery' | 'onbekend'>('')
   const [accountManagerFilter, setAccountManagerFilter] = useState<string>('')
   const [accountLogs, setAccountLogs] = useState<AccountWebhookLog[]>([])
   const [accountLogsFilter, setAccountLogsFilter] = useState<{ email: string; outcome: '' | 'created' | 'reused' | 'error' }>({ email: '', outcome: '' })
@@ -220,7 +214,6 @@ export default function AdminPage() {
           setAccountTotal(typeof d.accountTotal === 'number' ? d.accountTotal : refreshedUsers.length)
         }
         if (d.bookingOwners) setBookingOwners(d.bookingOwners as Record<string, string>)
-        if (d.invites) setInvites(d.invites as DemoInvite[])
       }
     } catch {
       setExtendError({ userId, msg: 'Netwerkfout' })
@@ -270,7 +263,6 @@ export default function AdminPage() {
       if (d.triggerLogs) setTriggerLog(d.triggerLogs as DemoTriggerLog[])
       if (d.webhookConfig) setWebhookConfig(d.webhookConfig as DemoWebhookConfig[])
       if (d.accountLogs) setAccountLogs(d.accountLogs as AccountWebhookLog[])
-      if (d.invites) setInvites(d.invites as DemoInvite[])
       if (d.quizSubmissions) setQuizSubmissions(d.quizSubmissions as DemoQuizSubmission[])
       if (d.bookingOwners) setBookingOwners(d.bookingOwners as Record<string, string>)
     }
@@ -333,14 +325,11 @@ export default function AdminPage() {
       return sortDir === 'asc' ? diff : -diff
     })
 
-  // ── Account status helpers (zelfde logica als workflow-evaluator) ──────────
-  // Activatielinks verlopen niet meer: een ongebruikte invite is altijd geldig,
-  // ongeacht expires_at. 'zonder_link' blijft over voor de zeldzame accounts
-  // waarvoor helemaal geen open invite (meer) bestaat.
+  // Accountstatus meet uitsluitend de marketingfunnel: ieder account is eerst
+  // aangemaakt en wordt geactiveerd zodra activated_at is gezet. De technische
+  // toestand van een invite mag die status nooit veranderen.
   function getAccountStatus(u: DemoUser): AccountStatus {
-    if (u.activated_at) return 'geactiveerd'
-    const openInvite = invites.find(inv => inv.user_id === u.id && !inv.used_at)
-    return openInvite ? 'aangemaakt' : 'zonder_link'
+    return u.activated_at ? 'geactiveerd' : 'aangemaakt'
   }
 
   function hoeLangGeleden(isoDate: string): string {
@@ -722,7 +711,6 @@ export default function AdminPage() {
         const statusConfig: Record<AccountStatus, { label: string; bg: string; color: string }> = {
           aangemaakt:  { label: 'Aangemaakt',  bg: 'rgba(37,0,245,0.08)', color: '#2500F5' },
           geactiveerd: { label: 'Geactiveerd', bg: 'rgba(34,197,94,0.1)', color: '#16a34a' },
-          zonder_link: { label: 'Zonder link', bg: '#f0f3fb',             color: 'rgba(13,15,20,0.4)' },
         }
 
         // Set dat álle filters behalve de statuskeuze respecteert. De telkaarten
@@ -745,15 +733,15 @@ export default function AdminPage() {
         // Telkaarten (KPI's) over het gescopete set — bewegen mee met het tijdvak.
         const aangemaakt = scopedUsers.filter(u => getAccountStatus(u) === 'aangemaakt').length
         const geactiveerd = scopedUsers.filter(u => getAccountStatus(u) === 'geactiveerd').length
-        const zonderLinkAccounts = scopedUsers.filter(u => getAccountStatus(u) === 'zonder_link').length
         const activatiegraad = scopedUsers.length > 0 ? Math.round((geactiveerd / scopedUsers.length) * 100) : 0
 
-    // Instroom = herkomst van het account, server-side bepaald uit de
-    // account-aanmaken webhook: wie via de vermogenstest-pagina binnenkwam telt
-    // als 'Vermogenstest', al de rest als 'Discovery'. (Zie /api/admin/data.)
+    // Instroom wordt server-side uit het eerste expliciete bronsignaal bepaald.
+    // Ontbrekende broninformatie blijft zichtbaar als 'Onbekend' en wordt nooit
+    // stilzwijgend bij Discovery geteld.
     const isVermogenstest = (u: AdminUser) => u.instroom === 'vermogenstest'
     const vermogenstestCount = scopedUsers.filter(isVermogenstest).length
-    const discoveryCount = scopedUsers.length - vermogenstestCount
+    const discoveryCount = scopedUsers.filter(u => u.instroom === 'discovery').length
+    const onbekendCount = scopedUsers.filter(u => u.instroom === 'onbekend').length
 
     // HubSpot owner-id → accountmanagernaam. Onbekende ids vallen terug op het id
     // zelf, zodat een ontbrekende boekingslink nooit een leeg veld oplevert.
@@ -771,7 +759,7 @@ export default function AdminPage() {
 
         const filtered = scopedUsers
           .filter(u => !accountsFilter.status || getAccountStatus(u) === accountsFilter.status)
-          .filter(u => !instroomFilter || (instroomFilter === 'vermogenstest' ? isVermogenstest(u) : !isVermogenstest(u)))
+          .filter(u => !instroomFilter || u.instroom === instroomFilter)
           .filter(u => {
             if (!accountManagerFilter) return true
             const owner = (u.hubspot_owner_id ?? '').trim().toLowerCase()
@@ -798,10 +786,10 @@ export default function AdminPage() {
               {[
                 { label: 'Aangemaakt, niet geactiveerd', value: aangemaakt, bg: 'rgba(37,0,245,0.06)', color: '#2500F5', border: 'rgba(37,0,245,0.12)' },
                 { label: 'Geactiveerd', value: geactiveerd, bg: 'rgba(34,197,94,0.07)', color: '#16a34a', border: 'rgba(34,197,94,0.18)' },
-                { label: 'Zonder openstaande link', value: zonderLinkAccounts, bg: '#f7f8fc', color: 'rgba(13,15,20,0.45)', border: '#e8ecf4' },
                 { label: 'Activatiegraad', value: `${activatiegraad}%`, bg: '#ffffff', color: '#0d0f14', border: '#e8ecf4' },
                 { label: 'Vermogenstest', value: vermogenstestCount, bg: 'rgba(37,0,245,0.06)', color: '#2500F5', border: 'rgba(37,0,245,0.12)' },
                 { label: 'Discovery', value: discoveryCount, bg: '#ffffff', color: '#0d0f14', border: '#e8ecf4' },
+                { label: 'Instroom onbekend', value: onbekendCount, bg: '#f7f8fc', color: 'rgba(13,15,20,0.45)', border: '#e8ecf4' },
               ].map(card => (
                 <div
                   key={card.label}
@@ -821,7 +809,6 @@ export default function AdminPage() {
                   { value: '' as const,           label: 'Alles' },
                   { value: 'aangemaakt' as const,  label: 'Aangemaakt' },
                   { value: 'geactiveerd' as const, label: 'Geactiveerd' },
-                  { value: 'zonder_link' as const, label: 'Zonder link' },
                 ]).map(opt => (
                   <button
                     key={opt.value}
@@ -869,7 +856,7 @@ export default function AdminPage() {
               <select
                 value={instroomFilter}
                 onChange={e => {
-                  setInstroomFilter(e.target.value as '' | 'vermogenstest' | 'discovery')
+                  setInstroomFilter(e.target.value as '' | 'vermogenstest' | 'discovery' | 'onbekend')
                   setAccountPage(1)
                 }}
                 className="rounded-xl px-3 py-2 text-xs border outline-none"
@@ -879,6 +866,7 @@ export default function AdminPage() {
                 <option value="">Alle instroom ({scopedUsers.length})</option>
                 <option value="vermogenstest">Vermogenstest ({vermogenstestCount})</option>
                 <option value="discovery">Discovery ({discoveryCount})</option>
+                <option value="onbekend">Onbekend ({onbekendCount})</option>
               </select>
               <select
                 value={accountManagerFilter}
@@ -995,15 +983,15 @@ export default function AdminPage() {
                           {/* Instroom / herkomst */}
                           <td className="px-4 py-3 whitespace-nowrap">
                             {(() => {
-                              const vermogenstest = isVermogenstest(u)
+                              const instroom = u.instroom ?? 'onbekend'
                               return (
                                 <span
                                   className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                                  style={vermogenstest
+                                  style={instroom === 'vermogenstest'
                                     ? { background: 'rgba(37,0,245,0.1)', color: '#2500F5' }
                                     : { background: '#f0f3fb', color: 'rgba(13,15,20,0.55)' }}
                                 >
-                                  {vermogenstest ? 'Vermogenstest' : 'Discovery'}
+                                  {instroom === 'vermogenstest' ? 'Vermogenstest' : instroom === 'discovery' ? 'Discovery' : 'Onbekend'}
                                 </span>
                               )
                             })()}
