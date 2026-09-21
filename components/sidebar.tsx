@@ -38,7 +38,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           icon: <CalendarDays size={16} />,
           external: true,
         },
-        { label: tr.nav.masterclass, href: '/masterclass', icon: <GraduationCap size={16} /> },
+        {
+          label: tr.nav.masterclass,
+          href: 'https://archerinvest.be',
+          icon: <GraduationCap size={16} />,
+          external: true,
+        },
       ],
     },
     {
