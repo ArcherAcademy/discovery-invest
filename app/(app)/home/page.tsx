@@ -118,7 +118,9 @@ export default function HomePage() {
                       ? '/video-1-thumbnail.png'
                       : featuredVideo.index === 1
                         ? '/video-2-thumbnail.png'
-                        : '/video-thumbnail.png'
+                        : featuredVideo.index === 2
+                          ? '/video-3-thumbnail.png'
+                          : '/video-thumbnail.png'
                   }
                   alt=""
                   className="absolute inset-0 size-full object-cover opacity-45 transition-transform duration-300 group-hover:scale-105"
