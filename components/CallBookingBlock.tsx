@@ -15,7 +15,7 @@ interface BookingResponse {
 
 interface CallBookingBlockProps {
   unlocked: boolean
-  variant?: 'card' | 'milestone'
+  variant?: 'card' | 'milestone' | 'sidebar'
   openRequest?: number
 }
 
@@ -225,7 +225,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
     )
   }
 
-  if (user?.call_booked && !open) {
+  if (user?.call_booked && !open && variant !== 'sidebar') {
     const appointment = formatAppointment(user.call_start_at, user.call_timezone)
 
     if (variant === 'milestone') {
@@ -260,7 +260,18 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
   }
 
   const unavailable = !isLoading && (error || !data?.available || !data.booking_url)
-  const trigger = variant === 'milestone' ? (
+  const trigger = variant === 'sidebar' ? (
+    <button
+      type="button"
+      onClick={() => handleOpenChange(true)}
+      disabled={isLoading || unavailable}
+      className="flex w-full items-center gap-2.5 rounded-full px-3 py-3 text-left text-sm font-medium text-foreground/65 transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 sm:py-2"
+    >
+      {isLoading ? <LoaderCircle size={16} className="shrink-0 animate-spin opacity-60" /> : <CalendarDays size={16} className="shrink-0 opacity-60" />}
+      <span className="flex-1">Strategy Meeting</span>
+      {!isLoading && !unavailable ? <ArrowRight size={13} className="opacity-45" /> : null}
+    </button>
+  ) : variant === 'milestone' ? (
     <Button onClick={() => handleOpenChange(true)} disabled={isLoading || unavailable} size="sm" className="w-full rounded-lg text-xs font-bold">
       {isLoading ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : <CalendarDays data-icon="inline-start" />}
       {isLoading ? 'Agenda laden' : unavailable ? 'Agenda niet beschikbaar' : 'Kies een moment'}

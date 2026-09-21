@@ -15,6 +15,7 @@ interface VimeoPlayerProps {
   src: string
   videoDbId: string
   completed: boolean
+  initialProgressPct?: number
   nextVideoTitle?: string | null   // null = last video
   nextContentType?: 'video' | 'pdf' | null
   isLastVideo?: boolean
@@ -28,6 +29,7 @@ export default function VimeoPlayer({
   src,
   videoDbId,
   completed,
+  initialProgressPct = 0,
   nextVideoTitle,
   nextContentType,
   isLastVideo,
@@ -142,7 +144,12 @@ export default function VimeoPlayer({
     player.ready().then(async () => {
       try {
         const d = await player.getDuration()
-        if (d && d > 0) onRealDuration?.(d)
+        if (d && d > 0) {
+          onRealDuration?.(d)
+          if (!completed && initialProgressPct > 0 && initialProgressPct < 90) {
+            await player.setCurrentTime(d * (initialProgressPct / 100))
+          }
+        }
       } catch { /* ignore */ }
 
       // Fetch thumbnail for end-screen poster

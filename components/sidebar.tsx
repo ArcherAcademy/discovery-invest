@@ -4,8 +4,9 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Clock, Settings, LogOut, Home, PlaySquare, CalendarDays, GraduationCap, ShieldCheck, ClipboardList, Lock, Menu, X } from 'lucide-react'
+import { Clock, Settings, LogOut, Home, PlaySquare, CalendarDays, GraduationCap, ShieldCheck, Menu, X } from 'lucide-react'
 import { useApp } from './app-context'
+import CallBookingBlock from './CallBookingBlock'
 import { SidebarCallStatus } from './SidebarCallStatus'
 import { t } from '@/lib/i18n'
 
@@ -24,7 +25,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const tr = t(locale)
 
   const isMentorOrAdmin = user?.role === 'admin' || user?.role === 'mentor'
-  const { allCoreCompleted } = useApp()
 
   const navGroups: { label: string; items: NavItem[]; adminOnly?: boolean }[] = [
     {
@@ -116,48 +116,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   )
                 })}
 
-                {/* Quiz item — only shown in overview group */}
-                {group.label === tr.nav.overview && (
-                  <li key="quiz">
-                    {allCoreCompleted ? (
-                      <Link
-                        href="/quiz"
-                        onClick={onNavigate}
-                        className="flex items-center gap-2.5 px-3 py-3 sm:py-2 rounded-full text-sm font-medium transition-all duration-150"
-                        style={
-                          pathname === '/quiz'
-                            ? { background: '#2500F5', color: '#ffffff' }
-                            : { color: 'rgba(13,15,20,0.65)' }
-                        }
-                      >
-                        <span style={{ opacity: pathname === '/quiz' ? 1 : 0.6 }}>
-                          <ClipboardList size={16} />
-                        </span>
-                        Quiz
-                      </Link>
-                    ) : (
-                      <div
-                        className="group relative flex items-center gap-2.5 px-3 py-3 sm:py-2 rounded-full text-sm font-medium cursor-default select-none"
-                        style={{ color: 'rgba(13,15,20,0.3)' }}
-                      >
-                        <span style={{ opacity: 0.4 }}><ClipboardList size={16} /></span>
-                        Quiz
-                        <Lock size={11} className="ml-auto" style={{ opacity: 0.4 }} />
-                        {/* Tooltip */}
-                        <div
-                          className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 hidden group-hover:block"
-                        >
-                          <div
-                            className="rounded-lg px-3 py-2 text-xs font-medium whitespace-nowrap shadow-lg"
-                            style={{ background: '#0d0f14', color: '#fff', maxWidth: '220px', whiteSpace: 'normal' }}
-                          >
-                            Bekijk eerst alle 6 video&apos;s om de quiz vrij te spelen.
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                {group.label === tr.nav.overview ? (
+                  <li key="strategy-meeting">
+                    <CallBookingBlock unlocked variant="sidebar" />
                   </li>
-                )}
+                ) : null}
               </ul>
             </div>
           )

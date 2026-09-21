@@ -1,9 +1,9 @@
 'use client'
 
-import { useRef, useState } from 'react'
 import Link from 'next/link'
-import { Play, ChevronRight, CheckCircle2, GraduationCap, CalendarDays, Pause, Volume2, VolumeX, Clock, Zap, Lock } from 'lucide-react'
+import { Play, ChevronRight, CheckCircle2, CalendarDays, Clock, Zap, Lock } from 'lucide-react'
 import CallBookingBlock from '@/components/CallBookingBlock'
+import VimeoPlayer from '@/components/VimeoPlayer'
 import { useApp } from '@/components/app-context'
 import { t } from '@/lib/i18n'
 
@@ -29,7 +29,7 @@ function ProgressRing({ pct, size = 56 }: { pct: number; size?: number }) {
 }
 
 export default function HomePage() {
-  const { user, videos, progress, coreCompleted, allCoreCompleted, locale, trialDaysLeft } = useApp()
+  const { user, videos, progress, coreCompleted, allCoreCompleted, locale, trialDaysLeft, refresh } = useApp()
   const tr = t(locale)
 
   // Real DB videos, sorted by order_no so display order always matches actual course order.
@@ -53,7 +53,11 @@ export default function HomePage() {
   const displayVideos = coreVideos.map((live, i) => ({
     id: live.id,
     title: live.title || VIDEO_TITLES[i] || live.title,
+    description: live.description,
     duration: Math.ceil((live.duration_seconds ?? 0) / 60) || VIDEO_DURATIONS[i] || 0,
+    videoUrl: live.video_url,
+    contentType: live.content_type,
+    progressPct: videoProgressMap.get(live.id)?.progress_pct ?? 0,
     color: VIDEO_COLORS[i] ?? VIDEO_COLORS[VIDEO_COLORS.length - 1],
     status: getStatus(live.id),
     index: i,
@@ -84,22 +88,13 @@ export default function HomePage() {
         ? 'Bekijk je bonus'
         : 'Naar je traject'
 
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [paused, setPaused] = useState(false)
-  const [muted, setMuted] = useState(true)
-
-  function togglePlay() {
-    const v = videoRef.current
-    if (!v) return
-    if (v.paused) { v.play(); setPaused(false) }
-    else { v.pause(); setPaused(true) }
-  }
-  function toggleMute() {
-    const v = videoRef.current
-    if (!v) return
-    v.muted = !v.muted
-    setMuted(v.muted)
-  }
+  const featuredVideo = displayVideos.find(video => video.status === 'in_progress')
+    ?? nextIncompleteCore
+    ?? displayVideos.at(-1)
+    ?? null
+  const featuredNextVideo = featuredVideo
+    ? displayVideos[featuredVideo.index + 1] ?? null
+    : null
 
   // Show: last completed, current/next (in-progress or first not started), and the one after
   const activeIndex = displayVideos.findIndex(v => v.status === 'in_progress')
@@ -118,65 +113,62 @@ export default function HomePage() {
 
     <div className="max-w-6xl mx-auto space-y-5">
 
-      {/* ── HERO ─────────────────────────────────────────────── */}
-      <div className="relative rounded-2xl overflow-hidden aspect-[4/5] sm:aspect-[16/6]">
-        {/* Full-bleed video */}
-        <video
-          ref={videoRef}
-          src="/hero-intro.mp4"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="auto"
-          className="absolute inset-0 w-full h-full object-cover"
-        />
+      {/* ── ACTUELE VIDEO ─────────────────────────────────────── */}
+      <p className="text-sm font-semibold text-muted-foreground">
+        Welkom terug, <span className="text-primary">{firstName}</span>
+      </p>
 
-        {/* Dark gradient overlay — stronger at the bottom so #2500F5 stays legible */}
-        <div className="absolute inset-0"
-          style={{ background: 'linear-gradient(to top, rgba(5,5,15,0.92) 0%, rgba(5,5,15,0.55) 40%, rgba(5,5,15,0.1) 100%)' }} />
+      <section className="flex flex-col gap-6 rounded-2xl border border-border bg-card p-5 text-card-foreground shadow-sm sm:p-8">
+        {featuredVideo ? (
+          <>
+            <header className="flex flex-col gap-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">
+                Invest Discovery · Video {featuredVideo.index + 1} van {displayVideos.length}
+              </p>
+              <h1 className="text-balance text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
+                {featuredVideo.title}
+              </h1>
+              {featuredVideo.description ? (
+                <p className="max-w-4xl text-pretty text-sm leading-6 text-muted-foreground sm:text-base">
+                  {featuredVideo.description}
+                </p>
+              ) : null}
+            </header>
 
-        {/* Bottom-left: text + CTA */}
-        <div className="absolute bottom-0 left-0 right-0 px-4 sm:px-7 py-5 sm:py-6 sm:max-w-lg sm:right-auto">
-          <p className="text-[10px] font-bold tracking-[0.22em] uppercase mb-2" style={{ color: '#2500F5' }}>
-            INVEST DISCOVERY
-          </p>
-          <h1 className="text-2xl sm:text-[1.75rem] font-bold text-white leading-tight tracking-tight text-balance">
-            Welkom, <span style={{ color: '#2500F5' }}>{firstName}.</span>
-          </h1>
-          <p className="text-sm mt-1 mb-4" style={{ color: 'rgba(255,255,255,0.6)' }}>
-            Jouw 7-daagse gratis Invest-traject
-          </p>
-          <Link
-            href={heroHref}
-            className="inline-flex items-center gap-2.5 px-5 py-3 sm:py-2.5 rounded-full text-sm font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
-            style={{ background: 'rgba(255,255,255,0.18)', color: '#fff', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.25)' }}
-          >
-            <Play size={14} fill="white" />
-            {heroLabel}
-          </Link>
-        </div>
-
-        {/* Top-right on mobile / bottom-right on desktop: pause + mute controls */}
-        <div className="absolute top-3 right-3 sm:top-auto sm:bottom-5 sm:right-5 flex items-center gap-2">
-          <button
-            onClick={togglePlay}
-            className="w-9 h-9 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all hover:scale-110"
-            style={{ background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.2)' }}
-            aria-label={paused ? 'Afspelen' : 'Pauzeren'}
-          >
-            {paused ? <Play size={13} fill="white" color="white" /> : <Pause size={13} fill="white" color="white" />}
-          </button>
-          <button
-            onClick={toggleMute}
-            className="w-9 h-9 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all hover:scale-110"
-            style={{ background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.2)' }}
-            aria-label={muted ? 'Geluid aan' : 'Dempen'}
-          >
-            {muted ? <VolumeX size={13} color="white" /> : <Volume2 size={13} color="white" />}
-          </button>
-        </div>
-      </div>
+            {featuredVideo.contentType === 'video' && featuredVideo.videoUrl ? (
+              <div className="overflow-hidden rounded-2xl bg-foreground shadow-lg">
+                <VimeoPlayer
+                  key={featuredVideo.id}
+                  src={featuredVideo.videoUrl}
+                  videoDbId={featuredVideo.id}
+                  completed={featuredVideo.status === 'completed'}
+                  initialProgressPct={featuredVideo.progressPct}
+                  nextVideoTitle={featuredNextVideo?.title ?? null}
+                  nextContentType={featuredNextVideo?.contentType ?? null}
+                  isLastVideo={featuredVideo.index === displayVideos.length - 1}
+                  onCompleted={() => refresh()}
+                  onUnlockNext={() => refresh()}
+                />
+              </div>
+            ) : (
+              <Link
+                href={heroHref}
+                className="group relative flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-foreground text-background"
+              >
+                <img src="/video-thumbnail.png" alt="" className="absolute inset-0 size-full object-cover opacity-45 transition-transform duration-300 group-hover:scale-105" />
+                <span className="relative flex size-16 items-center justify-center rounded-full bg-background text-foreground shadow-xl">
+                  <Play size={24} fill="currentColor" />
+                  <span className="sr-only">{heroLabel}</span>
+                </span>
+              </Link>
+            )}
+          </>
+        ) : (
+          <div className="flex aspect-video items-center justify-center rounded-2xl bg-muted text-sm text-muted-foreground">
+            Je traject wordt geladen...
+          </div>
+        )}
+      </section>
 
       {/* ── STATS STRIP ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
