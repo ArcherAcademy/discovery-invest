@@ -29,9 +29,60 @@ const CORE_DESCRIPTIONS = [
   'Hoe een plan over tien tot vijfentwintig jaar er concreet uitziet.',
 ]
 
+const CORE_THUMBNAILS = [
+  '/video-1-thumbnail.png',
+  '/video-2-thumbnail.png',
+  '/video-3-thumbnail.png',
+  '/video-4-thumbnail.png',
+  '/video-5-thumbnail.png',
+  '/video-6-thumbnail.png',
+]
+
 function formatDuration(minutes: number, contentType: string) {
   if (contentType === 'pdf') return 'PDF'
   return minutes > 0 ? `${minutes} min` : 'Video'
+}
+
+function getBonusThumbnail(video: TrajectItem) {
+  const title = video.title.toLowerCase()
+
+  if (title.includes('technische analyse')) return '/bonus-technische-analyse-thumbnail.png'
+  if (title.includes('masterclass') || title.includes('binnenkijken') || video.duration === 15) {
+    return '/bonus-masterclass-thumbnail.png'
+  }
+
+  return '/video-thumbnail.png'
+}
+
+function VideoThumbnail({
+  src,
+  title,
+  completed = false,
+}: {
+  src: string
+  title: string
+  completed?: boolean
+}) {
+  return (
+    <div className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-xl bg-muted ring-1 ring-border transition-all duration-300 group-hover:ring-primary-foreground/40 sm:w-32">
+      <img
+        src={src}
+        alt={`Thumbnail van ${title}`}
+        className="interactive-video-image size-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+      />
+      <div className="absolute inset-0 bg-primary/0 transition-colors duration-300 group-hover:bg-primary/35" />
+      <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 group-hover:opacity-100">
+        <span className="flex size-9 items-center justify-center rounded-full bg-primary-foreground text-primary shadow-lg">
+          <Play size={14} fill="currentColor" />
+        </span>
+      </span>
+      {completed ? (
+        <span className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md transition-colors group-hover:bg-primary-foreground group-hover:text-primary">
+          <Check size={12} strokeWidth={3} />
+        </span>
+      ) : null}
+    </div>
+  )
 }
 
 export function HomeTrajectOverview({
@@ -62,29 +113,35 @@ export function HomeTrajectOverview({
             const description = video.description || CORE_DESCRIPTIONS[index] || ''
 
             const content = (
-              <div className="flex min-h-20 items-center gap-4 px-5 py-4 sm:px-7">
-                <div className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${isCompleted || isActive ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                  {isCompleted ? <Check size={15} strokeWidth={3} /> : index + 1}
-                </div>
+              <div className="flex min-h-24 items-center gap-4 px-5 py-4 sm:px-7">
+                <VideoThumbnail
+                  src={CORE_THUMBNAILS[index] || '/video-thumbnail.png'}
+                  title={video.title}
+                  completed={isCompleted}
+                />
 
                 <div className="grid min-w-0 flex-1 gap-1 sm:grid-cols-[150px_1fr] sm:items-center sm:gap-5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-bold">{video.title}</p>
-                    <p className="text-xs text-muted-foreground">{formatDuration(video.duration, video.contentType)}</p>
+                    <p className="truncate text-sm font-bold transition-colors group-hover:text-primary-foreground">{video.title}</p>
+                    <p className="text-xs text-muted-foreground transition-colors group-hover:text-primary-foreground/70">
+                      {formatDuration(video.duration, video.contentType)}
+                    </p>
                   </div>
-                  <p className="hidden truncate text-sm text-muted-foreground sm:block">{description}</p>
+                  <p className="hidden truncate text-sm text-muted-foreground transition-colors group-hover:text-primary-foreground/75 sm:block">
+                    {description}
+                  </p>
                 </div>
 
                 <div className="flex shrink-0 items-center justify-end sm:min-w-28">
                   {isActive ? (
-                    <span className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground">
+                    <span className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground transition-colors group-hover:bg-primary-foreground group-hover:text-primary">
                       {video.status === 'in_progress' ? 'Ga verder' : 'Start nu'}
                       <ArrowRight size={15} />
                     </span>
                   ) : isLocked ? (
                     <Lock size={17} className="text-muted-foreground" aria-label="Vergrendeld" />
                   ) : (
-                    <ChevronRight size={18} className="text-muted-foreground" aria-hidden="true" />
+                    <ChevronRight size={20} className="text-muted-foreground transition-all duration-300 group-hover:translate-x-1 group-hover:text-primary-foreground" aria-hidden="true" />
                   )}
                 </div>
               </div>
@@ -93,7 +150,11 @@ export function HomeTrajectOverview({
             return isLocked ? (
               <div key={video.id} aria-disabled="true" className="opacity-70">{content}</div>
             ) : (
-              <Link key={video.id} href={`/video/${video.id}`} className="block transition-colors hover:bg-muted/50">
+              <Link
+                key={video.id}
+                href={`/video/${video.id}`}
+                className="interactive-video-row group block transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+              >
                 {content}
               </Link>
             )
@@ -121,24 +182,43 @@ export function HomeTrajectOverview({
             ) : null}
 
             {bonusVideos.map((video) => {
+              const isPdf = video.contentType === 'pdf'
               const item = (
-                <div className="flex min-h-16 items-center gap-4 px-5 py-4 sm:px-7">
-                  <div className={`flex size-8 shrink-0 items-center justify-center rounded-full ${allCoreCompleted ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
-                    {allCoreCompleted ? (video.contentType === 'pdf' ? <FileText size={15} /> : <Play size={14} fill="currentColor" />) : <Lock size={14} />}
-                  </div>
+                <div className="flex min-h-24 items-center gap-4 px-5 py-4 sm:px-7">
+                  {isPdf ? (
+                    <div className="flex aspect-video w-24 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15 transition-colors group-hover:bg-primary-foreground group-hover:text-primary sm:w-32">
+                      <FileText size={24} />
+                    </div>
+                  ) : (
+                    <VideoThumbnail
+                      src={getBonusThumbnail(video)}
+                      title={video.title}
+                      completed={video.status === 'completed'}
+                    />
+                  )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold">{video.title}</p>
-                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                      {video.contentType !== 'pdf' ? <Clock size={11} /> : null}
+                    <p className="truncate text-sm font-bold transition-colors group-hover:text-primary-foreground">{video.title}</p>
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground transition-colors group-hover:text-primary-foreground/70">
+                      {!isPdf ? <Clock size={11} /> : null}
                       {formatDuration(video.duration, video.contentType)}
                     </p>
                   </div>
-                  {allCoreCompleted ? <ChevronRight size={18} className="text-muted-foreground" /> : <Lock size={16} className="text-muted-foreground" aria-label="Vergrendeld" />}
+                  {allCoreCompleted ? (
+                    <ChevronRight size={20} className="text-muted-foreground transition-all duration-300 group-hover:translate-x-1 group-hover:text-primary-foreground" />
+                  ) : (
+                    <Lock size={16} className="text-muted-foreground" aria-label="Vergrendeld" />
+                  )}
                 </div>
               )
 
               return allCoreCompleted ? (
-                <Link key={video.id} href={`/video/${video.id}`} className="block transition-colors hover:bg-muted/50">{item}</Link>
+                <Link
+                  key={video.id}
+                  href={`/video/${video.id}`}
+                  className="interactive-video-row group block transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                >
+                  {item}
+                </Link>
               ) : (
                 <div key={video.id} aria-disabled="true" className="opacity-70">{item}</div>
               )

@@ -157,6 +157,24 @@
   .archer-blue-gradient {
     background: linear-gradient(135deg, #2500F5 0%, #5b40ff 100%);
   }
+  .interactive-video-row {
+    transition: background-color 300ms ease, color 300ms ease;
+  }
+  .interactive-video-row:hover,
+  .interactive-video-row:focus-visible {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+  .interactive-video-row:hover p,
+  .interactive-video-row:hover svg,
+  .interactive-video-row:focus-visible p,
+  .interactive-video-row:focus-visible svg {
+    color: var(--primary-foreground);
+  }
+  .interactive-video-row:hover .interactive-video-image,
+  .interactive-video-row:focus-visible .interactive-video-image {
+    transform: scale(1.1);
+  }
   .progress-ring-track {
     fill: none;
     stroke: #e8ecf4;
