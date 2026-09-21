@@ -12,27 +12,68 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createAdminClient()
+  const batchSize = 1000
+
+  async function fetchAllActivatedUsers() {
+    const rows = []
+    for (let from = 0; ; from += batchSize) {
+      const { data, error } = await supabase
+        .from('demo_invest_users')
+        .select('id, email, name, activated_at, trial_expires_at, last_activity_at, created_at')
+        .not('activated_at', 'is', null)
+        .order('activated_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, from + batchSize - 1)
+
+      if (error) throw error
+      rows.push(...(data ?? []))
+      if (!data || data.length < batchSize) return rows
+    }
+  }
+
+  async function fetchAllProgress() {
+    const rows = []
+    for (let from = 0; ; from += batchSize) {
+      const { data, error } = await supabase
+        .from('demo_invest_video_progress')
+        .select('user_id, video_id, status, progress_pct, started_at, completed_at')
+        .order('user_id')
+        .order('video_id')
+        .range(from, from + batchSize - 1)
+
+      if (error) throw error
+      rows.push(...(data ?? []))
+      if (!data || data.length < batchSize) return rows
+    }
+  }
+
+  let users: Awaited<ReturnType<typeof fetchAllActivatedUsers>> = []
+  let progress: Awaited<ReturnType<typeof fetchAllProgress>> = []
+  try {
+    const results = await Promise.all([
+      fetchAllActivatedUsers(),
+      fetchAllProgress(),
+    ])
+    users = results[0]
+    progress = results[1]
+  } catch (error) {
+    console.error('[admin/voortgang] Volledige voortgang ophalen mislukt:', error)
+    return NextResponse.json(
+      { error: 'De volledige voortgang kon niet worden opgehaald.' },
+      { status: 500 },
+    )
+  }
 
   const [
-    { data: users },
     { data: videos },
-    { data: progress },
     { data: funnels },
     { data: quizRows },
     { data: followUpDisabledRows },
   ] = await Promise.all([
     supabase
-      .from('demo_invest_users')
-      .select('id, email, name, activated_at, trial_expires_at, last_activity_at, created_at')
-      .not('activated_at', 'is', null)
-      .order('activated_at', { ascending: false }),
-    supabase
       .from('demo_invest_videos')
       .select('id, order_no, title, section')
       .order('order_no'),
-    supabase
-      .from('demo_invest_video_progress')
-      .select('user_id, video_id, status, progress_pct, started_at, completed_at'),
     supabase
       .from('demo_invest_user_funnel')
       .select('user_id, event_booked, all_completed_at, invest_avond_geclaimd, invest_avond_verschenen'),

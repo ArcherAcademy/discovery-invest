@@ -41,6 +41,9 @@ export default function VimeoPlayer({
   const containerRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<Player | null>(null)
   const marked = useRef(completed)
+  const startedTrackedRef = useRef(false)
+  const lastTrackedProgressRef = useRef(Math.floor(initialProgressPct / 10) * 10)
+  const progressRequestRef = useRef<Promise<void>>(Promise.resolve())
   const countdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onAutoNextRef = useRef(onAutoNext)
   useEffect(() => { onAutoNextRef.current = onAutoNext }, [onAutoNext])
@@ -55,7 +58,10 @@ export default function VimeoPlayer({
 
   // Reset all state when video changes
   useEffect(() => {
-    marked.current = false
+    marked.current = completed
+    startedTrackedRef.current = false
+    lastTrackedProgressRef.current = Math.floor(initialProgressPct / 10) * 10
+    progressRequestRef.current = Promise.resolve()
     setEnded(false)
     setCountdown(null)
     setCancelled(false)
@@ -88,6 +94,24 @@ export default function VimeoPlayer({
     setCountdown(null)
     setCancelled(true)
   }, [])
+
+  const trackProgress = useCallback((action: 'started' | 'progress', progressPct?: number) => {
+    progressRequestRef.current = progressRequestRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const response = await fetch('/api/video-progress', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId: videoDbId, action, progressPct }),
+          keepalive: true,
+        })
+        if (!response.ok) {
+          const body = await response.text().catch(() => '')
+          console.error('[v0] video-progress opslaan mislukt:', response.status, body)
+        }
+      })
+  }, [videoDbId])
 
   // ── doComplete — called by 'ended' and manual button ──────────────────────
   const doComplete = useCallback(async (source: 'ended' | 'manual') => {
@@ -134,7 +158,6 @@ export default function VimeoPlayer({
       title: false,
       byline: false,
       portrait: false,
-      badge: false,
       pip: false,
       dnt: true,
       color: '2500f5',
@@ -170,13 +193,33 @@ export default function VimeoPlayer({
       setErrorMsg('Er ging iets mis bij het laden van de video, probeer opnieuw.')
     })
 
-    player.on('ended', () => {
+    const handlePlay = () => {
+      if (marked.current || startedTrackedRef.current) return
+      startedTrackedRef.current = true
+      trackProgress('started')
+    }
+
+    const handleTimeUpdate = ({ percent }: { percent: number }) => {
+      if (marked.current || !Number.isFinite(percent)) return
+      const progressPct = Math.min(99, Math.floor((percent * 100) / 10) * 10)
+      if (progressPct < 10 || progressPct <= lastTrackedProgressRef.current) return
+      lastTrackedProgressRef.current = progressPct
+      trackProgress('progress', progressPct)
+    }
+
+    const handleEnded = () => {
       setEnded(true)
       doComplete('ended')
-    })
+    }
+
+    player.on('play', handlePlay)
+    player.on('timeupdate', handleTimeUpdate)
+    player.on('ended', handleEnded)
 
     return () => {
-      player.off('ended')
+      player.off('play', handlePlay)
+      player.off('timeupdate', handleTimeUpdate)
+      player.off('ended', handleEnded)
       player.off('error')
       player.destroy().catch(() => {})
       playerRef.current = null

@@ -11,11 +11,24 @@ export async function POST(req: NextRequest) {
   const supabase = createAdminClient()
 
   const { videoId, action, progressPct } = await req.json() as {
-    videoId: string
-    action: 'started' | 'progress' | 'completed'
-    progressPct?: number
+    videoId?: unknown
+    action?: unknown
+    progressPct?: unknown
   }
 
+  if (typeof videoId !== 'string' || !videoId) {
+    return NextResponse.json({ error: 'Missing videoId' }, { status: 400 })
+  }
+  if (action !== 'started' && action !== 'progress' && action !== 'completed') {
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+  }
+  if (action === 'progress' && (typeof progressPct !== 'number' || !Number.isFinite(progressPct))) {
+    return NextResponse.json({ error: 'Invalid progressPct' }, { status: 400 })
+  }
+
+  const safeProgressPct = action === 'progress'
+    ? Math.min(99, Math.max(0, Math.round(progressPct as number)))
+    : undefined
   const now = new Date()
 
   // Load user, funnel, video
@@ -50,9 +63,10 @@ export async function POST(req: NextRequest) {
     }
   } else if (action === 'progress') {
     // Monotone: progress_pct may never decrease; take the max of incoming and existing
-    const incomingPct = progressPct ?? 0
     const existingPct = existingProgress?.progress_pct ?? 0
-    const safePct = Math.max(incomingPct, existingPct)
+    const safePct = existingProgress?.status === 'completed'
+      ? 100
+      : Math.max(safeProgressPct ?? 0, existingPct)
 
     upsertPayload = {
       user_id: authUser.id,
@@ -110,7 +124,7 @@ export async function POST(req: NextRequest) {
   if (action === 'started') {
     await emitEvent({ type: 'video.started', user, funnel, nextVideo: video, data: { video_id: videoId, video_title: video?.title } })
   } else if (action === 'progress') {
-    await emitEvent({ type: 'video.progress', user, funnel, nextVideo: video, data: { video_id: videoId, progress_pct: progressPct } })
+    await emitEvent({ type: 'video.progress', user, funnel, nextVideo: video, data: { video_id: videoId, progress_pct: safeProgressPct } })
   } else if (action === 'completed') {
     // Count completed core videos from the fresh DB set (completedIds already includes this video
     // because the upsert above wrote 'completed' before we re-read)

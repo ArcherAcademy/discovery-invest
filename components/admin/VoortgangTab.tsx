@@ -36,6 +36,10 @@ interface UserRow {
   all_completed_at: string | null
   invest_avond_geclaimd: boolean
   invest_avond_verschenen: boolean
+  call_opened_at: string | null
+  call_clicked_at: string | null
+  call_booked: boolean
+  call_booked_at: string | null
   quiz_submission: { submitted_at: string; score: number; answers: { question_no: number; chosen: string; correct: boolean }[] } | null
 }
 
@@ -973,7 +977,7 @@ export function VoortgangTab() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/admin/voortgang')
+      const res = await fetch('/api/admin/voortgang', { cache: 'no-store' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setData(await res.json())
     } catch (e) {
@@ -990,15 +994,20 @@ export function VoortgangTab() {
   // zodat badge en vervaldatum meteen omslaan na een verlenging.
   const refreshSilent = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/voortgang')
+      const res = await fetch('/api/admin/voortgang', { cache: 'no-store' })
       if (!res.ok) return
       const fresh = (await res.json()) as { userRows: UserRow[]; insights: Insights }
       setData(fresh)
       setSelectedUser(prev => (prev ? fresh.userRows.find(r => r.id === prev.id) ?? prev : prev))
     } catch {
-      // Stil falen: de verlenging zelf is al bevestigd door de route.
+      // De bestaande gegevens blijven zichtbaar bij een tijdelijke netwerkfout.
     }
   }, [])
+
+  useEffect(() => {
+    const id = window.setInterval(refreshSilent, 30000)
+    return () => window.clearInterval(id)
+  }, [refreshSilent])
 
   if (loading) {
     return (
