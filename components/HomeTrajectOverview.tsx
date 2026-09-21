@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowRight, Check, ChevronRight, Clock, FileText, Lock, Play } from 'lucide-react'
+import { ArrowRight, Check, ChevronRight, Clock, Lock, Play } from 'lucide-react'
+import PdfThumbnail from '@/components/PdfThumbnail'
 
 interface TrajectItem {
   id: string
@@ -186,8 +187,11 @@ export function HomeTrajectOverview({
               const item = (
                 <div className="flex min-h-24 items-center gap-4 px-5 py-4 sm:px-7">
                   {isPdf ? (
-                    <div className="flex aspect-video w-24 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15 transition-colors group-hover:bg-primary-foreground group-hover:text-primary sm:w-32">
-                      <FileText size={24} />
+                    <div className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-xl bg-muted ring-1 ring-border sm:w-32">
+                      <PdfThumbnail
+                        pdfUrl="/bonus/de-vermogenskloof.pdf"
+                        className="absolute inset-0"
+                      />
                     </div>
                   ) : (
                     <VideoThumbnail

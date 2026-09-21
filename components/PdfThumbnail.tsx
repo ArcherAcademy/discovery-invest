@@ -34,7 +34,7 @@ async function renderFirstPage(pdfUrl: string): Promise<string> {
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('no-canvas-context')
 
-    await page.render({ canvasContext: ctx, viewport }).promise
+    await page.render({ canvas, canvasContext: ctx, viewport }).promise
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
     thumbnailCache.set(pdfUrl, dataUrl)
     return dataUrl
