@@ -124,7 +124,9 @@ export default function HomePage() {
                             ? '/video-4-thumbnail.png'
                             : featuredVideo.index === 4
                               ? '/video-5-thumbnail.png'
-                              : '/video-thumbnail.png'
+                              : featuredVideo.index === 5
+                                ? '/video-6-thumbnail.png'
+                                : '/video-thumbnail.png'
                   }
                   alt=""
                   className="absolute inset-0 size-full object-cover opacity-45 transition-transform duration-300 group-hover:scale-105"
