@@ -289,7 +289,7 @@ export default function TrajectPage() {
                 ) : (
                   <div className="relative h-28 overflow-hidden">
                     <img
-                      src="/video-thumbnail.png"
+                      src={video.title.toLowerCase().includes('technische analyse') ? '/bonus-technische-analyse-thumbnail.png' : '/video-thumbnail.png'}
                       alt=""
                       className="absolute inset-0 w-full h-full object-cover brightness-75"
                     />
@@ -326,7 +326,7 @@ export default function TrajectPage() {
                 ) : (
                   <div className="relative h-28 overflow-hidden">
                     <img
-                      src="/video-thumbnail.png"
+                      src={video.title.toLowerCase().includes('technische analyse') ? '/bonus-technische-analyse-thumbnail.png' : '/video-thumbnail.png'}
                       alt=""
                       className="absolute inset-0 w-full h-full object-cover"
                       style={{ filter: 'brightness(0.3) grayscale(0.5)' }}
