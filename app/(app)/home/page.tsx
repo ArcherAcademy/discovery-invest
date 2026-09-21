@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Play, ChevronRight, CheckCircle2, CalendarDays, Clock, Zap, Lock } from 'lucide-react'
 import CallBookingBlock from '@/components/CallBookingBlock'
 import VimeoPlayer from '@/components/VimeoPlayer'
+import { VermogensavondCta } from '@/components/VermogensavondCta'
 import { useApp } from '@/components/app-context'
 import { t } from '@/lib/i18n'
 
@@ -170,6 +171,8 @@ export default function HomePage() {
         )}
       </section>
 
+      <VermogensavondCta />
+
       {/* ── STATS STRIP ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
         {[
@@ -304,7 +307,7 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* Step 3 — persoonlijk oriëntatiegesprek */}
+                {/* Step 3 �� persoonlijk oriëntatiegesprek */}
                 <div className="flex-1">
                   <div
                     className="rounded-xl p-4 border-2 relative overflow-hidden"
