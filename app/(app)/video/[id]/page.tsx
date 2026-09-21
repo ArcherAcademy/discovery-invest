@@ -195,7 +195,9 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                           ? '/video-2-thumbnail.png'
                           : video.order_no === 3
                             ? '/video-3-thumbnail.png'
-                            : '/video-thumbnail.png'
+                            : video.order_no === 4
+                              ? '/video-4-thumbnail.png'
+                              : '/video-thumbnail.png'
                     }
                     alt=""
                     className="absolute inset-0 w-full h-full object-cover brightness-50"
