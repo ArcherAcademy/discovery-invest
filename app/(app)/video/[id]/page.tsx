@@ -203,7 +203,9 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                                   ? '/video-6-thumbnail.png'
                                   : video.title.toLowerCase().includes('technische analyse')
                                     ? '/bonus-technische-analyse-thumbnail.png'
-                                    : '/video-thumbnail.png'
+                                    : video.title.toLowerCase().includes('masterclass')
+                                      ? '/bonus-masterclass-thumbnail.png'
+                                      : '/video-thumbnail.png'
                     }
                     alt=""
                     className="absolute inset-0 w-full h-full object-cover brightness-50"
