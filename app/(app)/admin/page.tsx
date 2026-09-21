@@ -95,6 +95,7 @@ export default function AdminPage() {
   const [roleLoading, setRoleLoading] = useState<string | null>(null)
   const [roleFeedback, setRoleFeedback] = useState<{ ok: boolean; message: string } | null>(null)
   const [exportLoading, setExportLoading] = useState(false)
+  const [demoExportLoading, setDemoExportLoading] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
   async function handleAccountsExport() {
@@ -123,6 +124,35 @@ export default function AdminPage() {
       setExportError('Netwerkfout. Probeer de export opnieuw.')
     } finally {
       setExportLoading(false)
+    }
+  }
+
+  async function handleDemoExport() {
+    setDemoExportLoading(true)
+    setExportError(null)
+    try {
+      const response = await fetch('/api/admin/export-demo')
+      if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        setExportError(data?.error ?? 'De demo-export kon niet worden gemaakt.')
+        return
+      }
+
+      const blob = await response.blob()
+      const disposition = response.headers.get('content-disposition') ?? ''
+      const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? 'demo-pagina-volledige-personen.xlsx'
+      const downloadUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(downloadUrl)
+    } catch {
+      setExportError('Netwerkfout. Probeer de demo-export opnieuw.')
+    } finally {
+      setDemoExportLoading(false)
     }
   }
 
@@ -906,13 +936,23 @@ export default function AdminPage() {
               </span>
               <button
                 type="button"
+                onClick={handleDemoExport}
+                disabled={demoExportLoading}
+                className="ml-auto inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-85 disabled:cursor-wait disabled:opacity-50"
+                style={{ background: '#ffffff', borderColor: '#2500F5', color: '#2500F5' }}
+              >
+                {demoExportLoading ? <RefreshCw size={15} className="animate-spin" /> : <Download size={15} />}
+                {demoExportLoading ? 'Demo Excel maken…' : 'Download demo-inschrijvingen'}
+              </button>
+              <button
+                type="button"
                 onClick={handleAccountsExport}
                 disabled={exportLoading}
-                className="ml-auto inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-85 disabled:cursor-wait disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-85 disabled:cursor-wait disabled:opacity-50"
                 style={{ background: '#2500F5', color: '#ffffff' }}
               >
                 {exportLoading ? <RefreshCw size={15} className="animate-spin" /> : <Download size={15} />}
-                {exportLoading ? 'Excel maken…' : 'Download Excel'}
+                {exportLoading ? 'Excel maken…' : 'Download alle accounts'}
               </button>
             </div>
             {exportError && (
