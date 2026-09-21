@@ -112,7 +112,11 @@ export default function HomePage() {
               </div>
             ) : (
               <Link href={heroHref} className="group relative flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-foreground text-background">
-                <img src="/video-thumbnail.png" alt="" className="absolute inset-0 size-full object-cover opacity-45 transition-transform duration-300 group-hover:scale-105" />
+                <img
+                  src={featuredVideo.index === 0 ? '/video-1-thumbnail.png' : '/video-thumbnail.png'}
+                  alt=""
+                  className="absolute inset-0 size-full object-cover opacity-45 transition-transform duration-300 group-hover:scale-105"
+                />
                 <span className="relative flex size-16 items-center justify-center rounded-full bg-background text-foreground shadow-xl">
                   <Play size={24} fill="currentColor" />
                   <span className="sr-only">{heroLabel}</span>

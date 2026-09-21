@@ -137,7 +137,7 @@ export default function TrajectPage() {
                 <div className="relative h-48 overflow-hidden">
                   {/* Photo thumbnail — always visible, dimmed when locked */}
                   <img
-                    src="/video-thumbnail.png"
+                    src={i === 0 ? '/video-1-thumbnail.png' : '/video-thumbnail.png'}
                     alt=""
                     className="absolute inset-0 w-full h-full object-cover"
                     style={{ filter: isLocked ? 'brightness(0.45)' : isCompleted ? 'brightness(0.6)' : 'brightness(0.75)' }}

@@ -187,7 +187,11 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                   className="relative flex flex-col items-center justify-center gap-4"
                   style={{ background: '#0d0f14', aspectRatio: '16/9' }}
                 >
-                  <img src="/video-thumbnail.png" alt="" className="absolute inset-0 w-full h-full object-cover brightness-50" />
+                  <img
+                    src={video.order_no === 1 ? '/video-1-thumbnail.png' : '/video-thumbnail.png'}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover brightness-50"
+                  />
                   <div className="relative z-10 flex flex-col items-center gap-3">
                     <div
                       className="w-16 h-16 rounded-full flex items-center justify-center cursor-pointer transition-transform active:scale-95"
