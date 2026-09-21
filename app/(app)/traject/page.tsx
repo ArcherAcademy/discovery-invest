@@ -146,7 +146,9 @@ export default function TrajectPage() {
                             ? '/video-3-thumbnail.png'
                             : i === 3
                               ? '/video-4-thumbnail.png'
-                              : '/video-thumbnail.png'
+                              : i === 4
+                                ? '/video-5-thumbnail.png'
+                                : '/video-thumbnail.png'
                     }
                     alt=""
                     className="absolute inset-0 w-full h-full object-cover"
