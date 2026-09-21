@@ -113,7 +113,13 @@ export default function HomePage() {
             ) : (
               <Link href={heroHref} className="group relative flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-foreground text-background">
                 <img
-                  src={featuredVideo.index === 0 ? '/video-1-thumbnail.png' : '/video-thumbnail.png'}
+                  src={
+                    featuredVideo.index === 0
+                      ? '/video-1-thumbnail.png'
+                      : featuredVideo.index === 1
+                        ? '/video-2-thumbnail.png'
+                        : '/video-thumbnail.png'
+                  }
                   alt=""
                   className="absolute inset-0 size-full object-cover opacity-45 transition-transform duration-300 group-hover:scale-105"
                 />

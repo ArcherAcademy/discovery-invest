@@ -188,7 +188,13 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                   style={{ background: '#0d0f14', aspectRatio: '16/9' }}
                 >
                   <img
-                    src={video.order_no === 1 ? '/video-1-thumbnail.png' : '/video-thumbnail.png'}
+                    src={
+                      video.order_no === 1
+                        ? '/video-1-thumbnail.png'
+                        : video.order_no === 2
+                          ? '/video-2-thumbnail.png'
+                          : '/video-thumbnail.png'
+                    }
                     alt=""
                     className="absolute inset-0 w-full h-full object-cover brightness-50"
                   />
