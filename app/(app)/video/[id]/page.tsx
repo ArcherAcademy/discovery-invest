@@ -190,8 +190,8 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                 >
                   <img
                     src={
-                      video.order_no === 1
-                        ? '/video-1-thumbnail.png'
+video.order_no === 1
+                  ? '/images/video-1-thumbnail.png'
                         : video.order_no === 2
                           ? '/video-2-thumbnail.png'
                           : video.order_no === 3

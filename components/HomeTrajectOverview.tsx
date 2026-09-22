@@ -31,7 +31,7 @@ const CORE_DESCRIPTIONS = [
 ]
 
 const CORE_THUMBNAILS = [
-  '/video-1-thumbnail.png',
+  '/images/video-1-thumbnail.png',
   '/video-2-thumbnail.png',
   '/video-3-thumbnail.png',
   '/video-4-thumbnail.png',

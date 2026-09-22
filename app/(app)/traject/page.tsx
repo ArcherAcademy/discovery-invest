@@ -121,7 +121,7 @@ export default function TrajectPage() {
                   <img
                     src={
                       i === 0
-                        ? '/video-1-thumbnail.png'
+                        ? '/images/video-1-thumbnail.png'
                         : i === 1
                           ? '/video-2-thumbnail.png'
                           : i === 2

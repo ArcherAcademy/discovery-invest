@@ -115,7 +115,7 @@ export default function HomePage() {
                 <img
                   src={
                     featuredVideo.index === 0
-                      ? '/video-1-thumbnail.png'
+                      ? '/images/video-1-thumbnail.png'
                       : featuredVideo.index === 1
                         ? '/video-2-thumbnail.png'
                         : featuredVideo.index === 2
