@@ -22,9 +22,9 @@ interface HomeTrajectOverviewProps {
 }
 
 const CORE_DESCRIPTIONS = [
-  'Waarom beleggen geen keuze meer is maar een verdediging.',
-  'De drie fases van vermogen, en in welke jij zit.',
-  'Het enige getal dat telt als je rendementen vergelijkt.',
+  'Waarom je pensioen niet vanzelfsprekend is, en wat inflatie met je koopkracht doet.',
+  'Waarom je vermogen daalt na je pensioen, en hoe je dat omdraait.',
+  'Het ene getal dat bepaalt of je over 20 jaar rijker of armer bent.',
   'Waarom kosten op lange termijn duizenden euro’s verschil maken.',
   'Je volledige financiële leven op één scherm.',
   'Hoe een plan over tien tot vijfentwintig jaar er concreet uitziet.',
