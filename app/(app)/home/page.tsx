@@ -101,6 +101,19 @@ export default function HomePage() {
                   key={featuredVideo.id}
                   src={coreVideos[featuredVideo.index]?.video_url ?? ''}
                   videoDbId={featuredVideo.id}
+                  thumbnailUrl={
+                    featuredVideo.index === 0
+                      ? '/images/video-1-thumbnail.png'
+                      : featuredVideo.index === 1
+                        ? '/video-2-thumbnail.png'
+                        : featuredVideo.index === 2
+                          ? '/video-3-thumbnail.png'
+                          : featuredVideo.index === 3
+                            ? '/video-4-thumbnail.png'
+                            : featuredVideo.index === 4
+                              ? '/video-5-thumbnail.png'
+                              : '/video-6-thumbnail.png'
+                  }
                   completed={featuredVideo.status === 'completed'}
                   initialProgressPct={featuredVideo.progressPct}
                   nextVideoTitle={featuredNextVideo?.title ?? null}

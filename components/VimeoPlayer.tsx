@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Player from '@vimeo/player'
-import { CheckCircle2, ExternalLink, RefreshCw, SkipForward, X, Trophy, FileText } from 'lucide-react'
+import { CheckCircle2, ExternalLink, FileText, Play, RefreshCw, SkipForward, Trophy, X } from 'lucide-react'
 
 function parseVimeoId(src: string): number | null {
   const m = src.match(/(?:vimeo\.com\/|video\/)(\d+)/)
@@ -53,6 +53,7 @@ export default function VimeoPlayer({
   useEffect(() => { onAutoNextRef.current = onAutoNext }, [onAutoNext])
 
   const [ended, setEnded] = useState(false)
+  const [hasStarted, setHasStarted] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [cancelled, setCancelled] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -68,6 +69,7 @@ export default function VimeoPlayer({
     lastTrackedProgressRef.current = Math.floor(initialProgressPct / 10) * 10
     progressRequestRef.current = Promise.resolve()
     setEnded(false)
+    setHasStarted(false)
     setCountdown(null)
     setCancelled(false)
     setErrorMsg(null)
@@ -170,12 +172,6 @@ export default function VimeoPlayer({
     })
     playerRef.current = player
 
-    // Laad de thumbnail los van de speler, zodat ook een geblokkeerde embed een nette fallback heeft.
-    fetch(`https://vimeo.com/api/v2/video/${vimeoId}.json`)
-      .then(response => response.ok ? response.json() : null)
-      .then(json => setThumbnailUrl(json?.[0]?.thumbnail_large ?? null))
-      .catch(() => undefined)
-
     player.ready().then(async () => {
       try {
         const d = await player.getDuration()
@@ -197,6 +193,7 @@ export default function VimeoPlayer({
     })
 
     const handlePlay = () => {
+      setHasStarted(true)
       if (marked.current || startedTrackedRef.current) return
       startedTrackedRef.current = true
       trackProgress('started')
@@ -240,12 +237,35 @@ export default function VimeoPlayer({
   const playerLoadError = errorMsg?.includes('laden van de video') ?? false
   const vimeoPageUrl = `https://vimeo.com/${vimeoId}`
 
+  const handlePosterPlay = async () => {
+    try {
+      await playerRef.current?.play()
+      setHasStarted(true)
+    } catch (error) {
+      console.error('[v0] Vimeo play starten mislukt:', error)
+    }
+  }
+
   return (
     <div className="w-full">
       {/* Player + end-screen overlay */}
       <div className="relative w-full" style={{ aspectRatio: '16/9', background: '#000', borderRadius: '1rem', overflow: 'hidden' }}>
         {/* Vimeo player container */}
         <div ref={containerRef} className="absolute inset-0 w-full h-full" />
+
+        {!hasStarted && !playerLoadError && thumbnailUrl && (
+          <button
+            type="button"
+            onClick={handlePosterPlay}
+            aria-label="Video afspelen"
+            className="absolute inset-0 z-10 flex items-center justify-center overflow-hidden bg-black focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-white"
+          >
+            <img src={thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" />
+            <span className="relative flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl transition-transform hover:scale-105">
+              <Play size={24} fill="currentColor" className="ml-1" />
+            </span>
+          </button>
+        )}
 
         {playerLoadError && !ended && (
           <div
