@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowRight, ExternalLink, X } from 'lucide-react'
+import { ArrowRight, X } from 'lucide-react'
 
 const EVENT_URL = 'https://workshops.archerinvest.be'
-const INTRO_VIDEO_URL = 'https://player.vimeo.com/video/1229085246?dnt=1&title=0&byline=0&portrait=0'
+const INTRO_VIDEO_URL = 'https://player.vimeo.com/video/1229085246?dnt=1&title=0&byline=0&portrait=0&autoplay=1&muted=1&playsinline=1'
 
 interface InvestAvondUnlockModalProps {
   open: boolean
@@ -45,7 +45,7 @@ export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: In
         role="dialog"
         aria-modal="true"
         aria-labelledby="invest-avond-unlock-title"
-        className="relative my-auto flex w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border bg-card text-card-foreground shadow-2xl sm:grid sm:grid-cols-[0.9fr_1.1fr]"
+        className="relative my-auto flex w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-2xl sm:grid sm:grid-cols-[minmax(270px,0.82fr)_minmax(390px,1.18fr)] sm:rounded-3xl"
       >
         <button
           type="button"
@@ -56,7 +56,7 @@ export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: In
           <X size={18} />
         </button>
 
-        <div className="order-1 flex aspect-video bg-foreground sm:order-2 sm:aspect-auto sm:min-h-full">
+        <div className="order-1 flex aspect-video min-h-0 w-full bg-foreground sm:order-2 sm:aspect-auto sm:min-h-[360px]">
           <iframe
             src={INTRO_VIDEO_URL}
             title="Wat is een kennismaking event?"
@@ -66,7 +66,7 @@ export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: In
           />
         </div>
 
-        <div className="order-2 flex flex-col gap-5 p-6 sm:order-1 sm:justify-center sm:p-8">
+        <div className="order-2 flex flex-col gap-4 p-5 sm:order-1 sm:justify-center sm:gap-5 sm:p-8">
           <div className="flex flex-col gap-3">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Proficiat</p>
             <h2 id="invest-avond-unlock-title" className="text-balance text-2xl font-bold tracking-tight sm:text-3xl">
@@ -89,10 +89,6 @@ export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: In
             {isUnlocking ? null : <ArrowRight size={17} />}
           </button>
 
-          <p className="flex items-center gap-1.5 text-xs leading-5 text-muted-foreground">
-            <ExternalLink size={12} />
-            Je wordt geopend op de kennismakingseventpagina.
-          </p>
         </div>
       </div>
     </div>
