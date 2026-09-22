@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { FileText, Lock, Play, Clock } from 'lucide-react'
 import { useApp } from '@/components/app-context'
 import PdfThumbnail from '@/components/PdfThumbnail'
+import { VermogensavondCta } from '@/components/VermogensavondCta'
 
 // Accent colours per video slot (index 0–5)
 const CORE_COLORS = ['#2500F5', '#2500F5', '#2500F5', '#2500F5', '#2500F5', '#2500F5']
@@ -23,9 +24,9 @@ function fmt(seconds: number) {
 }
 
 export default function TrajectPage() {
-  const { videos, progress, coreCompleted, allCoreCompleted, investAvondGeclaimd } = useApp()
+  const { videos, progress, coreCompleted, allCoreCompleted } = useApp()
   const progressMap = new Map(progress.map(p => [p.video_id, p]))
-  const bonusUnlocked = allCoreCompleted && investAvondGeclaimd
+  const bonusUnlocked = allCoreCompleted
   const pct = Math.round((coreCompleted / 6) * 100)
 
   // Split live database videos into core and bonus
@@ -250,7 +251,9 @@ export default function TrajectPage() {
         </div>
       </div>
 
-      {/* Bonus videos — subordinate, locked */}
+      <VermogensavondCta />
+
+      {/* Bonus videos — available after all six core videos */}
       <section id="bonusmateriaal" className="scroll-mt-6">
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex flex-col gap-1">
@@ -258,7 +261,7 @@ export default function TrajectPage() {
               Jouw bonusmateriaal
             </h2>
             <p className="text-xs leading-5" style={{ color: 'rgba(13,15,20,0.5)' }}>
-              Na alle 6 kernvideo&apos;s bekijk je eerst de korte Vermogensavond-video. Daarna wordt je bonusmateriaal vrijgegeven.
+              Na alle 6 kernvideo&apos;s wordt je bonusmateriaal vrijgegeven.
             </p>
           </div>
           {!bonusUnlocked && (

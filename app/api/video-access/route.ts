@@ -62,20 +62,6 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    const { data: funnel } = await supabase
-      .from('demo_invest_user_funnel')
-      .select('invest_avond_geclaimd')
-      .eq('user_id', authUser.id)
-      .maybeSingle()
-
-    if (!funnel?.invest_avond_geclaimd) {
-      return NextResponse.json({
-        allowed: false,
-        reason: 'invest_avond_required',
-        message: 'Bekijk eerst de Vermogensavond-video en klik op de eventknop.',
-      })
-    }
-
     return NextResponse.json({ allowed: true })
   }
 

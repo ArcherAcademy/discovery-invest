@@ -11,16 +11,14 @@ import {
 import { useApp } from '@/components/app-context'
 import { t } from '@/lib/i18n'
 import VimeoPlayer from '@/components/VimeoPlayer'
-import InvestAvondUnlockModal from '@/components/InvestAvondUnlockModal'
 import PdfItem from '@/components/PdfItem'
 
 
 export default function VideoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const { videos, progress, coreCompleted, refresh, locale, loading, investAvondGeclaimd } = useApp()
+  const { videos, progress, coreCompleted, refresh, locale, loading } = useApp()
   const tr = t(locale)
   const router = useRouter()
-  const [investAvondModalOpen, setInvestAvondModalOpen] = useState(false)
 
   const video = videos.find(v => v.id === id)
   const coreVideos = videos.filter(v => v.section === 'core')
@@ -34,8 +32,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
   const prevVideo = allVideos[currentIndex - 1] ?? null
   // True only for video 6 itself — not derived from nextVideo, since bonus items
   // always follow core videos in allVideos and would otherwise mask this check.
-  // After the last core video, the CTA should route to /traject (celebration +
-  // gratis-avond popup) rather than jump straight into bonus content.
   const isLastCoreVideo = isCoreVideo && coreIndex === coreVideos.length - 1
 
   const progressMap = new Map(progress.map(p => [p.video_id, p]))
@@ -85,7 +81,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
   function handleCompleted() {
     setCompleted(true)
     refresh()
-    if (isLastCoreVideo) setInvestAvondModalOpen(true)
   }
 
   if (!video) {
@@ -174,9 +169,9 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                   onCompleted={handleCompleted}
                   onUnlockNext={() => refresh()}
                   onAutoNext={() => {
-                    if (isLastCoreVideo) {
-                      setInvestAvondModalOpen(true)
-                    } else if (nextVideo) {
+                  if (isLastCoreVideo) {
+                    router.push('/traject#bonusmateriaal')
+                  } else if (nextVideo) {
                       router.push(`/video/${nextVideo.id}`)
                     }
                   }}
@@ -299,9 +294,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
               </div>
               <p className="text-sm font-medium" style={{ color: '#0d0f14' }}>
                 {isLastCoreVideo
-                  ? investAvondGeclaimd
-                    ? 'Alle 6 kernvideo\'s bekeken. Je bonusmateriaal is vrijgespeeld!'
-                    : 'Alle 6 kernvideo\'s bekeken. Bekijk eerst de Vermogensavond-video.'
+                  ? 'Alle 6 kernvideo\'s bekeken. Je bonusmateriaal is vrijgespeeld!'
                   : nextVideo && nextVideo.section === 'core'
                     ? `Goed gedaan! Ga door naar video ${coreVideos.findIndex(v => v.id === nextVideo.id) + 1}.`
                     : 'Goed gedaan! Je hebt deze video bekeken.'}
@@ -337,20 +330,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                     </div>
                   )
                 }
-                if (!investAvondGeclaimd) {
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => setInvestAvondModalOpen(true)}
-                      className="flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-full transition-all"
-                      style={{ background: '#2500F5', color: '#fff', boxShadow: '0 4px 16px rgba(37,0,245,0.35)' }}
-                    >
-                      <Trophy size={14} />
-                      Bekijk de Vermogensavond
-                    </button>
-                  )
-                }
-
                 return (
                   <Link
                     href="/traject#bonusmateriaal"
@@ -594,13 +573,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
           </div>
         </div>
       </div>
-      <InvestAvondUnlockModal
-        open={investAvondModalOpen && isLastCoreVideo}
-        onUnlocked={async () => {
-          await refresh()
-        }}
-        onClose={() => setInvestAvondModalOpen(false)}
-      />
     </div>
   )
 }
