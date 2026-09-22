@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Player from '@vimeo/player'
-import { CheckCircle2, RefreshCw, SkipForward, X, Trophy, FileText } from 'lucide-react'
+import { CheckCircle2, ExternalLink, RefreshCw, SkipForward, X, Trophy, FileText } from 'lucide-react'
 
 function parseVimeoId(src: string): number | null {
   const m = src.match(/(?:vimeo\.com\/|video\/)(\d+)/)
@@ -10,6 +10,8 @@ function parseVimeoId(src: string): number | null {
   if (/^\d+$/.test(src.trim())) return Number(src.trim())
   return null
 }
+
+type VimeoUrl = `https://vimeo.com/${string}` | `https://player.vimeo.com/video/${string}`
 
 interface VimeoPlayerProps {
   src: string
@@ -55,6 +57,7 @@ export default function VimeoPlayer({
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
 
   const vimeoId = parseVimeoId(src)
+  const vimeoUrl = (src.startsWith('https://') ? src : `https://vimeo.com/${vimeoId}`) as VimeoUrl
 
   // Reset all state when video changes
   useEffect(() => {
@@ -153,7 +156,7 @@ export default function VimeoPlayer({
     if (!containerRef.current || !vimeoId) return
 
     const player = new Player(containerRef.current, {
-      id: vimeoId,
+      url: vimeoUrl,
       responsive: true,
       title: false,
       byline: false,
@@ -164,6 +167,12 @@ export default function VimeoPlayer({
     })
     playerRef.current = player
 
+    // Laad de thumbnail los van de speler, zodat ook een geblokkeerde embed een nette fallback heeft.
+    fetch(`https://vimeo.com/api/v2/video/${vimeoId}.json`)
+      .then(response => response.ok ? response.json() : null)
+      .then(json => setThumbnailUrl(json?.[0]?.thumbnail_large ?? null))
+      .catch(() => undefined)
+
     player.ready().then(async () => {
       try {
         const d = await player.getDuration()
@@ -172,15 +181,6 @@ export default function VimeoPlayer({
           if (!completed && initialProgressPct > 0 && initialProgressPct < 90) {
             await player.setCurrentTime(d * (initialProgressPct / 100))
           }
-        }
-      } catch { /* ignore */ }
-
-      // Fetch thumbnail for end-screen poster
-      try {
-        const data = await fetch(`https://vimeo.com/api/v2/video/${vimeoId}.json`)
-        if (data.ok) {
-          const json = await data.json()
-          setThumbnailUrl(json[0]?.thumbnail_large ?? null)
         }
       } catch { /* ignore */ }
     }).catch((err: unknown) => {
@@ -224,7 +224,7 @@ export default function VimeoPlayer({
       player.destroy().catch(() => {})
       playerRef.current = null
     }
-  }, [vimeoId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [src, vimeoId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!vimeoId) {
     return (
@@ -234,12 +234,40 @@ export default function VimeoPlayer({
     )
   }
 
+  const playerLoadError = errorMsg?.includes('laden van de video') ?? false
+  const vimeoPageUrl = `https://vimeo.com/${vimeoId}`
+
   return (
     <div className="w-full">
       {/* Player + end-screen overlay */}
       <div className="relative w-full" style={{ aspectRatio: '16/9', background: '#000', borderRadius: '1rem', overflow: 'hidden' }}>
         {/* Vimeo player container */}
         <div ref={containerRef} className="absolute inset-0 w-full h-full" />
+
+        {playerLoadError && !ended && (
+          <div
+            className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 px-6 text-center"
+            style={{
+              background: thumbnailUrl
+                ? `linear-gradient(rgba(8,10,16,0.68), rgba(8,10,16,0.9)), url(${thumbnailUrl}) center/cover no-repeat`
+                : '#080a10',
+            }}
+          >
+            <div className="flex max-w-sm flex-col gap-1">
+              <p className="text-base font-bold text-primary-foreground">Video kan hier niet afspelen</p>
+              <p className="text-sm leading-5 text-primary-foreground/65">Open de video rechtstreeks in Vimeo om meteen verder te kijken.</p>
+            </div>
+            <a
+              href={vimeoPageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground shadow-lg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              <ExternalLink size={16} />
+              Open video
+            </a>
+          </div>
+        )}
 
         {/* End screen overlay — appears when video ends */}
         {ended && (
@@ -264,7 +292,7 @@ export default function VimeoPlayer({
                 <div>
                   <p className="text-white font-bold text-lg leading-tight">Alle video&apos;s bekeken</p>
                   <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                    Je bonus en persoonlijk oriëntatiegesprek zijn vrijgespeeld.
+                    Je bonusmateriaal is vrijgespeeld.
                   </p>
                 </div>
                 <button
@@ -352,14 +380,14 @@ export default function VimeoPlayer({
       </div>
 
       {/* Error + fallback button — only shown on error */}
-      {(errorMsg || (ended && !marked.current)) && (
+      {((errorMsg && !playerLoadError) || (ended && !marked.current)) && (
         <div className="flex items-center justify-between gap-3 mt-2 px-1">
-          {errorMsg && (
+          {errorMsg && !playerLoadError && (
             <span className="text-xs" style={{ color: '#dc2626' }}>
               {errorMsg}
             </span>
           )}
-          {!marked.current && (ended || errorMsg) && (
+          {!marked.current && ended && (
             <button
               onClick={() => doComplete('manual')}
               className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-colors shrink-0"

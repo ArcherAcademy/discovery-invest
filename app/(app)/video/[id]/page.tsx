@@ -278,7 +278,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                 <span className="font-semibold" style={{ color: '#2500F5' }}>
                   Nog {videosLeft} video{videosLeft !== 1 ? "'s" : ''}
                 </span>
-                {' '}tot je bonus en persoonlijk oriëntatiegesprek vrijspeelt
+                {' '}tot je bonusmateriaal vrijspeelt
               </p>
             </div>
           )}
@@ -296,7 +296,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
               </div>
               <p className="text-sm font-medium" style={{ color: '#0d0f14' }}>
                 {isLastCoreVideo
-                  ? 'Alle 6 kernvideo\'s bekeken. Je bonus en persoonlijk oriëntatiegesprek zijn vrijgespeeld!'
+                  ? 'Alle 6 kernvideo\'s bekeken. Je bonusmateriaal is vrijgespeeld!'
                   : nextVideo && nextVideo.section === 'core'
                     ? `Goed gedaan! Ga door naar video ${coreVideos.findIndex(v => v.id === nextVideo.id) + 1}.`
                     : 'Goed gedaan! Je hebt deze video bekeken.'}
@@ -318,8 +318,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
             ) : <div />}
 
             {(() => {
-              // On the last core video (video 6): show "Bekijk je bonus" → /traject after completion,
-              // zodat het afrondscherm en het vrijgespeelde oriëntatiegesprek zichtbaar blijven.
+              // Na de laatste kernvideo leidt de gebruiker rechtstreeks naar het bonusmateriaal.
               if (isLastCoreVideo) {
                 if (!completed) {
                   return (
@@ -335,7 +334,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                 }
                 return (
                   <Link
-                    href="/traject?vrijgespeeld=1"
+                    href="/traject#bonusmateriaal"
                     className="flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-full transition-all"
                     style={{ background: '#2500F5', color: '#fff', boxShadow: '0 4px 16px rgba(37,0,245,0.35)' }}
                   >
@@ -346,8 +345,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
               }
 
               if (!nextVideo) {
-                // Last item in the entire course (last bonus item): don't leave a dead end —
-                // stuur terug naar /traject waar het persoonlijke oriëntatiegesprek staat.
+                // Laat de gebruiker na het laatste bonusitem terugkeren naar het trajectoverzicht.
                 if (coreCompleted >= 6) {
                   return (
                     <Link
@@ -356,7 +354,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                       style={{ background: '#2500F5', color: '#fff', boxShadow: '0 4px 16px rgba(37,0,245,0.35)' }}
                     >
                       <Trophy size={14} />
-                      Plan je oriëntatiegesprek
+                      Terug naar je traject
                     </Link>
                   )
                 }
