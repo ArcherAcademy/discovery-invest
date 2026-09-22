@@ -165,6 +165,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                   key={video.id}
                   src={video.video_url}
                   videoDbId={video.id}
+                  thumbnailUrl={video.section === 'core' ? '/images/video-1-thumbnail.png' : video.thumbnail_url}
                   completed={completed}
                   nextVideoTitle={nextVideo?.title ?? null}
                   nextContentType={nextVideo?.content_type ?? null}
@@ -189,25 +190,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                   style={{ background: '#0d0f14', aspectRatio: '16/9' }}
                 >
                   <img
-                    src={
-video.order_no === 1
-                  ? '/images/video-1-thumbnail.png'
-                        : video.order_no === 2
-                          ? '/video-2-thumbnail.png'
-                          : video.order_no === 3
-                            ? '/video-3-thumbnail.png'
-                            : video.order_no === 4
-                              ? '/video-4-thumbnail.png'
-                              : video.order_no === 5
-                                ? '/video-5-thumbnail.png'
-                                : video.order_no === 6
-                                  ? '/video-6-thumbnail.png'
-                                  : video.title.toLowerCase().includes('technische analyse')
-                                    ? '/bonus-technische-analyse-thumbnail.png'
-                                    : video.title.toLowerCase().includes('masterclass')
-                                      ? '/bonus-masterclass-thumbnail.png'
-                                      : '/video-thumbnail.png'
-                    }
+                    src={video.section === 'core' ? '/images/video-1-thumbnail.png' : video.title.toLowerCase().includes('technische analyse') ? '/bonus-technische-analyse-thumbnail.png' : video.title.toLowerCase().includes('masterclass') ? '/bonus-masterclass-thumbnail.png' : '/video-thumbnail.png'}
                     alt=""
                     className="absolute inset-0 w-full h-full object-cover brightness-50"
                   />

@@ -16,6 +16,7 @@ type VimeoUrl = `https://vimeo.com/${string}` | `https://player.vimeo.com/video/
 interface VimeoPlayerProps {
   src: string
   videoDbId: string
+  thumbnailUrl?: string | null
   completed: boolean
   initialProgressPct?: number
   nextVideoTitle?: string | null   // null = last video
@@ -30,6 +31,7 @@ interface VimeoPlayerProps {
 export default function VimeoPlayer({
   src,
   videoDbId,
+  thumbnailUrl: fallbackThumbnailUrl = null,
   completed,
   initialProgressPct = 0,
   nextVideoTitle,
@@ -54,7 +56,7 @@ export default function VimeoPlayer({
   const [countdown, setCountdown] = useState<number | null>(null)
   const [cancelled, setCancelled] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(fallbackThumbnailUrl)
 
   const vimeoId = parseVimeoId(src)
   const vimeoUrl = (src.startsWith('https://') ? src : `https://vimeo.com/${vimeoId}`) as VimeoUrl
@@ -69,6 +71,7 @@ export default function VimeoPlayer({
     setCountdown(null)
     setCancelled(false)
     setErrorMsg(null)
+    setThumbnailUrl(fallbackThumbnailUrl)
     if (countdownTimerRef.current) clearTimeout(countdownTimerRef.current)
   }, [videoDbId])
 

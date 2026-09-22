@@ -30,14 +30,7 @@ const CORE_DESCRIPTIONS = [
   'Hoe een plan over tien tot vijfentwintig jaar er concreet uitziet.',
 ]
 
-const CORE_THUMBNAILS = [
-  '/images/video-1-thumbnail.png',
-  '/video-2-thumbnail.png',
-  '/video-3-thumbnail.png',
-  '/video-4-thumbnail.png',
-  '/video-5-thumbnail.png',
-  '/video-6-thumbnail.png',
-]
+const CORE_THUMBNAILS = Array.from({ length: 6 }, () => '/images/video-1-thumbnail.png')
 
 function formatDuration(minutes: number, contentType: string) {
   if (contentType === 'pdf') return 'PDF'
