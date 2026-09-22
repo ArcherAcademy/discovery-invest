@@ -66,12 +66,12 @@ function VideoThumbnail({
       />
       <div className="absolute inset-0 bg-primary/0 transition-colors duration-300 group-hover:bg-primary/35" />
       <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 group-hover:opacity-100">
-        <span className="flex size-9 items-center justify-center rounded-full bg-primary-foreground text-primary shadow-lg">
+        <span className="flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
           <Play size={14} fill="currentColor" />
         </span>
       </span>
       {completed ? (
-        <span className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md transition-colors group-hover:bg-primary-foreground group-hover:text-primary">
+        <span className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md">
           <Check size={12} strokeWidth={3} />
         </span>
       ) : null}
