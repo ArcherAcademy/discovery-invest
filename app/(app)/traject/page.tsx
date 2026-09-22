@@ -23,8 +23,9 @@ function fmt(seconds: number) {
 }
 
 export default function TrajectPage() {
-  const { videos, progress, coreCompleted, allCoreCompleted } = useApp()
+  const { videos, progress, coreCompleted, allCoreCompleted, investAvondGeclaimd } = useApp()
   const progressMap = new Map(progress.map(p => [p.video_id, p]))
+  const bonusUnlocked = allCoreCompleted && investAvondGeclaimd
   const pct = Math.round((coreCompleted / 6) * 100)
 
   // Split live database videos into core and bonus
@@ -257,12 +258,12 @@ export default function TrajectPage() {
               Jouw bonusmateriaal
             </h2>
             <p className="text-xs leading-5" style={{ color: 'rgba(13,15,20,0.5)' }}>
-              Na alle 6 kernvideo&apos;s krijg je toegang tot je bonusmateriaal.
+              Na alle 6 kernvideo&apos;s bekijk je eerst de korte Vermogensavond-video. Daarna wordt je bonusmateriaal vrijgegeven.
             </p>
           </div>
-          {!allCoreCompleted && (
+          {!bonusUnlocked && (
             <span className="flex shrink-0 items-center gap-1 text-xs" style={{ color: 'rgba(13,15,20,0.4)' }}>
-              <Lock size={10} /> Kijk eerst alle 6 kernvideo&apos;s
+              <Lock size={10} /> {allCoreCompleted ? 'Bekijk eerst de Vermogensavond' : 'Kijk eerst alle 6 kernvideo&apos;s'}
             </span>
           )}
         </div>
@@ -270,7 +271,7 @@ export default function TrajectPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {bonusVideos.map((video) => {
             const isPdf = video.content_type === 'pdf'
-            return allCoreCompleted ? (
+            return bonusUnlocked ? (
               <Link
                 key={video.id}
                 href={`/video/${video.id}`}
