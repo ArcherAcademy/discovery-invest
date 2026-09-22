@@ -89,13 +89,38 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { error: progressError } = await supabase
-    .from('demo_invest_video_progress')
-    .upsert(upsertPayload, { onConflict: 'user_id,video_id' })
+  let progressError: { message: string; details?: string | null } | null = null
+
+  if (action === 'completed') {
+    const result = await supabase
+      .from('demo_invest_video_progress')
+      .upsert(upsertPayload, { onConflict: 'user_id,video_id' })
+    progressError = result.error
+  } else {
+    // Een late started/progress-request mag een reeds voltooide video nooit terugzetten.
+    const { data: updatedRows, error: updateError } = await supabase
+      .from('demo_invest_video_progress')
+      .update(upsertPayload)
+      .eq('user_id', authUser.id)
+      .eq('video_id', videoId)
+      .neq('status', 'completed')
+      .select('video_id')
+
+    progressError = updateError
+
+    if (!progressError && (updatedRows?.length ?? 0) === 0 && !existingProgress) {
+      const insertResult = await supabase
+        .from('demo_invest_video_progress')
+        .upsert(upsertPayload, {
+          onConflict: 'user_id,video_id',
+          ignoreDuplicates: true,
+        })
+      progressError = insertResult.error
+    }
+  }
 
   if (progressError) {
-    console.error('[v0] video_progress upsert failed:', progressError.message, progressError.details)
-    // Hard fail — do NOT silently continue; caller must know the write failed
+    console.error('[v0] video_progress write failed:', progressError.message, progressError.details)
     return NextResponse.json({ error: 'progress_upsert_failed', detail: progressError.message }, { status: 500 })
   }
 
