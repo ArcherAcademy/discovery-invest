@@ -73,7 +73,7 @@ export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: In
               Je hebt alle 6 video&apos;s bekeken.
             </h2>
             <p className="text-pretty text-sm leading-6 text-muted-foreground">
-              Bekijk deze korte video over het kennismaking event. Klik daarna op de knop om je plaats te reserveren. Je bonusmateriaal wordt meteen daarna vrijgegeven.
+              Klik op de knop om een kennismakingsevent van ons bij te wonen. Je bonusmateriaal is vrijgegeven.
             </p>
           </div>
 
