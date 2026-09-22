@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
-import { Clock, Settings, LogOut, Home, PlaySquare, CalendarDays, GraduationCap, ShieldCheck, Menu, X } from 'lucide-react'
+import { Clock, Settings, LogOut, Home, PlaySquare, CalendarDays, GraduationCap, ShieldCheck } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useApp } from './app-context'
 import CallBookingBlock from './CallBookingBlock'
 import { SidebarCallStatus } from './SidebarCallStatus'
@@ -192,84 +192,80 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   )
 }
 
-/**
- * Mobile topbar: fixed header with logo + hamburger. Renders only < sm.
- * Tapping the hamburger opens a full-height slide-in drawer with the same
- * nav content as the desktop sidebar.
- */
-function MobileTopbar() {
-  const [open, setOpen] = useState(false)
-
-  // Lock body scroll while the drawer is open, and close on route change.
+function MobileBottomNav() {
   const pathname = usePathname()
-  useEffect(() => { setOpen(false) }, [pathname])
-  useEffect(() => {
-    if (open) {
-      const prev = document.body.style.overflow
-      document.body.style.overflow = 'hidden'
-      return () => { document.body.style.overflow = prev }
-    }
-  }, [open])
+  const { user, locale } = useApp()
+  const tr = t(locale)
+  const isMentorOrAdmin = user?.role === 'admin' || user?.role === 'mentor'
+
+  const items: NavItem[] = [
+    { label: tr.nav.home, href: '/home', icon: <Home size={21} /> },
+    { label: tr.nav.traject, href: '/traject', icon: <PlaySquare size={21} /> },
+    {
+      label: tr.nav.events,
+      href: 'https://workshops.archerinvest.be',
+      icon: <CalendarDays size={21} />,
+      external: true,
+    },
+    {
+      label: tr.nav.masterclass,
+      href: 'https://archerinvest.be',
+      icon: <GraduationCap size={21} />,
+      external: true,
+    },
+  ]
+
+  if (isMentorOrAdmin) {
+    items.push({ label: tr.nav.adminCenter, href: '/admin', icon: <ShieldCheck size={21} /> })
+  }
 
   return (
-    <div className="sm:hidden">
-      {/* Fixed top bar */}
-      <div
-        className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4"
-        style={{ height: '56px', background: '#ffffff', borderBottom: '1px solid #e8ecf4' }}
-      >
-        <Image src="/archer-logo.png" alt="Archer" width={72} height={18} className="w-[72px] h-auto" priority />
-        <button
-          onClick={() => setOpen(true)}
-          aria-label="Open menu"
-          className="flex items-center justify-center rounded-full"
-          style={{ width: 44, height: 44, color: '#0d0f14' }}
-        >
-          <Menu size={22} />
-        </button>
-      </div>
+    <nav
+      aria-label="Hoofdnavigatie"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background pb-[env(safe-area-inset-bottom)] sm:hidden"
+    >
+      <ul className="flex min-h-20 items-stretch gap-1 px-2 py-2">
+        {items.map((item) => {
+          const active = !item.external && (pathname === item.href || pathname.startsWith(`${item.href}/`))
 
-      {/* Drawer overlay */}
-      {open && (
-        <div
-          className="fixed inset-0 z-50"
-          style={{ background: 'rgba(8,10,20,0.45)' }}
-          onClick={() => setOpen(false)}
-        >
-          <aside
-            className="absolute top-0 left-0 h-full w-[85%] max-w-[320px] flex flex-col"
-            style={{ background: '#ffffff' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-end px-3 pt-2 shrink-0">
-              <button
-                onClick={() => setOpen(false)}
-                aria-label="Sluit menu"
-                className="flex items-center justify-center rounded-full"
-                style={{ width: 44, height: 44, color: 'rgba(13,15,20,0.5)' }}
+          return (
+            <li key={item.href} className="flex min-w-0 flex-1">
+              <Link
+                href={item.href}
+                target={item.external ? '_blank' : undefined}
+                rel={item.external ? 'noopener noreferrer' : undefined}
+                aria-current={active ? 'page' : undefined}
+                aria-label={item.external ? `${item.label} openen in een nieuw tabblad` : item.label}
+                className={cn(
+                  'flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-center transition-colors',
+                  active ? 'bg-primary/10 text-primary' : 'text-muted-foreground',
+                )}
               >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="flex flex-col flex-1 min-h-0 -mt-2">
-              <SidebarContent onNavigate={() => setOpen(false)} />
-            </div>
-          </aside>
-        </div>
-      )}
-    </div>
+                <span aria-hidden="true">{item.icon}</span>
+                <span
+                  className={cn(
+                    'whitespace-nowrap font-medium leading-tight',
+                    isMentorOrAdmin ? 'text-[8px] min-[375px]:text-[9px]' : 'text-[9px] min-[375px]:text-[10px]',
+                  )}
+                >
+                  {item.label}
+                </span>
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+    </nav>
   )
 }
 
 export function Sidebar() {
   return (
     <>
-      {/* Mobile: fixed topbar + slide-in drawer, no static layout space reserved */}
-      <MobileTopbar />
+      <MobileBottomNav />
 
-      {/* Desktop / tablet: static sidebar */}
       <aside
-        className="hidden sm:flex flex-col h-full w-[220px] shrink-0"
+        className="hidden h-full w-[220px] shrink-0 flex-col sm:flex"
         style={{ background: '#ffffff', borderRight: '1px solid #e8ecf4' }}
       >
         <SidebarContent />

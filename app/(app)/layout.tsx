@@ -12,8 +12,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <AppProvider initialUser={user}>
       <div className="flex h-screen overflow-hidden bg-background">
         <Sidebar />
-        {/* pt-14 reserves space for the fixed mobile topbar (56px); sm+ has no fixed topbar so it's reset to 0 */}
-        <div className="flex flex-col flex-1 min-w-0 overflow-hidden pt-14 sm:pt-0">
+        {/* Op mobiel blijft onderaan ruimte vrij voor de vaste tabnavigatie. */}
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden pb-24 sm:pb-0">
           <ExpiredTrialBanner />
           <main className="flex-1 overflow-y-auto p-4 sm:p-6">
             {children}
