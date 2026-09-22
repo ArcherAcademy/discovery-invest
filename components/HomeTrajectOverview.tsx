@@ -138,7 +138,11 @@ export function HomeTrajectOverview({
                   {isActive ? (
                     <span className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground transition-colors group-hover:bg-primary-foreground group-hover:text-primary">
                       Start nu
-                      <ArrowRight size={15} aria-hidden="true" />
+                      <ArrowRight
+                        size={15}
+                        aria-hidden="true"
+                        className="transition-colors group-hover:!text-primary group-focus-visible:!text-primary"
+                      />
                     </span>
                   ) : isLocked ? (
                     <Lock size={17} className="text-muted-foreground" aria-label="Vergrendeld" />
