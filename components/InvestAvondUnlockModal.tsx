@@ -56,11 +56,11 @@ export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: In
           <X size={18} />
         </button>
 
-        <div className="order-1 flex aspect-video min-h-0 w-full bg-foreground sm:order-2 sm:aspect-auto sm:min-h-[360px]">
+        <div className="order-1 aspect-video min-h-0 w-full overflow-hidden bg-foreground sm:order-2">
           <iframe
             src={INTRO_VIDEO_URL}
             title="Wat is een kennismaking event?"
-            className="h-full min-h-56 w-full"
+            className="block h-full w-full border-0"
             allow="autoplay; fullscreen; picture-in-picture"
             allowFullScreen
           />
