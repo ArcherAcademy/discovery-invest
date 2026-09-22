@@ -30,6 +30,10 @@ interface UserRow {
   days_trial_left: number | null
   trial_expires_at: string | null
   completed_count: number
+  first_video_completed_at: string | null
+  qualified_at: string | null
+  lead_stage: 'Account aangemaakt' | 'Account geactiveerd' | 'Eerste video voltooid' | 'Gekwalificeerde lead' | 'Afspraak geboekt'
+  lead_priority: 'normaal' | 'middel' | 'hoog'
   current_video: { id: string; order: number; title: string } | null
   video_strip: VideoStrip[]
   event_booked: boolean
@@ -43,11 +47,19 @@ interface UserRow {
   quiz_submission: { submitted_at: string; score: number; answers: { question_no: number; chosen: string; correct: boolean }[] } | null
 }
 
-interface FunnelStep { label: string; count: number }
+interface FunnelStep {
+  label: string
+  count: number
+  conversionFromPrevious: number | null
+  dropoff: number
+  avgMinutesFromPrevious: number | null
+}
 interface VideoStat { videoId: string; order: number; title: string; dropout?: number; avg_pct?: number; started_count?: number }
 
 interface Insights {
   total: number
+  totalAccounts: number
+  qualifiedLeads: number
   dropoutPerVideo: (VideoStat & { dropout: number })[]
   avgDepthPerVideo: (VideoStat & { avg_pct: number; started_count: number })[]
   funnelSteps: FunnelStep[]
@@ -410,7 +422,7 @@ function UserDetailSlideOver({ user, onClose, onExtended }: { user: UserRow; onC
     })
   }
 
-  // ── Build timeline ────────────────────────────────────────────
+  // ── Build timeline ──────────────────────��─────────────────────
   // Each event has a numeric timestamp for strict sorting.
   // Impossible timestamps (started_at before activated_at) are detected and flagged.
   type TimelineEvent = {
@@ -957,7 +969,7 @@ function UserDetailSlideOver({ user, onClose, onExtended }: { user: UserRow; onC
 }
 
 // ── Main component ────────────────────────────────────────────
-type FilterStatus = 'all' | 'bezig' | 'voltooid' | 'inactief'
+type FilterStatus = 'all' | 'gekwalificeerd' | 'bezig' | 'voltooid' | 'inactief'
 
 export function VoortgangTab() {
   const [data, setData] = useState<{ userRows: UserRow[]; insights: Insights } | null>(null)
@@ -1036,8 +1048,9 @@ export function VoortgangTab() {
   const filtered = userRows.filter(u => {
     const msAge = u.ms_since_activity ?? (u.last_activity_at ? now - new Date(u.last_activity_at).getTime() : null)
     const matchFilter =
-      filter === 'all'      ? true :
-      filter === 'bezig'    ? u.completed_count > 0 && u.completed_count < 6 :
+      filter === 'all'             ? true :
+      filter === 'gekwalificeerd' ? u.completed_count >= 2 :
+      filter === 'bezig'           ? u.completed_count > 0 && u.completed_count < 6 :
       filter === 'voltooid' ? u.completed_count === 6 :
       filter === 'inactief' ? (msAge ?? 0) > 86400000 && u.completed_count < 6 : true
     const matchSearch = !search ||
@@ -1047,8 +1060,9 @@ export function VoortgangTab() {
   })
 
   const FILTERS: { id: FilterStatus; label: string }[] = [
-    { id: 'all',      label: 'Alle' },
-    { id: 'bezig',    label: 'Bezig' },
+    { id: 'all',             label: 'Alle' },
+    { id: 'gekwalificeerd', label: 'Gekwalificeerd' },
+    { id: 'bezig',           label: 'Bezig' },
     { id: 'voltooid', label: 'Voltooid' },
     { id: 'inactief', label: 'Inactief >24u' },
   ]
@@ -1061,7 +1075,7 @@ export function VoortgangTab() {
         <div>
           <h2 className="text-sm font-bold" style={{ color: TEXT }}>Voortgang & analyse</h2>
           <p className="text-xs mt-0.5" style={{ color: TEXT_DIM }}>
-            {insights.total} geactiveerde gebruiker{insights.total !== 1 ? 's' : ''}
+            {insights.totalAccounts} accounts · {insights.total} geactiveerd · {insights.qualifiedLeads} gekwalificeerd
           </p>
         </div>
         <button
@@ -1126,6 +1140,18 @@ export function VoortgangTab() {
                   <div className="w-40 shrink-0 min-w-0">
                     <p className="text-xs font-semibold truncate" style={{ color: TEXT }}>{u.name || u.email}</p>
                     {u.name && <p className="text-[10px] truncate" style={{ color: TEXT_DIM }}>{u.email}</p>}
+                  </div>
+
+                  <div className="w-36 shrink-0">
+                    <span
+                      className="inline-flex rounded-lg px-2 py-1 text-[10px] font-semibold"
+                      style={{
+                        background: u.lead_priority === 'hoog' ? GREEN_BG : u.lead_priority === 'middel' ? COBALT_08 : '#f0f3fb',
+                        color: u.lead_priority === 'hoog' ? GREEN : u.lead_priority === 'middel' ? COBALT : TEXT_DIM,
+                      }}
+                    >
+                      {u.lead_stage}
+                    </span>
                   </div>
 
                   {/* Video status dots — bigger, more prominent */}
@@ -1256,24 +1282,35 @@ export function VoortgangTab() {
         </InsightCard>
 
         {/* 3. Funnel */}
-        <InsightCard title="Conversietrechter">
-          <div className="space-y-2">
+        <InsightCard title="Beslisfunnel & leadkwaliteit">
+          <div className="flex flex-col gap-3">
             {insights.funnelSteps.map((step, i) => {
               const pct = funnelMax === 0 ? 0 : Math.round((step.count / funnelMax) * 100)
-              const isKey = step.label === 'Geactiveerd' || step.label === 'Event geboekt' || step.label.endsWith('voltooid')
+              const isQualified = step.label === 'Gekwalificeerde lead' || step.label === 'Afspraak geboekt'
               return (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="w-28 shrink-0">
-                    <p className="text-[10px] font-medium leading-tight" style={{ color: isKey ? TEXT : TEXT_DIM }}>{step.label}</p>
-                  </div>
-                  <div className="flex-1">
-                    <div className="h-4 rounded-full overflow-hidden" style={{ background: '#f0f3fb' }}>
-                      <div className="h-4 rounded-full transition-all" style={{ width: `${pct}%`, background: isKey ? COBALT : 'rgba(37,0,245,0.3)' }} />
+                <div key={step.label} className="flex flex-col gap-1.5">
+                  {i > 0 && (
+                    <div className="flex items-center justify-between text-[10px]" style={{ color: TEXT_DIM }}>
+                      <span>{step.conversionFromPrevious === null ? '—' : `${step.conversionFromPrevious}% conversie`} · {step.dropoff} uitval</span>
+                      <span>{step.avgMinutesFromPrevious === null ? 'Nog geen doorlooptijd' : `gem. ${formatMinutes(step.avgMinutesFromPrevious)}`}</span>
                     </div>
-                  </div>
-                  <div className="w-14 text-right shrink-0">
-                    <span className="text-xs font-bold" style={{ color: isKey ? TEXT : TEXT_DIM }}>{step.count}</span>
-                    <span className="text-[10px] ml-1" style={{ color: TEXT_DIM }}>{pct}%</span>
+                  )}
+                  <div className="flex items-center gap-3">
+                    <div className="w-32 shrink-0">
+                      <p className="text-[10px] font-semibold leading-tight" style={{ color: isQualified ? GREEN : TEXT }}>{step.label}</p>
+                    </div>
+                    <div className="flex-1">
+                      <div className="h-4 overflow-hidden rounded-full" style={{ background: '#f0f3fb' }}>
+                        <div
+                          className="h-4 rounded-full transition-all"
+                          style={{ width: `${pct}%`, background: isQualified ? GREEN : COBALT }}
+                        />
+                      </div>
+                    </div>
+                    <div className="w-16 shrink-0 text-right">
+                      <span className="text-xs font-bold" style={{ color: isQualified ? GREEN : TEXT }}>{step.count}</span>
+                      <span className="ml-1 text-[10px]" style={{ color: TEXT_DIM }}>{pct}%</span>
+                    </div>
                   </div>
                 </div>
               )

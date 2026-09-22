@@ -129,8 +129,31 @@ export async function POST(req: NextRequest) {
     // Count completed core videos from the fresh DB set (completedIds already includes this video
     // because the upsert above wrote 'completed' before we re-read)
     const completedCoreCount = coreVideos.filter(v => completedIds.has(v.id)).length
+    const isNewCompletion = existingProgress?.status !== 'completed'
 
-    await emitEvent({ type: 'video.completed', user, funnel: { ...funnel, videos_completed_count: completedCoreCount }, nextVideo, data: { video_id: videoId, video_title: video?.title } })
+    if (isNewCompletion) {
+      await emitEvent({
+        type: 'video.completed',
+        user,
+        funnel: { ...funnel, videos_completed_count: completedCoreCount },
+        nextVideo,
+        data: {
+          video_id: videoId,
+          video_title: video?.title,
+          stage: completedCoreCount >= 2 ? 'qualified_lead' : 'first_video_completed',
+        },
+      })
+
+      if (video?.section === 'core' && completedCoreCount === 2) {
+        await emitEvent({
+          type: 'lead.qualified',
+          user,
+          funnel: { ...funnel, videos_completed_count: completedCoreCount },
+          nextVideo,
+          data: { stage: 'qualified_lead', priority: 'high', qualification_rule: '2_core_videos_completed' },
+        })
+      }
+    }
 
     // Update funnel — upsert so it works even if no funnel row exists yet
     if (video?.section === 'core') {

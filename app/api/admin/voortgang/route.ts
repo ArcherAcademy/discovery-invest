@@ -14,14 +14,14 @@ export async function GET(req: NextRequest) {
   const supabase = createAdminClient()
   const batchSize = 1000
 
-  async function fetchAllActivatedUsers() {
+  async function fetchAllUsers() {
     const rows = []
     for (let from = 0; ; from += batchSize) {
       const { data, error } = await supabase
         .from('demo_invest_users')
         .select('id, email, name, activated_at, trial_expires_at, last_activity_at, created_at')
-        .not('activated_at', 'is', null)
-        .order('activated_at', { ascending: false })
+        .eq('role', 'user')
+        .order('created_at', { ascending: false })
         .order('id', { ascending: false })
         .range(from, from + batchSize - 1)
 
@@ -47,11 +47,11 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  let users: Awaited<ReturnType<typeof fetchAllActivatedUsers>> = []
+  let users: Awaited<ReturnType<typeof fetchAllUsers>> = []
   let progress: Awaited<ReturnType<typeof fetchAllProgress>> = []
   try {
     const results = await Promise.all([
-      fetchAllActivatedUsers(),
+      fetchAllUsers(),
       fetchAllProgress(),
     ])
     users = results[0]
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
       .order('order_no'),
     supabase
       .from('demo_invest_user_funnel')
-      .select('user_id, event_booked, all_completed_at, invest_avond_geclaimd, invest_avond_verschenen'),
+      .select('user_id, event_booked, event_booked_at, all_completed_at, invest_avond_geclaimd, invest_avond_verschenen'),
     supabase
       .from('demo_invest_quiz_submissions')
       .select('user_id, submitted_at, score, answers'),
@@ -132,6 +132,24 @@ export async function GET(req: NextRequest) {
     const daysTrialLeft = u.trial_expires_at
       ? Math.max(0, Math.ceil((new Date(u.trial_expires_at).getTime() - now) / 86400000))
       : null
+    const completedAt = videoStrip
+      .map(video => video.completed_at)
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+    const leadStage = funnel?.event_booked
+      ? 'Afspraak geboekt'
+      : completedCount >= 2
+        ? 'Gekwalificeerde lead'
+        : completedCount === 1
+          ? 'Eerste video voltooid'
+          : u.activated_at
+            ? 'Account geactiveerd'
+            : 'Account aangemaakt'
+    const leadPriority = funnel?.event_booked || completedCount >= 2
+      ? 'hoog'
+      : completedCount === 1
+        ? 'middel'
+        : 'normaal'
 
     return {
       id: u.id,
@@ -144,10 +162,15 @@ export async function GET(req: NextRequest) {
       days_trial_left: daysTrialLeft,
       trial_expires_at: u.trial_expires_at,
       completed_count: completedCount,
+      first_video_completed_at: completedAt[0] ?? null,
+      qualified_at: completedAt[1] ?? null,
+      lead_stage: leadStage,
+      lead_priority: leadPriority,
       current_video: currentVideo ? { id: currentVideo.id, order: currentVideo.order_no, title: currentVideo.title } : null,
       video_strip: videoStrip,
       created_at: u.created_at,
       event_booked: funnel?.event_booked ?? false,
+      event_booked_at: funnel?.event_booked_at ?? null,
       all_completed_at: funnel?.all_completed_at ?? null,
       invest_avond_geclaimd: funnel?.invest_avond_geclaimd ?? false,
       invest_avond_verschenen: funnel?.invest_avond_verschenen ?? false,
@@ -161,8 +184,10 @@ export async function GET(req: NextRequest) {
   })
 
   // ── Aggregated insights ───────────────────────────────────────
-  const activatedUsers = userRows
+  const activatedUsers = userRows.filter(user => Boolean(user.activated_at))
   const total = activatedUsers.length
+  const totalAccounts = userRows.length
+  const qualifiedLeads = userRows.filter(user => user.completed_count >= 2).length
 
   // 1. Dropout per video: users for whom this is their highest reached video and they stopped
   const dropoutPerVideo = coreVideos.map(v => {
@@ -171,10 +196,8 @@ export async function GET(req: NextRequest) {
       const thisIdx = strip.findIndex(s => s.videoId === v.id)
       if (thisIdx < 0) return false
       const thisStatus = strip[thisIdx].status
-      // Reached this video (started or completed)
       const reached = thisStatus === 'completed' || thisStatus === 'in_progress'
       if (!reached) return false
-      // No subsequent video started
       const nextStarted = strip.slice(thisIdx + 1).some(s => s.status !== 'not_started')
       return !nextStarted && u.completed_count < 6
     }).length
@@ -188,19 +211,44 @@ export async function GET(req: NextRequest) {
     return { videoId: v.id, order: v.order_no, title: v.title, avg_pct: avg, started_count: started.length }
   })
 
-  // 3. Funnel
-  const funnelSteps = [
-    { label: 'Geactiveerd', count: total },
-    ...coreVideos.map(v => {
-      const started = activatedUsers.filter(u => u.video_strip.find(s => s.videoId === v.id)?.status !== 'not_started').length
-      const completed = activatedUsers.filter(u => u.video_strip.find(s => s.videoId === v.id)?.status === 'completed').length
-      return [
-        { label: `V${v.order_no} gestart`, count: started },
-        { label: `V${v.order_no} voltooid`, count: completed },
-      ]
-    }).flat(),
-    { label: 'Event geboekt', count: activatedUsers.filter(u => u.event_booked).length },
+  // 3. Beslisfunnel: van instroom tot afspraak, met conversie en doorlooptijd per overgang.
+  const milestones = [
+    { label: 'Account aangemaakt', timestamp: (user: typeof userRows[number]) => user.created_at },
+    { label: 'Account geactiveerd', timestamp: (user: typeof userRows[number]) => user.activated_at },
+    { label: 'Eerste video voltooid', timestamp: (user: typeof userRows[number]) => user.first_video_completed_at },
+    { label: 'Gekwalificeerde lead', timestamp: (user: typeof userRows[number]) => user.qualified_at },
+    { label: "Alle 6 video's voltooid", timestamp: (user: typeof userRows[number]) => user.all_completed_at },
+    { label: 'Afspraak geboekt', timestamp: (user: typeof userRows[number]) => user.event_booked_at },
   ]
+
+  const funnelSteps = milestones.map((milestone, index) => {
+    const reached = userRows.filter(user => Boolean(milestone.timestamp(user)))
+    const previous = milestones[index - 1]
+    const previousCount = previous
+      ? userRows.filter(user => Boolean(previous.timestamp(user))).length
+      : reached.length
+    const transitionDurations = previous
+      ? reached.flatMap(user => {
+          const from = previous.timestamp(user)
+          const to = milestone.timestamp(user)
+          if (!from || !to) return []
+          const minutes = (new Date(to).getTime() - new Date(from).getTime()) / 60000
+          return minutes >= 0 ? [minutes] : []
+        })
+      : []
+
+    return {
+      label: milestone.label,
+      count: reached.length,
+      conversionFromPrevious: index === 0 || previousCount === 0
+        ? null
+        : Math.round((reached.length / previousCount) * 100),
+      dropoff: index === 0 ? 0 : Math.max(0, previousCount - reached.length),
+      avgMinutesFromPrevious: transitionDurations.length === 0
+        ? null
+        : Math.round(transitionDurations.reduce((sum, minutes) => sum + minutes, 0) / transitionDurations.length),
+    }
+  })
 
   // 4. Tempo
   const withFirstVideo = activatedUsers.filter(u => {
@@ -231,7 +279,7 @@ export async function GET(req: NextRequest) {
 
   // 5. Inactivity risk list: activated, < 6/6, inactive > 24h
   const riskList = activatedUsers
-    .filter(u => u.completed_count < 6 && u.ms_since_activity !== null && u.ms_since_activity > 86400000)
+    .filter(u => u.activated_at && u.completed_count < 6 && u.ms_since_activity !== null && u.ms_since_activity > 86400000)
     .sort((a, b) => (b.ms_since_activity ?? 0) - (a.ms_since_activity ?? 0))
     .map(u => ({
       id: u.id,
@@ -246,6 +294,8 @@ export async function GET(req: NextRequest) {
     userRows,
     insights: {
       total,
+      totalAccounts,
+      qualifiedLeads,
       dropoutPerVideo,
       avgDepthPerVideo,
       funnelSteps,

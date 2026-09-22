@@ -1,159 +1,137 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createSession, applySessionCookie } from '@/lib/auth'
+import { emitEvent } from '@/lib/emit-event'
 import { fireInstant } from '@/lib/workflow-engine'
-import type { DemoUser } from '@/lib/types'
+import type { DemoUser, DemoUserFunnel } from '@/lib/types'
 
 async function sha256hex(raw: string): Promise<string> {
   const buf = new TextEncoder().encode(raw)
   const digest = await crypto.subtle.digest('SHA-256', buf)
   return Array.from(new Uint8Array(digest))
-    .map(b => b.toString(16).padStart(2, '0'))
+    .map(byte => byte.toString(16).padStart(2, '0'))
     .join('')
 }
 
-export async function POST(req: NextRequest) {
-  const { token } = await req.json()
-
-  if (!token) {
-    return NextResponse.json({ ok: false, error: 'Token is vereist.' }, { status: 400 })
+function activationError(req: NextRequest, message: string, status: number, browserNavigation: boolean) {
+  if (browserNavigation) {
+    const url = new URL('/activeren', req.url)
+    url.searchParams.set('error', message)
+    return NextResponse.redirect(url, { status: 303 })
   }
+  return NextResponse.json({ ok: false, error: message }, { status })
+}
 
-  const tokenHash = await sha256hex(token)
+async function activate(req: NextRequest, token: string, browserNavigation: boolean) {
+  if (!token) return activationError(req, 'Geen activatietoken gevonden.', 400, browserNavigation)
+
   const supabase = createAdminClient()
-
-  // ── 1. Invite ophalen en valideren ────────────────────────────────────────
-  const { data: invite } = await supabase
+  const tokenHash = await sha256hex(token)
+  const { data: invite, error: inviteError } = await supabase
     .from('demo_invest_invites')
-    .select('id, user_id, email, used_at')
+    .select('id, user_id')
     .eq('token_hash', tokenHash)
     .maybeSingle()
 
-  if (!invite) {
-    return NextResponse.json({ ok: false, error: 'Ongeldige activatielink.' }, { status: 400 })
+  if (inviteError || !invite) {
+    return activationError(req, 'Deze activatielink is ongeldig.', 400, browserNavigation)
   }
 
-  if (invite.used_at) {
-    // If the invite is already used, check whether the account was actually
-    // activated. If it was, the user is fully activated — create a new session
-    // so they land on /home immediately. If not, a prior attempt failed
-    // mid-way, so allow the activation to proceed.
-    const { data: existingUser } = await supabase
+  const now = new Date()
+  const nowIso = now.toISOString()
+  const trialExpiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  // Slechts één gelijktijdig verzoek kan de eerste activatie claimen. Daardoor
+  // blijven activatie-events en CRM-stages idempotent, ook bij dubbelklikken.
+  const { data: newlyActivated, error: activationErrorResult } = await supabase
+    .from('demo_invest_users')
+    .update({
+      activated_at: nowIso,
+      trial_started_at: nowIso,
+      trial_expires_at: trialExpiresAt,
+      last_activity_at: nowIso,
+    })
+    .eq('id', invite.user_id)
+    .is('activated_at', null)
+    .select('*')
+    .maybeSingle()
+
+  if (activationErrorResult) {
+    return activationError(req, 'Activatie mislukt. Probeer het opnieuw.', 500, browserNavigation)
+  }
+
+  let user = newlyActivated as DemoUser | null
+  const isFirstActivation = Boolean(user)
+
+  if (!user) {
+    const { data: existingUser, error: userError } = await supabase
       .from('demo_invest_users')
-      .select('activated_at')
+      .select('*')
       .eq('id', invite.user_id)
       .maybeSingle()
 
-    if (existingUser?.activated_at) {
-      const rawToken = await createSession(invite.user_id)
-      const redirectUrl = new URL('/home', req.url)
-      const response = NextResponse.redirect(redirectUrl, { status: 303 })
-      applySessionCookie(response, rawToken)
-      return response
+    if (userError || !existingUser?.activated_at) {
+      return activationError(req, 'Het account bij deze link bestaat niet meer.', 404, browserNavigation)
     }
-    // Not activated yet — fall through to complete activation
+    user = existingUser as DemoUser
   }
 
-  // Geen vervalcheck meer: een activatielink blijft geldig tot hij gebruikt is.
-
-  const userId = invite.user_id
-  const now = new Date()
-  const trialExpires = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-
-  const { data: userBeforeActivation } = await supabase
-    .from('demo_invest_users')
-    .select('activated_at')
-    .eq('id', userId)
-    .maybeSingle()
-
-  const isPasswordReset = Boolean(userBeforeActivation?.activated_at)
-
-  // ── 2. Profiel activeren (geen wachtwoord meer, alleen e-mail) ────────────
-  const userUpdate = isPasswordReset
-    ? {
-        last_activity_at: now.toISOString(),
-      }
-    : {
-        activated_at: now.toISOString(),
-        trial_started_at: now.toISOString(),
-        trial_expires_at: trialExpires.toISOString(),
-        last_activity_at: now.toISOString(),
-      }
-
-  const { error: activateError } = await supabase
-    .from('demo_invest_users')
-    .update(userUpdate)
-    .eq('id', userId)
-
-  if (activateError) {
-    // Even if the UPDATE returned an error, verify whether it actually wrote.
-    // Some DB configurations fire a side-effect after a successful write.
-    const { data: checkUser } = await supabase
-      .from('demo_invest_users')
-      .select('activated_at')
-      .eq('id', userId)
-      .maybeSingle()
-
-    if (!checkUser?.activated_at) {
-      return NextResponse.json(
-        { ok: false, error: 'Activatie mislukt. Neem contact op via info@archerinvest.nl.' },
-        { status: 500 }
-      )
-    }
-    // The write succeeded despite the error — continue
-  }
-
-  // ── 4. Funnel alleen bij eerste activatie aanmaken ────────────────────────
-  if (!isPasswordReset) {
-    await supabase
+  let funnel: DemoUserFunnel | null = null
+  if (isFirstActivation) {
+    const { data: funnelData, error: funnelError } = await supabase
       .from('demo_invest_user_funnel')
       .upsert({
-        user_id: userId,
+        user_id: user.id,
         videos_completed_count: 0,
         all_completed_at: null,
         event_booked: false,
         event_booked_at: null,
       }, { onConflict: 'user_id' })
-  }
+      .select('*')
+      .single()
 
-  // ── 5. Invite sluiten ─────────────────────────────────────────────────────
-  await supabase
-    .from('demo_invest_invites')
-    .update({ used_at: now.toISOString() })
-    .eq('id', invite.id)
+    if (funnelError) {
+      return activationError(req, 'De activatie kon niet volledig worden opgeslagen.', 500, browserNavigation)
+    }
+    funnel = funnelData as DemoUserFunnel
 
-  // ── 6. Sessie aanmaken ────────────────────────────────────────────────────
-  let rawToken: string
-  try {
-    rawToken = await createSession(userId)
-  } catch (err) {
-    console.error('[activate] sessie aanmaken gefaald:', err)
-    return NextResponse.json(
-      { ok: false, error: 'Sessie aanmaken mislukt. Log in via /login.' },
-      { status: 500 }
-    )
-  }
+    await supabase
+      .from('demo_invest_invites')
+      .update({ used_at: nowIso })
+      .eq('id', invite.id)
 
-  // ── 7. Welkom-trigger alleen bij eerste activatie (non-fatal) ─────────────
-  if (!isPasswordReset) {
+    await emitEvent({
+      type: 'trial.account_activated',
+      user,
+      funnel,
+      data: { stage: 'account_activated', activated_at: user.activated_at },
+    })
+
     try {
-      const { data: newUser } = await supabase
-        .from('demo_invest_users')
-        .select('*')
-        .eq('id', userId)
-        .single()
-
-      if (newUser) {
-        await fireInstant(supabase, 'welkom', newUser as DemoUser, new Set(), {
-          trial_expires_at: (newUser as DemoUser).trial_expires_at,
-        })
-      }
-    } catch { /* non-fatal */ }
+      await fireInstant(supabase, 'welkom', user, new Set(), {
+        trial_expires_at: user.trial_expires_at,
+      })
+    } catch {
+      // De welkomstworkflow is aanvullend en mag directe toegang nooit blokkeren.
+    }
   }
 
-  // ── 8. Redirect naar /home als ingelogde gebruiker ────────────────────────
-  const redirectUrl = new URL('/home', req.url)
-  const response = NextResponse.redirect(redirectUrl, { status: 303 })
-  applySessionCookie(response, rawToken!)
-  return response
+  try {
+    const rawToken = await createSession(user.id)
+    const response = NextResponse.redirect(new URL('/home', req.url), { status: 303 })
+    applySessionCookie(response, rawToken)
+    return response
+  } catch (error) {
+    console.error('[activate] sessie aanmaken gefaald:', error)
+    return activationError(req, 'Inloggen mislukt. Open de activatielink opnieuw.', 500, browserNavigation)
+  }
+}
+
+export async function GET(req: NextRequest) {
+  return activate(req, req.nextUrl.searchParams.get('token') ?? '', true)
+}
+
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => ({})) as { token?: unknown }
+  return activate(req, typeof body.token === 'string' ? body.token : '', false)
 }

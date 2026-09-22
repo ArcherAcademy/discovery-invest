@@ -1,4 +1,4 @@
-import { createClient } from './supabase/server'
+import { createAdminClient } from './supabase/admin'
 import type { DemoUser, DemoUserFunnel, DemoVideo } from './types'
 
 export type WebhookEventType =
@@ -7,6 +7,7 @@ export type WebhookEventType =
   | 'video.started'
   | 'video.progress'
   | 'video.completed'
+  | 'lead.qualified'
   | 'videos.all_completed'
   | 'bonus.unlocked'
   | 'bonus.video_completed'
@@ -25,7 +26,7 @@ interface EmitEventOptions {
 
 export async function emitEvent(opts: EmitEventOptions): Promise<void> {
   const { type, user, funnel, nextVideo, data = {} } = opts
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const payload = {
     event: type,

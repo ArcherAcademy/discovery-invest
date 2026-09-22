@@ -60,14 +60,31 @@ export async function POST(req: NextRequest) {
   const nextVideo = coreVideos.find(v => !completedIds.has(v.id)) ?? null
   const isAllCompleted = completedCoreCount >= 6
 
-  // Emit completion event
-  await emitEvent({
-    type: 'video.completed',
-    user,
-    funnel: { ...funnel, videos_completed_count: completedCoreCount },
-    nextVideo,
-    data: { video_id: videoId, video_title: video?.title },
-  })
+  const isNewCompletion = existingProgress?.status !== 'completed'
+
+  if (isNewCompletion) {
+    await emitEvent({
+      type: 'video.completed',
+      user,
+      funnel: { ...funnel, videos_completed_count: completedCoreCount },
+      nextVideo,
+      data: {
+        video_id: videoId,
+        video_title: video?.title,
+        stage: completedCoreCount >= 2 ? 'qualified_lead' : 'first_video_completed',
+      },
+    })
+
+    if (video?.section === 'core' && completedCoreCount === 2) {
+      await emitEvent({
+        type: 'lead.qualified',
+        user,
+        funnel: { ...funnel, videos_completed_count: completedCoreCount },
+        nextVideo,
+        data: { stage: 'qualified_lead', priority: 'high', qualification_rule: '2_core_videos_completed' },
+      })
+    }
+  }
 
   // Update funnel
   if (video?.section === 'core') {

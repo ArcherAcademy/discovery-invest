@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { updateCallUserState } from '@/lib/call-booking-data'
+import { emitEvent } from '@/lib/emit-event'
+import type { DemoUser } from '@/lib/types'
 
 // ── CORS helpers ──────────────────────────────────────────────────────────────
 // Allow any origin so both the Lovable marketing site and HubSpot can call this.
@@ -341,6 +343,22 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
       return new Response(`Database error: ${inviteError.message}`, { status: 500, headers: CORS_HEADERS })
     }
     console.log(`[v0] account-aanmaken: nieuwe invite aangemaakt voor ${email}`)
+  }
+
+  if (outcome === 'created') {
+    const { data: createdUser } = await supabase
+      .from('demo_invest_users')
+      .select('*')
+      .eq('id', userId)
+      .single()
+
+    if (createdUser) {
+      await emitEvent({
+        type: 'trial.account_created',
+        user: createdUser as DemoUser,
+        data: { stage: 'account_created', source: bron },
+      })
+    }
   }
 
   // ── 6. Activatielink bouwen ───────────────────────────────────────────────
