@@ -6,7 +6,6 @@ import { usePathname, useRouter } from 'next/navigation'
 import { Clock, Settings, LogOut, Home, PlaySquare, CalendarDays, GraduationCap, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp } from './app-context'
-import CallBookingBlock from './CallBookingBlock'
 import { SidebarCallStatus } from './SidebarCallStatus'
 import { t } from '@/lib/i18n'
 
@@ -116,11 +115,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   )
                 })}
 
-                {group.label === tr.nav.overview ? (
-                  <li key="strategy-meeting">
-                    <CallBookingBlock unlocked variant="sidebar" />
-                  </li>
-                ) : null}
               </ul>
             </div>
           )

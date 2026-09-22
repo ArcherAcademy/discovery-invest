@@ -59,7 +59,7 @@ export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: In
         <div className="order-1 flex aspect-video bg-foreground sm:order-2 sm:aspect-auto sm:min-h-full">
           <iframe
             src={INTRO_VIDEO_URL}
-            title="Wat is een Vermogensavond?"
+            title="Wat is een kennismaking event?"
             className="h-full min-h-56 w-full"
             allow="autoplay; fullscreen; picture-in-picture"
             allowFullScreen
@@ -73,7 +73,7 @@ export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: In
               Je hebt alle 6 video&apos;s bekeken.
             </h2>
             <p className="text-pretty text-sm leading-6 text-muted-foreground">
-              Bekijk deze korte video over de Vermogensavond. Klik daarna op de knop om je plaats te reserveren. Je bonusmateriaal wordt meteen daarna vrijgegeven.
+              Bekijk deze korte video over het kennismaking event. Klik daarna op de knop om je plaats te reserveren. Je bonusmateriaal wordt meteen daarna vrijgegeven.
             </p>
           </div>
 
@@ -85,7 +85,7 @@ export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: In
             disabled={isUnlocking}
             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
-            {isUnlocking ? 'Bonusmateriaal vrijgeven…' : 'Bekijk de Vermogensavond'}
+            {isUnlocking ? 'Bonusmateriaal vrijgeven…' : 'Bekijk het kennismaking event'}
             {isUnlocking ? null : <ArrowRight size={17} />}
           </button>
 

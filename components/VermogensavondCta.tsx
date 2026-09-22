@@ -11,7 +11,7 @@ export function VermogensavondCta() {
     >
       <div className="flex max-w-3xl flex-col gap-3">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary-foreground/70">
-          De Vermogensavond
+          Het kennismaking event
         </p>
         <div className="flex flex-col gap-2">
           <h2 id="vermogensavond-title" className="text-balance text-2xl font-bold leading-tight tracking-tight sm:text-3xl">
