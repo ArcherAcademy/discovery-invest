@@ -45,7 +45,7 @@ export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: In
         role="dialog"
         aria-modal="true"
         aria-labelledby="invest-avond-unlock-title"
-        className="relative my-auto flex w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-2xl sm:grid sm:grid-cols-[minmax(270px,0.82fr)_minmax(390px,1.18fr)] sm:rounded-3xl"
+        className="relative my-auto flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-2xl sm:rounded-3xl"
       >
         <button
           type="button"
@@ -56,7 +56,7 @@ export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: In
           <X size={18} />
         </button>
 
-        <div className="order-1 aspect-video min-h-0 w-full overflow-hidden bg-foreground sm:order-2">
+        <div className="aspect-video min-h-0 w-full overflow-hidden bg-foreground">
           <iframe
             src={INTRO_VIDEO_URL}
             title="Wat is een kennismaking event?"
@@ -66,7 +66,7 @@ export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: In
           />
         </div>
 
-        <div className="order-2 flex flex-col gap-4 p-5 sm:order-1 sm:justify-center sm:gap-5 sm:p-8">
+        <div className="flex flex-col gap-4 p-5 sm:gap-5 sm:p-8">
           <div className="flex flex-col gap-3">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Proficiat</p>
             <h2 id="invest-avond-unlock-title" className="text-balance text-2xl font-bold tracking-tight sm:text-3xl">
