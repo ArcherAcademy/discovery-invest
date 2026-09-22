@@ -175,6 +175,12 @@
   .interactive-video-row:focus-visible .interactive-video-image {
     transform: scale(1.1);
   }
+  .core-video-card:hover > .core-video-details {
+    opacity: 1;
+  }
+  .core-video-link:focus-visible .core-video-details {
+    opacity: 1;
+  }
   .progress-ring-track {
     fill: none;
     stroke: #e8ecf4;

@@ -1,16 +1,21 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Dialog } from '@base-ui/react/dialog'
-import { CalendarDays, CheckCircle2, FileText, Gift, Lock, Play, Clock, X } from 'lucide-react'
+import { FileText, Lock, Play, Clock } from 'lucide-react'
 import { useApp } from '@/components/app-context'
-import CallBookingBlock from '@/components/CallBookingBlock'
 import PdfThumbnail from '@/components/PdfThumbnail'
-import { Button } from '@/components/ui/button'
 
 // Accent colours per video slot (index 0–5)
 const CORE_COLORS = ['#2500F5', '#2500F5', '#2500F5', '#2500F5', '#2500F5', '#2500F5']
+
+const CORE_HIGHLIGHTS = [
+  ['Waarom België richting onhoudbare schulden en vergrijzing gaat', 'Wat inflatie écht met je spaargeld doet'],
+  ['Hoe je vermogen meestal piekt rond je pensioen en daarna sterk daalt', 'Het verschil tussen de creërende en de investerende fase'],
+  ['Wat je gewogen gemiddeld rendement is en waarom dat cijfer telt', 'Waarom het cijfer dat je denkt te halen vaak lager uitvalt'],
+  ['Hoe kosten, dividendstructuur en fondslocatie je nettorendement bepalen', 'Wanneer kern-, satelliet- en speculatieve ETF’s zinvol zijn'],
+  ['Hoe je al je assets, privé en professioneel, in één dashboard zet', 'Hoe de app je GGR en levensprojectie doorrekent'],
+  ['Hoe de vierdaagse masterclass en de Invest-app één systeem vormen', 'Met welk twaalfmaandenplan je nadien aan de slag gaat'],
+]
 
 function fmt(seconds: number) {
   const m = Math.ceil(seconds / 60)
@@ -19,33 +24,8 @@ function fmt(seconds: number) {
 
 export default function TrajectPage() {
   const { videos, progress, coreCompleted, allCoreCompleted } = useApp()
-  const [unlockDialogOpen, setUnlockDialogOpen] = useState(false)
-  const [bookingOpenRequest, setBookingOpenRequest] = useState(0)
   const progressMap = new Map(progress.map(p => [p.video_id, p]))
   const pct = Math.round((coreCompleted / 6) * 100)
-
-  useEffect(() => {
-    const url = new URL(window.location.href)
-    if (!allCoreCompleted || url.searchParams.get('vrijgespeeld') !== '1') return
-
-    setUnlockDialogOpen(true)
-    url.searchParams.delete('vrijgespeeld')
-    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
-  }, [allCoreCompleted])
-
-  function openBookingFromUnlockDialog() {
-    setUnlockDialogOpen(false)
-    requestAnimationFrame(() => {
-      setBookingOpenRequest(current => current + 1)
-    })
-  }
-
-  function viewUnlockedBonus() {
-    setUnlockDialogOpen(false)
-    requestAnimationFrame(() => {
-      document.getElementById('bonusmateriaal')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    })
-  }
 
   // Split live database videos into core and bonus
   const coreVideos = videos.filter(v => v.section === 'core')
@@ -124,7 +104,7 @@ export default function TrajectPage() {
 
             const card = (
               <div
-                className="group relative flex flex-col rounded-2xl border overflow-hidden transition-all duration-200"
+                className="core-video-card relative flex flex-col overflow-hidden rounded-2xl border transition-all duration-200"
                 style={{
                   background: '#ffffff',
                   borderColor: isCompleted ? '#2500F5' : isInProgress ? 'rgba(37,0,245,0.3)' : '#e8ecf4',
@@ -180,7 +160,7 @@ export default function TrajectPage() {
                       <Lock size={24} color="rgba(255,255,255,0.7)" />
                     ) : !isCompleted ? (
                       <div
-                        className="w-11 h-11 rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-110"
+                        className="w-11 h-11 rounded-full flex items-center justify-center transition-transform duration-200"
                         style={{ background: color }}
                       >
                         <Play size={18} color="#fff" fill="#fff" />
@@ -206,22 +186,44 @@ export default function TrajectPage() {
                 </div>
 
                 {/* Info */}
-                <div className="px-4 py-3 flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold truncate" style={{ color: '#0d0f14' }}>
+                <div className="flex items-center justify-between gap-2 px-4 py-3">
+                  <p className="truncate text-sm font-semibold" style={{ color: '#0d0f14' }}>
                     {video.title}
                   </p>
                   <span
-                    className="text-xs font-medium shrink-0 px-2 py-0.5 rounded-full"
+                    className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
                     style={{
                       background: isCompleted
                         ? 'rgba(37,0,245,0.1)'
                         : isInProgress
                           ? 'rgba(37,0,245,0.06)'
                           : '#f0f3fb',
-                      color: isCompleted || isInProgress ? '#2500F5' : 'rgba(13,15,20,0.4)',
+                      color: isCompleted || isInProgress || canPlay ? '#2500F5' : 'rgba(13,15,20,0.4)',
                     }}
                   >
-                    {isCompleted ? 'Voltooid' : isInProgress ? 'Bezig' : isLocked ? 'Vergrendeld' : 'Starten'}
+                    {isCompleted ? 'Voltooid' : isInProgress ? 'Verder kijken' : isLocked ? 'Vergrendeld' : 'Start nu →'}
+                  </span>
+                </div>
+
+                {/* Desktop hover/focus detail — only this card changes. Touchscreens keep the thumbnail. */}
+                <div className="core-video-details pointer-events-none absolute inset-0 z-20 hidden flex-col bg-card p-5 text-card-foreground opacity-0 transition-opacity duration-200 sm:flex">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                      {video.order_no}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{fmt(video.duration_seconds ?? 0)}</span>
+                  </div>
+                  <h3 className="mt-4 text-lg font-bold tracking-tight">{video.title}</h3>
+                  <ul className="mt-3 flex flex-1 flex-col gap-2 text-sm leading-5 text-muted-foreground">
+                    {(CORE_HIGHLIGHTS[i] ?? [video.description]).filter(Boolean).map((highlight) => (
+                      <li key={highlight} className="flex items-start gap-2">
+                        <span className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+                        <span>{highlight}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <span className="mt-4 inline-flex min-h-10 w-fit items-center rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground">
+                    {isCompleted ? 'Opnieuw bekijken' : isInProgress ? 'Verder kijken' : isLocked ? `Gaat open na video ${i}` : 'Start nu →'}
                   </span>
                 </div>
               </div>
@@ -231,7 +233,7 @@ export default function TrajectPage() {
               <Link
                 key={video.id}
                 href={`/video/${video.id}`}
-                className="block group hover:-translate-y-0.5 transition-transform duration-200"
+                className="core-video-link block transition-transform duration-200 hover:-translate-y-0.5"
               >
                 {card}
               </Link>
@@ -255,7 +257,7 @@ export default function TrajectPage() {
               Jouw bonusmateriaal
             </h2>
             <p className="text-xs leading-5" style={{ color: 'rgba(13,15,20,0.5)' }}>
-              Na alle 6 kernvideo&apos;s krijg je toegang tot je bonusmateriaal én kun je een persoonlijk oriëntatiegesprek inplannen.
+              Na alle 6 kernvideo&apos;s krijg je toegang tot je bonusmateriaal.
             </p>
           </div>
           {!allCoreCompleted && (
@@ -359,68 +361,6 @@ export default function TrajectPage() {
           })}
         </div>
       </section>
-
-      <Dialog.Root open={unlockDialogOpen} onOpenChange={setUnlockDialogOpen}>
-        <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 z-50 min-h-dvh bg-foreground/45 backdrop-blur-sm transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0" />
-          <Dialog.Viewport className="fixed inset-0 z-50 flex items-end justify-center p-3 sm:items-center sm:p-6">
-            <Dialog.Popup className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col gap-6 overflow-y-auto rounded-2xl border border-border bg-card p-5 text-card-foreground shadow-2xl transition duration-200 data-ending-style:translate-y-4 data-ending-style:opacity-0 data-starting-style:translate-y-4 data-starting-style:opacity-0 sm:p-7">
-              <Dialog.Close className="absolute right-4 top-4 flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" aria-label="Melding sluiten">
-                <X size={18} />
-              </Dialog.Close>
-
-              <div className="flex flex-col gap-4 pr-10">
-                <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-                  <CheckCircle2 size={24} />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Dialog.Title className="text-2xl font-bold tracking-tight text-balance">
-                    Je bonus én oriëntatiegesprek zijn vrijgespeeld
-                  </Dialog.Title>
-                  <Dialog.Description className="text-sm leading-6 text-muted-foreground">
-                    Je hebt alle 6 kernvideo&apos;s bekeken. Daarmee heb je nu twee waardevolle onderdelen vrijgespeeld.
-                  </Dialog.Description>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 p-4">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background text-primary">
-                    <Gift size={18} />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <p className="text-sm font-bold">Je bonusmateriaal</p>
-                    <p className="text-sm leading-5 text-muted-foreground">Bekijk de bonusvideo en praktische bonusdocumenten wanneer het jou uitkomt.</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/[0.04] p-4">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                    <CalendarDays size={18} />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <p className="text-sm font-bold">Je persoonlijk oriëntatiegesprek</p>
-                    <p className="text-sm leading-5 text-muted-foreground">Plan meteen een vrijblijvend gesprek en bespreek je persoonlijke situatie met een adviseur.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2 sm:flex-row-reverse">
-                <Button onClick={openBookingFromUnlockDialog} size="lg" className="w-full rounded-full sm:flex-1">
-                  <CalendarDays data-icon="inline-start" />
-                  Plan mijn oriëntatiegesprek
-                </Button>
-                <Button onClick={viewUnlockedBonus} variant="outline" size="lg" className="w-full rounded-full sm:flex-1">
-                  <Gift data-icon="inline-start" />
-                  Bekijk mijn bonus
-                </Button>
-              </div>
-            </Dialog.Popup>
-          </Dialog.Viewport>
-        </Dialog.Portal>
-      </Dialog.Root>
-
-      {/* Persoonlijk oriëntatiegesprek — vrijgespeeld na 6/6 */}
-      <CallBookingBlock unlocked={allCoreCompleted} openRequest={bookingOpenRequest} />
 
     </div>
   )
