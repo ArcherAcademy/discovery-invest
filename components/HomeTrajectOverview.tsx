@@ -93,6 +93,8 @@ export function HomeTrajectOverview({
   allCoreCompleted,
   loading,
 }: HomeTrajectOverviewProps) {
+  const activeCoreVideoIndex = coreVideos.findIndex(video => video.status !== 'completed')
+
   return (
     <div className="flex flex-col gap-7">
       <section className="overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-sm">
@@ -107,10 +109,9 @@ export function HomeTrajectOverview({
           ) : null}
 
           {coreVideos.map((video, index) => {
-            const previousCompleted = index === 0 || coreVideos[index - 1]?.status === 'completed'
-            const isLocked = !previousCompleted
             const isCompleted = video.status === 'completed'
-            const isActive = !isLocked && !isCompleted
+            const isActive = index === activeCoreVideoIndex
+            const isLocked = activeCoreVideoIndex !== -1 && index > activeCoreVideoIndex
             const description = video.description || CORE_DESCRIPTIONS[index] || ''
 
             const content = (
@@ -136,8 +137,8 @@ export function HomeTrajectOverview({
                 <div className="flex shrink-0 items-center justify-end sm:min-w-28">
                   {isActive ? (
                     <span className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground transition-colors group-hover:bg-primary-foreground group-hover:text-primary">
-                      {video.status === 'in_progress' ? 'Ga verder' : 'Start nu'}
-                      <ArrowRight size={15} />
+                      Start nu
+                      <ArrowRight size={15} aria-hidden="true" />
                     </span>
                   ) : isLocked ? (
                     <Lock size={17} className="text-muted-foreground" aria-label="Vergrendeld" />
