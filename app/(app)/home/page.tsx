@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Play } from 'lucide-react'
 import VimeoPlayer from '@/components/VimeoPlayer'
 import { HomeTrajectOverview } from '@/components/HomeTrajectOverview'
+import { VermogensavondCta } from '@/components/VermogensavondCta'
 import { useApp } from '@/components/app-context'
 
 const VIDEO_TITLES = ['De Why', 'De Levensloop', 'GGR', 'ETF', 'De Invest-app', 'De Oplossing']
@@ -143,6 +144,8 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      <VermogensavondCta />
 
       <HomeTrajectOverview
         coreVideos={displayVideos}
