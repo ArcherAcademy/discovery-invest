@@ -579,7 +579,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
       </div>
       <InvestAvondUnlockModal
         open={investAvondModalOpen && isLastCoreVideo}
-        onUnlocked={refresh}
         onClose={() => setInvestAvondModalOpen(false)}
       />
     </div>
