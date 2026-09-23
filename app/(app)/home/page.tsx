@@ -1,8 +1,13 @@
 'use client'
 
+'use client'
+
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { Play } from 'lucide-react'
 import VimeoPlayer from '@/components/VimeoPlayer'
+import InvestAvondUnlockModal from '@/components/InvestAvondUnlockModal'
 import { HomeTrajectOverview } from '@/components/HomeTrajectOverview'
 import { VermogensavondCta } from '@/components/VermogensavondCta'
 import { useApp } from '@/components/app-context'
@@ -11,6 +16,8 @@ const VIDEO_TITLES = ['De Why', 'De Levensloop', 'GGR', 'ETF', 'De Invest-app', 
 const VIDEO_DURATIONS = [12, 18, 22, 25, 15, 20]
 
 export default function HomePage() {
+  const router = useRouter()
+  const [investAvondModalOpen, setInvestAvondModalOpen] = useState(false)
   const { user, videos, progress, coreCompleted, allCoreCompleted, refresh } = useApp()
 
   const coreVideos = [...videos].filter(video => video.section === 'core').sort((a, b) => a.order_no - b.order_no)
@@ -121,6 +128,7 @@ export default function HomePage() {
                   isLastVideo={featuredVideo.index === displayVideos.length - 1}
                   onCompleted={() => refresh()}
                   onUnlockNext={() => refresh()}
+                  onAutoNext={() => setInvestAvondModalOpen(true)}
                 />
               </div>
             ) : (
@@ -168,6 +176,14 @@ export default function HomePage() {
         loading={isLoading}
       />
 
+      <InvestAvondUnlockModal
+        open={investAvondModalOpen}
+        onClose={() => setInvestAvondModalOpen(false)}
+        onViewBonus={() => {
+          setInvestAvondModalOpen(false)
+          router.push('/traject')
+        }}
+      />
     </div>
   )
 }
