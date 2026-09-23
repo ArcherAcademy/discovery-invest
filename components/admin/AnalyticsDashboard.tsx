@@ -3,17 +3,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BarChart3, CheckCircle2, ChevronRight, Circle, Filter, Loader2, Search, Users, X } from 'lucide-react'
 
-type User = { id: string; email: string | null; last_activity_at: string | null; whatsapp_opt_in: boolean | null; invest_avond_geclaimd: boolean | null }
+type User = { id: string; email: string | null; last_activity_at: string | null; whatsapp_opt_in: boolean | null }
 type Video = { id: string; order_no: number; section: string; title: string }
 type Progress = { user_id: string; video_id: string; progress_pct: number | null; status: string | null; started_at: string | null; completed_at: string | null; last_activity_at: string | null }
-type Funnel = { user_id: string; videos_completed_count: number | null; all_completed_at: string | null }
+type Funnel = { user_id: string; videos_completed_count: number | null; all_completed_at: string | null; invest_avond_geclaimd: boolean | null }
 type Booking = { user_id: string; event_id: string | null; booked_at: string | null; status: string | null }
 type Event = { id: string; starts_at: string | null; locatie: string | null; capaciteit: number | null; prijs: number | null }
 type Trigger = { user_id: string | null; workflow_naam: string | null; status: string | null; created_at: string }
 type Webhook = { user_id: string | null; event_type: string; created_at: string }
 type Payload = { users: User[]; videos: Video[]; progress: Progress[]; funnel: Funnel[]; bookings: Booking[]; events: Event[]; triggers: Trigger[]; webhooks: Webhook[] }
 
-type Lead = User & { completed: number; progress: Progress[]; booked: boolean; triggers: Trigger[] }
+type Lead = User & { invest_avond_geclaimd: boolean | null; completed: number; progress: Progress[]; booked: boolean; triggers: Trigger[] }
 
 const dateLabel = (value: string | null) => value ? new Date(value).toLocaleString('nl-BE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Nog niet gelogd'
 const shortDate = (value: string | null) => value ? new Date(value).toLocaleDateString('nl-BE') : '—'
@@ -43,7 +43,7 @@ function FunnelOverview({ data, onSelectLead }: { data: Payload; onSelectLead: (
   const distribution = Array.from({ length: 7 }, (_, count) => ({ count, total: data.funnel.filter(row => (row.videos_completed_count ?? 0) === count).length }))
   const bonusIds = new Set(data.videos.filter(video => video.section === 'bonus').map(video => video.id))
   const bonusUsers = new Set(data.progress.filter(row => bonusIds.has(row.video_id) && row.status === 'completed').map(row => row.user_id))
-  const claimed = new Set(data.users.filter(user => user.invest_avond_geclaimd).map(user => user.id))
+  const claimed = new Set(data.funnel.filter(row => row.invest_avond_geclaimd).map(row => row.user_id))
 
   return <div className="space-y-6">
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -79,7 +79,7 @@ export function AnalyticsDashboard() {
 
   useEffect(() => { const params = new URLSearchParams(); if (from) params.set('from', from); if (to) params.set('to', to); setLoading(true); fetch(`/api/admin/analytics?${params}`).then(async response => { if (!response.ok) throw new Error('Analytics konden niet worden geladen.'); return response.json() }).then(setData).catch(error => setError(error.message)).finally(() => setLoading(false)) }, [from, to])
 
-  const leads = useMemo<Lead[]>(() => { if (!data) return []; const funnel = new Map(data.funnel.map(row => [row.user_id, row])); const progress = new Map<string, Progress[]>(); data.progress.forEach(row => progress.set(row.user_id, [...(progress.get(row.user_id) ?? []), row])); const booked = new Set([...data.bookings.map(row => row.user_id), ...data.webhooks.flatMap(row => row.user_id ? [row.user_id] : [])]); return data.users.map(user => ({ ...user, completed: funnel.get(user.id)?.videos_completed_count ?? 0, progress: progress.get(user.id) ?? [], booked: booked.has(user.id), triggers: data.triggers.filter(row => row.user_id === user.id) })).filter(lead => (lead.email ?? '').toLowerCase().includes(query.toLowerCase())).sort((a, b) => b.completed - a.completed || (a.email ?? '').localeCompare(b.email ?? '')) }, [data, query])
+  const leads = useMemo<Lead[]>(() => { if (!data) return []; const funnel = new Map(data.funnel.map(row => [row.user_id, row])); const progress = new Map<string, Progress[]>(); data.progress.forEach(row => progress.set(row.user_id, [...(progress.get(row.user_id) ?? []), row])); const booked = new Set([...data.bookings.map(row => row.user_id), ...data.webhooks.flatMap(row => row.user_id ? [row.user_id] : [])]); return data.users.map(user => ({ ...user, invest_avond_geclaimd: funnel.get(user.id)?.invest_avond_geclaimd ?? null, completed: funnel.get(user.id)?.videos_completed_count ?? 0, progress: progress.get(user.id) ?? [], booked: booked.has(user.id), triggers: data.triggers.filter(row => row.user_id === user.id) })).filter(lead => (lead.email ?? '').toLowerCase().includes(query.toLowerCase())).sort((a, b) => b.completed - a.completed || (a.email ?? '').localeCompare(b.email ?? '')) }, [data, query])
   const selected = leads.find(lead => lead.id === selectedId) ?? null
 
   if (loading) return <div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="size-6 animate-spin text-primary" /></div>
