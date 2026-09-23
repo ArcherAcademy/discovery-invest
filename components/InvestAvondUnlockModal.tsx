@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, CheckCircle2, X } from 'lucide-react'
+import { ArrowRight, Check, CheckCircle2, X } from 'lucide-react'
 
 type Edition = {
   id: string
@@ -50,9 +50,10 @@ const EDITIONS: Edition[] = [
 interface InvestAvondUnlockModalProps {
   open: boolean
   onClose?: () => void
+  onViewBonus: () => void
 }
 
-export default function InvestAvondUnlockModal({ open, onClose }: InvestAvondUnlockModalProps) {
+export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: InvestAvondUnlockModalProps) {
   const [selectedEdition, setSelectedEdition] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState(false)
 
@@ -164,9 +165,18 @@ export default function InvestAvondUnlockModal({ open, onClose }: InvestAvondUnl
                 <Check size={28} />
               </div>
               <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-primary">Voorkeursdatum ontvangen</p>
-              <h1 id="edition-choice-title" className="mt-3 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Top. We nemen persoonlijk contact met je op.</h1>
-              <p className="mt-4 text-sm leading-6 text-muted-foreground sm:text-base">Je koos voor {selected?.title}. We bespreken je situatie en bekijken samen of de Invest Masterclass bij je past. Je betaalt nu niets en je keuze verplicht je tot niets.</p>
-              <button type="button" onClick={close} className="mt-8 inline-flex min-h-11 items-center justify-center rounded-xl border border-border px-6 py-3 text-sm font-semibold transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              <h1 id="edition-choice-title" className="mt-3 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Proficiat met je keuze.</h1>
+              <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+                Je koos voor {selected?.title}. <strong className="font-semibold text-foreground">Iemand van ons team neemt zo snel mogelijk contact met je op.</strong> Je betaalt nu niets en je keuze verplicht je tot niets.
+              </p>
+              <div className="mx-auto mt-8 max-w-2xl rounded-2xl border border-primary/15 bg-primary/[0.06] p-5 text-left sm:p-6">
+                <p className="text-sm leading-6 text-foreground sm:text-base">In de tussentijd: geniet alvast van je bonusmateriaal, verdiend door de hele videoreeks uit te kijken.</p>
+                <button type="button" onClick={onViewBonus} className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  Bekijk je bonus
+                  <ArrowRight size={17} aria-hidden="true" />
+                </button>
+              </div>
+              <button type="button" onClick={close} className="mt-5 inline-flex min-h-9 items-center justify-center px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 Sluiten
               </button>
             </div>

@@ -580,6 +580,10 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
       <InvestAvondUnlockModal
         open={investAvondModalOpen && isLastCoreVideo}
         onClose={() => setInvestAvondModalOpen(false)}
+        onViewBonus={() => {
+          setInvestAvondModalOpen(false)
+          router.push('/traject')
+        }}
       />
     </div>
   )
