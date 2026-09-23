@@ -209,6 +209,7 @@ export default function VimeoPlayer({
 
     const handleEnded = () => {
       setEnded(true)
+      if (isLastVideo) onAutoNextRef.current?.()
       doComplete('ended')
     }
 
@@ -293,7 +294,7 @@ export default function VimeoPlayer({
         )}
 
         {/* End screen overlay — appears when video ends */}
-        {ended && (
+        {ended && !isLastVideo && (
           <div
             className="absolute inset-0 flex flex-col items-center justify-center z-20 transition-opacity duration-500"
             style={{
