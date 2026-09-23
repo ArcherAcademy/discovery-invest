@@ -181,7 +181,7 @@ export default function HomePage() {
         onClose={() => setInvestAvondModalOpen(false)}
         onViewBonus={() => {
           setInvestAvondModalOpen(false)
-          router.push('/traject')
+          router.push('/traject#bonusmateriaal')
         }}
       />
     </div>

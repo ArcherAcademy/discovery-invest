@@ -582,7 +582,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
         onClose={() => setInvestAvondModalOpen(false)}
         onViewBonus={() => {
           setInvestAvondModalOpen(false)
-          router.push('/traject')
+          router.push('/traject#bonusmateriaal')
         }}
       />
     </div>
