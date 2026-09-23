@@ -18,14 +18,14 @@ export function SignupBanner() {
             <span className="hidden text-foreground/45 sm:inline"> · Beperkt aantal plaatsen</span>
           </span>
         </p>
-        {!isSignupPage && (
-          <Link
-            href="/masterclass"
-            className="signup-banner-cta inline-flex shrink-0 items-center rounded-full border border-primary/20 bg-primary/[0.06] px-3.5 py-1.5 text-xs font-semibold text-primary transition-colors hover:border-primary/40 hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:text-sm"
-          >
-            Schrijf je in
-          </Link>
-        )}
+        <Link
+          href={isSignupPage ? 'https://archerinvest.be/wachtlijst' : '/masterclass'}
+          target={isSignupPage ? '_blank' : undefined}
+          rel={isSignupPage ? 'noreferrer' : undefined}
+          className="signup-banner-cta inline-flex shrink-0 items-center rounded-full border border-primary/20 bg-primary/[0.06] px-3.5 py-1.5 text-xs font-semibold text-primary transition-colors hover:border-primary/40 hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:text-sm"
+        >
+          {isSignupPage ? 'Open inschrijving' : 'Schrijf je in'}
+        </Link>
       </div>
     </div>
   )
