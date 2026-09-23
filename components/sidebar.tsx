@@ -101,8 +101,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                         aria-label={item.external ? `${item.label} openen in een nieuw tabblad` : undefined}
                         onClick={onNavigate}
                         className={cn(
-                          'relative flex items-center gap-2.5 px-3 py-3 sm:py-2 rounded-full text-sm font-medium transition-all duration-150',
-                          !active && item.href === '/masterclass' && 'signup-focus-ring',
+                          'flex items-center gap-2.5 px-3 py-3 sm:py-2 rounded-full text-sm font-medium transition-all duration-150',
                         )}
                         style={
                           active

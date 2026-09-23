@@ -1,38 +1,4 @@
 @import 'tailwindcss';
-
-.signup-focus-ring {
-  isolation: isolate;
-}
-
-.signup-focus-ring::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  z-index: 1;
-  pointer-events: none;
-  border-radius: inherit;
-  padding: 1px;
-  background: conic-gradient(from 0deg, transparent 0deg 322deg, color-mix(in srgb, var(--primary) 58%, white) 332deg 352deg, transparent 356deg 360deg);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  animation: signupOrbit 4s linear infinite;
-  will-change: transform;
-}
-
-@keyframes signupOrbit {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .signup-focus-ring::before {
-    animation: none;
-  }
-}
-
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 

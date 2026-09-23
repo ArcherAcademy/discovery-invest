@@ -15,7 +15,7 @@ export function SignupBanner() {
         </p>
         <Link
           href="/masterclass"
-          className="signup-focus-ring group relative inline-flex shrink-0 items-center rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className="inline-flex shrink-0 items-center rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           Schrijf je in
         </Link>
