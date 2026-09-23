@@ -21,7 +21,7 @@ const EDITIONS: Edition[] = [
     dates: '4–7',
     year: "'27",
     title: 'Editie februari 2027',
-    detail: 'donderdag 4 tot zondag 7 februari 2027 · Antwerpen',
+    detail: 'Antwerpen · Handelsbeurs',
     status: 'Beschikbare plaatsen',
     available: true,
   },
@@ -31,7 +31,7 @@ const EDITIONS: Edition[] = [
     dates: '3–6',
     year: "'27",
     title: 'Editie juni 2027',
-    detail: 'donderdag 3 tot zondag 6 juni 2027 · Antwerpen',
+    detail: 'Antwerpen · Handelsbeurs',
     status: 'Interesse doorgeven',
     available: true,
   },
@@ -41,7 +41,7 @@ const EDITIONS: Edition[] = [
     dates: '7–10',
     year: "'27",
     title: 'Editie oktober 2027',
-    detail: 'donderdag 7 tot zondag 10 oktober 2027 · Antwerpen',
+    detail: 'Antwerpen · Handelsbeurs',
     status: 'Interesse doorgeven',
     available: true,
   },
@@ -95,14 +95,31 @@ export default function InvestAvondUnlockModal({ open, onClose }: InvestAvondUnl
                   Kies de editie die bij jou past.
                 </h1>
                 <p className="mt-4 max-w-3xl text-pretty text-sm leading-6 text-muted-foreground sm:text-base">
-                  Selecteer hieronder je voorkeursdatum. Daarna neemt iemand van ons team contact met je op om je situatie te bespreken en te bekijken of de Invest Masterclass bij je past.
-                </p>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  <strong className="font-semibold text-foreground">Je betaalt nu niets en je keuze verplicht je tot niets.</strong>
+                  <strong className="font-semibold text-foreground">Je kandidaatstelling verplicht je tot niets.</strong> Daarna neemt iemand van ons team contact met je op om je situatie te bespreken en te bekijken of de Invest Masterclass bij je past.
                 </p>
               </div>
 
-              <div className="mt-8 grid gap-4 lg:grid-cols-3" aria-label="Beschikbare masterclass-edities">
+              <section className="mt-6 rounded-2xl border border-border/70 bg-card/60 px-4 py-4 sm:px-5" aria-labelledby="masterclass-takeaways-title">
+                <h2 id="masterclass-takeaways-title" className="text-sm font-semibold text-foreground">Wat je meeneemt uit de Masterclass</h2>
+                <ul className="mt-3 grid gap-x-6 gap-y-2 text-xs leading-5 text-muted-foreground sm:grid-cols-2">
+                  {[
+                    'Je persoonlijke levensprojectie met jouw cijfers',
+                    'Je GGR berekend, voor en na',
+                    'Je verdeling over de 12 domeinen, vastgelegd',
+                    'Je plan voor de komende 12 maanden op papier',
+                    'De vermogensplanner, voor altijd',
+                    '3 maanden 1-op-1 begeleiding met een vermogensexpert',
+                    'Een netwerk van 100 ondernemers',
+                  ].map(item => (
+                    <li key={item} className="flex items-start gap-2">
+                      <Check size={14} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              <div className="mt-6 grid gap-3 lg:grid-cols-3" aria-label="Beschikbare masterclass-edities">
                 {EDITIONS.map(edition => {
                   const isSelected = selectedEdition === edition.id
                   return (
@@ -111,10 +128,10 @@ export default function InvestAvondUnlockModal({ open, onClose }: InvestAvondUnl
                       type="button"
                       onClick={() => setSelectedEdition(edition.id)}
                       aria-pressed={isSelected}
-                      className={`flex min-h-56 flex-col rounded-2xl border p-4 text-left transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:p-5 ${isSelected ? 'border-primary bg-primary/[0.07] shadow-[0_0_0_3px_hsl(var(--primary)/0.12)]' : 'border-border bg-card hover:border-primary/45 hover:bg-primary/[0.025]'}`}
+                      className={`flex min-h-44 flex-col rounded-2xl border p-3.5 text-left transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:p-5 ${isSelected ? 'border-primary bg-primary/[0.07] shadow-[0_0_0_3px_hsl(var(--primary)/0.12)]' : 'border-border bg-card hover:border-primary/45 hover:bg-primary/[0.025]'}`}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <span className={`flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-xl border text-center ${isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/20 bg-primary/[0.06] text-primary'}`}>
+                        <span className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl border text-center ${isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/20 bg-primary/[0.06] text-primary'}`}>
                           <span className="text-[10px] font-bold tracking-[0.16em]">{edition.month}</span>
                           <span className="text-xl font-bold leading-5">{edition.dates}</span>
                           <span className="text-[10px]">{edition.year}</span>
@@ -125,10 +142,7 @@ export default function InvestAvondUnlockModal({ open, onClose }: InvestAvondUnl
                       </div>
                       <span className="mt-5 block font-semibold text-foreground">{edition.title}</span>
                       <span className="mt-2 block text-sm leading-5 text-muted-foreground">{edition.detail}</span>
-                      <span className="mt-auto flex items-center gap-2 pt-5 text-xs font-semibold text-primary">
-                        <span className={`size-2 rounded-full ${edition.status === 'Beschikbare plaatsen' ? 'bg-primary' : 'bg-muted-foreground/50'}`} />
-                        {edition.status}
-                      </span>
+
                     </button>
                   )
                 })}
@@ -140,9 +154,9 @@ export default function InvestAvondUnlockModal({ open, onClose }: InvestAvondUnl
                 onClick={() => setConfirmed(true)}
                 className="mt-7 inline-flex min-h-13 w-full items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
-                {selected?.status === 'Interesse doorgeven' ? 'Interesse doorgeven' : 'Mijn voorkeursdatum kiezen'}
+                Stel mij kandidaat
               </button>
-              <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">Na je keuze nemen we persoonlijk contact met je op. Geen betaling. Geen verplichting.</p>
+              <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">Geen betaling. Geen verplichting.</p>
             </>
           ) : (
             <div className="mx-auto max-w-xl py-8 text-center sm:py-12">
