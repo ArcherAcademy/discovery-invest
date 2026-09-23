@@ -1,0 +1,50 @@
+export interface HubSpotOwner {
+  id: string
+  name: string
+  email: string | null
+  team: string | null
+}
+
+const HUBSPOT_OWNERS: readonly HubSpotOwner[] = [
+  { id: '319840496', name: 'Anthony Swolfs', email: 'anthony@archer.academy', team: 'Management' },
+  { id: '320716249', name: 'Armani-Rochas Decock', email: 'armanirochas@gmail.com', team: 'Management' },
+  { id: '458827458', name: 'Bjorn Cornelissens', email: 'bjorn@archer.academy', team: 'Management' },
+  { id: '320716258', name: 'Nicolas Neuville', email: 'nicolas@archer.academy', team: 'Mentors' },
+  { id: '320716524', name: 'Kevin Peeters', email: 'kevin@archer.academy', team: 'Mentors' },
+  { id: '31191383', name: 'Wout Lambrecht', email: 'wout@archer.finance', team: 'Mentors' },
+  { id: '414511835', name: 'Jietse Strubbe', email: 'jietse@archer.academy', team: 'Mentors' },
+  { id: '873918168', name: 'Nigel Bertrams', email: 'nigel@archer.academy', team: 'Mentors' },
+  { id: '1359346636', name: 'Xavier Goethals', email: 'xavier@archer.academy', team: 'Mentors' },
+  { id: '1385035769', name: 'Lennard Van Hecke', email: 'lennard@archer.academy', team: 'Mentors' },
+  { id: '31313067', name: 'Stijn De Vos', email: 'stijn@archer.finance', team: 'Consultants' },
+  { id: '35791569', name: 'Pieter de Smet', email: 'pieter@archer.finance', team: 'Consultants' },
+  { id: '36112549', name: 'Lucas Alloing', email: 'lucas@archer.finance', team: 'Consultants' },
+  { id: '78151098', name: 'Creneau Rotsaert', email: 'creneau@archer.academy', team: 'Consultants' },
+  { id: '29636574', name: 'Ward buyse', email: 'ward@archer.academy', team: 'Product' },
+  { id: '32712616', name: 'Sophie Bielen', email: 'sophie@archer.finance', team: 'Product' },
+  { id: '768601327', name: 'Victor Matheussen', email: 'victor@archer.academy', team: 'Product' },
+  { id: '35973861', name: 'Caroline Maes', email: 'caroline@archer.finance', team: 'Events' },
+  { id: '795819249', name: 'Rha Demets', email: 'rha@archer.academy', team: 'Finance' },
+  { id: '33233361', name: 'Yannick Heraly', email: 'yannick@archer.finance', team: null },
+  { id: '34518213', name: 'Maxim Schuermans', email: 'maxim@archer.finance', team: null },
+  { id: '1092561603', name: 'Archer Academy', email: 'info@archer.academy', team: 'Support' },
+]
+
+const ownersById = new Map(HUBSPOT_OWNERS.map(owner => [owner.id, owner]))
+
+export function getHubSpotOwner(ownerId: string | null | undefined): HubSpotOwner | null {
+  const normalizedId = typeof ownerId === 'string' ? ownerId.trim() : ''
+  return normalizedId ? ownersById.get(normalizedId) ?? null : null
+}
+
+export function getHubSpotOwnerName(ownerId: string | null | undefined, fallback: string | null = null): string | null {
+  return getHubSpotOwner(ownerId)?.name ?? fallback
+}
+
+export { HUBSPOT_OWNERS }
+
+export default HUBSPOT_OWNERS
+
+// Keep the catalog immutable at runtime so owner routing cannot be changed by a request.
+Object.freeze(HUBSPOT_OWNERS)
+for (const owner of HUBSPOT_OWNERS) Object.freeze(owner)
