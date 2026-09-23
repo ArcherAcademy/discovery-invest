@@ -7,7 +7,7 @@ export default function KennismakingseventPage() {
       <iframe
         src="https://workshops.archerinvest.be"
         title="Kennismakingsevent van Archer Invest"
-        className="block h-[calc(100%+4rem)] w-full -translate-y-16 border-0 bg-background"
+        className="block h-[calc(100%+978px)] w-full -translate-y-16 border-0 bg-background md:h-[calc(100%+617px)]"
         allow="payment"
         referrerPolicy="strict-origin-when-cross-origin"
       />
