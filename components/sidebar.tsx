@@ -38,9 +38,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         },
         {
           label: tr.nav.masterclass,
-          href: 'https://archerinvest.be',
+          href: '/masterclass',
           icon: <GraduationCap size={16} />,
-          external: true,
         },
       ],
     },
@@ -201,9 +200,8 @@ function MobileBottomNav() {
     },
     {
       label: tr.nav.masterclass,
-      href: 'https://archerinvest.be',
+      href: '/masterclass',
       icon: <GraduationCap size={21} />,
-      external: true,
     },
   ]
 
