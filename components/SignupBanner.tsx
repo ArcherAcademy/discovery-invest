@@ -1,8 +1,13 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 
 export function SignupBanner() {
+  const pathname = usePathname()
+
+  if (pathname === '/masterclass') return null
+
   return (
     <div className="relative z-30 border-b border-primary/10 bg-background/80 px-4 py-2 backdrop-blur-md sm:px-6">
       <div className="mx-auto flex max-w-6xl justify-end">
