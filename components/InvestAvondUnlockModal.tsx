@@ -21,7 +21,7 @@ const EDITIONS: Edition[] = [
     dates: '4–7',
     year: "'27",
     title: 'Editie februari 2027',
-    detail: 'donderdag 4 tot zondag 7 februari 2027 · Antwerpen · beperkt aantal plaatsen',
+    detail: 'donderdag 4 tot zondag 7 februari 2027 · Antwerpen',
     status: 'Beschikbare plaatsen',
     available: true,
   },
@@ -31,7 +31,7 @@ const EDITIONS: Edition[] = [
     dates: '3–6',
     year: "'27",
     title: 'Editie juni 2027',
-    detail: 'donderdag 3 tot zondag 6 juni 2027 · Antwerpen · beperkt aantal plaatsen',
+    detail: 'donderdag 3 tot zondag 6 juni 2027 · Antwerpen',
     status: 'Interesse doorgeven',
     available: true,
   },
@@ -41,7 +41,7 @@ const EDITIONS: Edition[] = [
     dates: '7–10',
     year: "'27",
     title: 'Editie oktober 2027',
-    detail: 'donderdag 7 tot zondag 10 oktober 2027 · Antwerpen · beperkt aantal plaatsen',
+    detail: 'donderdag 7 tot zondag 10 oktober 2027 · Antwerpen',
     status: 'Interesse doorgeven',
     available: true,
   },
@@ -140,7 +140,7 @@ export default function InvestAvondUnlockModal({ open, onClose }: InvestAvondUnl
                 onClick={() => setConfirmed(true)}
                 className="mt-7 inline-flex min-h-13 w-full items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
-                Mijn voorkeursdatum kiezen
+                {selected?.status === 'Interesse doorgeven' ? 'Interesse doorgeven' : 'Mijn voorkeursdatum kiezen'}
               </button>
               <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">Na je keuze nemen we persoonlijk contact met je op. Geen betaling. Geen verplichting.</p>
             </>
