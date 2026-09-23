@@ -100,11 +100,16 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                         rel={item.external ? 'noopener noreferrer' : undefined}
                         aria-label={item.external ? `${item.label} openen in een nieuw tabblad` : undefined}
                         onClick={onNavigate}
-                        className="flex items-center gap-2.5 px-3 py-3 sm:py-2 rounded-full text-sm font-medium transition-all duration-150"
+                        className={cn(
+                          'flex items-center gap-2.5 px-3 py-3 sm:py-2 rounded-full text-sm font-medium transition-all duration-150',
+                          !active && item.href === '/masterclass' && 'bg-amber-50 text-amber-900 ring-1 ring-inset ring-amber-200',
+                        )}
                         style={
                           active
                             ? { background: '#2500F5', color: '#ffffff' }
-                            : { color: 'rgba(13,15,20,0.65)' }
+                            : item.href === '/masterclass'
+                              ? undefined
+                              : { color: 'rgba(13,15,20,0.65)' }
                         }
                       >
                         <span style={{ opacity: active ? 1 : 0.6 }}>{item.icon}</span>
