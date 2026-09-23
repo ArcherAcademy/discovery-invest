@@ -10,8 +10,7 @@ type Edition = {
   year: string
   title: string
   detail: string
-  filled: number
-  badge: string
+  status: 'Beschikbare plaatsen' | 'Interesse doorgeven'
   available: boolean
 }
 
@@ -23,8 +22,7 @@ const EDITIONS: Edition[] = [
     year: "'27",
     title: 'Editie februari 2027',
     detail: 'donderdag 4 tot zondag 7 februari 2027 · Antwerpen · beperkt aantal plaatsen',
-    filled: 55,
-    badge: 'Wachtlijst open',
+    status: 'Beschikbare plaatsen',
     available: true,
   },
   {
@@ -34,9 +32,8 @@ const EDITIONS: Edition[] = [
     year: "'27",
     title: 'Editie juni 2027',
     detail: 'donderdag 3 tot zondag 6 juni 2027 · Antwerpen · beperkt aantal plaatsen',
-    filled: 14,
-    badge: 'Binnenkort',
-    available: false,
+    status: 'Interesse doorgeven',
+    available: true,
   },
   {
     id: 'oktober-2027',
@@ -45,9 +42,8 @@ const EDITIONS: Edition[] = [
     year: "'27",
     title: 'Editie oktober 2027',
     detail: 'donderdag 7 tot zondag 10 oktober 2027 · Antwerpen · beperkt aantal plaatsen',
-    filled: 10,
-    badge: 'Binnenkort',
-    available: false,
+    status: 'Interesse doorgeven',
+    available: true,
   },
 ]
 
@@ -94,12 +90,15 @@ export default function InvestAvondUnlockModal({ open, onClose }: InvestAvondUnl
                 <div className="mb-6 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <CheckCircle2 size={23} />
                 </div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Alle video&apos;s bekeken</p>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Kies je voorkeursdatum</p>
                 <h1 id="edition-choice-title" className="mt-3 text-balance text-3xl font-bold tracking-tight sm:text-4xl lg:text-[2.65rem]">
-                  Kies de editie waarvoor je kandidaat wilt zijn.
+                  Kies de editie die bij jou past.
                 </h1>
-                <p className="mt-4 text-pretty text-sm leading-6 text-muted-foreground sm:text-base">
-                  <strong className="font-semibold text-foreground">Je kandidaatstelling verplicht je tot niets.</strong> We bellen je op om samen te bekijken of de editie bij je past.
+                <p className="mt-4 max-w-3xl text-pretty text-sm leading-6 text-muted-foreground sm:text-base">
+                  Selecteer hieronder je voorkeursdatum. Daarna neemt iemand van ons team contact met je op om je situatie te bespreken en te bekijken of de Invest Masterclass bij je past.
+                </p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  <strong className="font-semibold text-foreground">Je betaalt nu niets en je keuze verplicht je tot niets.</strong>
                 </p>
               </div>
 
@@ -121,19 +120,14 @@ export default function InvestAvondUnlockModal({ open, onClose }: InvestAvondUnl
                           <span className="text-[10px]">{edition.year}</span>
                         </span>
                         <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${edition.available ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
-                          {edition.badge}
+                          {edition.status}
                         </span>
                       </div>
                       <span className="mt-5 block font-semibold text-foreground">{edition.title}</span>
                       <span className="mt-2 block text-sm leading-5 text-muted-foreground">{edition.detail}</span>
-                      <span className="mt-auto pt-5">
-                        <span className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
-                          <span>VULGRAAD</span>
-                          <span>{edition.filled}% gevuld</span>
-                        </span>
-                        <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-primary/10">
-                          <span className="block h-full rounded-full bg-primary" style={{ width: `${edition.filled}%` }} />
-                        </span>
+                      <span className="mt-auto flex items-center gap-2 pt-5 text-xs font-semibold text-primary">
+                        <span className={`size-2 rounded-full ${edition.status === 'Beschikbare plaatsen' ? 'bg-primary' : 'bg-muted-foreground/50'}`} />
+                        {edition.status}
                       </span>
                     </button>
                   )
@@ -146,18 +140,18 @@ export default function InvestAvondUnlockModal({ open, onClose }: InvestAvondUnl
                 onClick={() => setConfirmed(true)}
                 className="mt-7 inline-flex min-h-13 w-full items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
-                Stel mij kandidaat
+                Mijn voorkeursdatum kiezen
               </button>
-              <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">Je hoeft hier geen gegevens opnieuw in te vullen.</p>
+              <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">Na je keuze nemen we persoonlijk contact met je op. Geen betaling. Geen verplichting.</p>
             </>
           ) : (
             <div className="mx-auto max-w-xl py-8 text-center sm:py-12">
               <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <Check size={28} />
               </div>
-              <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-primary">Kandidaatstelling ontvangen</p>
-              <h1 id="edition-choice-title" className="mt-3 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Top. We bellen je binnen 24u op om je plek te bespreken.</h1>
-              <p className="mt-4 text-sm leading-6 text-muted-foreground sm:text-base">Je koos voor {selected?.title}. We nemen persoonlijk contact met je op.</p>
+              <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-primary">Voorkeursdatum ontvangen</p>
+              <h1 id="edition-choice-title" className="mt-3 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Top. We nemen persoonlijk contact met je op.</h1>
+              <p className="mt-4 text-sm leading-6 text-muted-foreground sm:text-base">Je koos voor {selected?.title}. We bespreken je situatie en bekijken samen of de Invest Masterclass bij je past. Je betaalt nu niets en je keuze verplicht je tot niets.</p>
               <button type="button" onClick={close} className="mt-8 inline-flex min-h-11 items-center justify-center rounded-xl border border-border px-6 py-3 text-sm font-semibold transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 Sluiten
               </button>
