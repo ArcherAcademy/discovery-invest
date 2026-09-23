@@ -15,7 +15,7 @@ export function SignupBanner() {
         </p>
         <Link
           href="/masterclass"
-          className="inline-flex shrink-0 items-center rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className="group relative inline-flex shrink-0 items-center rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary before:pointer-events-none before:absolute before:-inset-1 before:rounded-lg before:border before:border-primary/20 before:opacity-0 before:animate-[signupHalo_3s_ease-out_infinite] motion-reduce:before:animate-none"
         >
           Schrijf je in
         </Link>
