@@ -1,0 +1,66 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { requireAdminOrMentor } from '@/lib/auth'
+import { createAdminClient } from '@/lib/supabase/admin'
+
+const USER_COLUMNS = 'id,email,last_activity_at,whatsapp_opt_in,invest_avond_geclaimd'
+const VIDEO_COLUMNS = 'id,order_no,section,title'
+const PROGRESS_COLUMNS = 'user_id,video_id,progress_pct,status,started_at,completed_at,last_activity_at'
+const FUNNEL_COLUMNS = 'user_id,videos_completed_count,all_completed_at'
+const BOOKING_COLUMNS = 'user_id,event_id,booked_at,status'
+const EVENT_COLUMNS = 'id,starts_at,locatie,capaciteit,prijs'
+const TRIGGER_COLUMNS = 'user_id,workflow_naam,status,created_at'
+const WEBHOOK_COLUMNS = 'user_id,event_type,created_at'
+
+async function fetchAll<T>(query: () => any): Promise<T[]> {
+  const rows: T[] = []
+  const batchSize = 1000
+  for (let from = 0; ; from += batchSize) {
+    const { data, error } = await query().range(from, from + batchSize - 1)
+    if (error) throw error
+    rows.push(...((data ?? []) as T[]))
+    if (!data || data.length < batchSize) return rows
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    await requireAdminOrMentor(request)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unauthorized'
+    return NextResponse.json({ error: message }, { status: message === 'Forbidden' ? 403 : 401 })
+  }
+
+  const supabase = createAdminClient()
+  const url = new URL(request.url)
+  const from = url.searchParams.get('from')
+  const to = url.searchParams.get('to')
+  const dateRange = (query: any, column: string) => {
+    if (from) query = query.gte(column, `${from}T00:00:00.000Z`)
+    if (to) query = query.lt(column, `${to}T00:00:00.000Z`)
+    return query
+  }
+
+  try {
+    const [users, videos, progress, funnel, bookings, events, triggers, webhooks] = await Promise.all([
+      fetchAll(() => supabase.from('demo_invest_users').select(USER_COLUMNS).order('id')),
+      supabase.from('demo_invest_videos').select(VIDEO_COLUMNS).order('order_no').then(({ data, error }) => {
+        if (error) throw error
+        return data ?? []
+      }),
+      fetchAll(() => dateRange(supabase.from('demo_invest_video_progress').select(PROGRESS_COLUMNS), 'started_at').order('started_at', { ascending: true })),
+      fetchAll(() => supabase.from('demo_invest_user_funnel').select(FUNNEL_COLUMNS).order('user_id')),
+      fetchAll(() => dateRange(supabase.from('demo_invest_event_bookings').select(BOOKING_COLUMNS), 'booked_at').order('booked_at', { ascending: false })),
+      supabase.from('demo_invest_events').select(EVENT_COLUMNS).order('starts_at').then(({ data, error }) => {
+        if (error) throw error
+        return data ?? []
+      }),
+      fetchAll(() => dateRange(supabase.from('demo_invest_trigger_log').select(TRIGGER_COLUMNS).order('created_at', { ascending: false }), 'created_at')),
+      fetchAll(() => dateRange(supabase.from('demo_invest_webhook_log').select(WEBHOOK_COLUMNS).eq('event_type', 'call.booked').order('created_at', { ascending: false }), 'created_at')),
+    ])
+
+    return NextResponse.json({ users, videos, progress, funnel, bookings, events, triggers, webhooks })
+  } catch (error) {
+    console.error('[analytics] data ophalen mislukt:', error)
+    return NextResponse.json({ error: 'Analyticsgegevens konden niet worden opgehaald.' }, { status: 500 })
+  }
+}

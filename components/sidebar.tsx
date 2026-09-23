@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
-import { Clock, Settings, LogOut, Home, PlaySquare, CalendarDays, GraduationCap, ShieldCheck } from 'lucide-react'
+import { Clock, Settings, LogOut, Home, PlaySquare, CalendarDays, GraduationCap, ShieldCheck, BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp } from './app-context'
 import { SidebarCallStatus } from './SidebarCallStatus'
@@ -48,6 +48,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       adminOnly: true,
       items: [
         { label: tr.nav.adminCenter, href: '/admin', icon: <ShieldCheck size={16} />, adminOnly: true },
+        { label: 'Analytics', href: '/admin/analytics', icon: <BarChart3 size={16} />, adminOnly: true },
       ],
     },
   ]
