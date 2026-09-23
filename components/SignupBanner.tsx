@@ -5,7 +5,8 @@ import { usePathname } from 'next/navigation'
 
 export function SignupBanner() {
   const pathname = usePathname()
-  const isSignupPage = pathname === '/masterclass'
+
+  if (pathname === '/masterclass') return null
 
   return (
     <div className="relative z-30 border-b border-primary/10 bg-background/80 px-4 py-2 backdrop-blur-md sm:px-6">
@@ -19,12 +20,10 @@ export function SignupBanner() {
           </span>
         </p>
         <Link
-          href={isSignupPage ? 'https://archerinvest.be/wachtlijst' : '/masterclass'}
-          target={isSignupPage ? '_blank' : undefined}
-          rel={isSignupPage ? 'noreferrer' : undefined}
+          href="/masterclass"
           className="signup-banner-cta inline-flex shrink-0 items-center rounded-full border border-primary/20 bg-primary/[0.06] px-3.5 py-1.5 text-xs font-semibold text-primary transition-colors hover:border-primary/40 hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:text-sm"
         >
-          {isSignupPage ? 'Open inschrijving' : 'Schrijf je in'}
+          Schrijf je in
         </Link>
       </div>
     </div>
