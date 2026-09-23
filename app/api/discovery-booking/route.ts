@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     .gte('starts_at', new Date().toISOString())
     .gt('spots_left', 0)
     .order('starts_at', { ascending: true })
-    .limit(2)
+    .limit(3)
   if (error) return NextResponse.json({ error: 'events_unavailable' }, { status: 500 })
 
   const { data: booking } = await context.supabase
@@ -105,7 +105,17 @@ export async function POST(req: NextRequest) {
     type: 'event.booked',
     user: context.user,
     funnel: context.funnel,
-    data: { booking_type: 'kennismakingsevent', event, booking },
+    data: {
+      booking_type: 'masterclass_edition_candidate',
+      selected_edition: {
+        id: event.id,
+        title: event.title,
+        starts_at: event.starts_at,
+        location: event.location,
+      },
+      event,
+      booking,
+    },
   })
   await emitEvent({
     type: 'bonus.unlocked',

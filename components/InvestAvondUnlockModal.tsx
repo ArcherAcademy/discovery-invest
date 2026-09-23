@@ -1,8 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { ArrowRight, CalendarDays, CheckCircle2, Clock3, MapPin, PhoneCall, Sparkles } from 'lucide-react'
+import { CalendarDays, Check, CheckCircle2, X } from 'lucide-react'
 import { useApp } from '@/components/app-context'
 import type { DemoEvent, DemoEventBooking } from '@/lib/types'
 
@@ -12,24 +11,24 @@ interface InvestAvondUnlockModalProps {
   onClose?: () => void
 }
 
-type BookingChoice = 'event' | 'strategy' | null
-
-function formatEventDate(value: string) {
+function formatEditionDate(event: DemoEvent) {
   return new Intl.DateTimeFormat('nl-BE', {
-    weekday: 'long',
     day: 'numeric',
     month: 'long',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date(value))
+    year: 'numeric',
+  }).format(new Date(event.starts_at))
 }
 
-export default function InvestAvondUnlockModal({ open, onUnlocked }: InvestAvondUnlockModalProps) {
+function editionLabel(event: DemoEvent) {
+  return event.title.replace(/^(Live\s+)?Invest-avond\s*[—-]\s*/i, '')
+}
+
+export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: InvestAvondUnlockModalProps) {
   const { videos } = useApp()
-  const [events, setEvents] = useState<DemoEvent[]>([])
+  const [editions, setEditions] = useState<DemoEvent[]>([])
   const [existingBooking, setExistingBooking] = useState<DemoEventBooking | null>(null)
-  const [choice, setChoice] = useState<BookingChoice>(null)
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [selectedEditionId, setSelectedEditionId] = useState<string | null>(null)
+  const [confirmed, setConfirmed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -38,16 +37,19 @@ export default function InvestAvondUnlockModal({ open, onUnlocked }: InvestAvond
     if (!open) return
     let cancelled = false
     setIsLoading(true)
+    setError(null)
     fetch('/api/discovery-booking', { credentials: 'include' })
-      .then(response => response.ok ? response.json() : Promise.reject(new Error('events_failed')))
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('editions_failed')))
       .then(data => {
         if (cancelled) return
-        setEvents(data.events ?? [])
-        setExistingBooking(data.booking ?? null)
-        if (data.booking) setChoice('event')
+        const booking = data.booking ?? null
+        setEditions(data.events ?? [])
+        setExistingBooking(booking)
+        setSelectedEditionId(booking?.event_id ?? null)
+        setConfirmed(Boolean(booking))
       })
       .catch(() => {
-        if (!cancelled) setError('We konden de beschikbare momenten niet laden. Probeer opnieuw.')
+        if (!cancelled) setError('De edities konden niet geladen worden. Probeer opnieuw.')
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false)
@@ -57,11 +59,10 @@ export default function InvestAvondUnlockModal({ open, onUnlocked }: InvestAvond
 
   if (!open) return null
 
-  const hasBooked = Boolean(existingBooking || choice === 'strategy')
   const bonusVideos = videos.filter(video => video.section === 'bonus')
 
-  async function bookEvent(eventId: string) {
-    if (isSubmitting) return
+  async function nominate() {
+    if (!selectedEditionId || isSubmitting || confirmed) return
     setIsSubmitting(true)
     setError(null)
     try {
@@ -69,146 +70,117 @@ export default function InvestAvondUnlockModal({ open, onUnlocked }: InvestAvond
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId }),
+        body: JSON.stringify({ eventId: selectedEditionId }),
       })
-      if (!response.ok) throw new Error('event_booking_failed')
+      if (!response.ok) throw new Error('nomination_failed')
       const data = await response.json()
-      setExistingBooking(data.booking)
-      setChoice('event')
+      setExistingBooking(data.booking ?? null)
+      setConfirmed(true)
       await onUnlocked()
     } catch {
-      setError('Deze plek kon niet worden gereserveerd. Kies een ander moment of probeer opnieuw.')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  async function requestStrategyMeeting() {
-    if (isSubmitting) return
-    setIsSubmitting(true)
-    setError(null)
-    try {
-      const response = await fetch('/api/strategy-meeting', { method: 'POST', credentials: 'include' })
-      if (!response.ok) throw new Error('strategy_request_failed')
-      setChoice('strategy')
-      await onUnlocked()
-    } catch {
-      setError('We konden je aanvraag nog niet versturen. Probeer opnieuw.')
+      setError('Je keuze kon nog niet opgeslagen worden. Probeer opnieuw.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto bg-background text-foreground">
-      <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-        <div className="mx-auto w-full max-w-3xl text-center">
-          <div className="mx-auto mb-5 flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <CheckCircle2 size={24} />
-          </div>
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-primary">Proficiat</p>
-          <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">Je hebt alle zes video&apos;s bekeken.</h1>
-          <p className="mx-auto mt-4 max-w-2xl text-pretty text-base leading-7 text-muted-foreground sm:text-lg">
-            <strong className="font-semibold text-foreground">Nu zetten we het om in een plan dat werkt voor jouw cijfers.</strong>
-          </p>
-        </div>
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-foreground/45 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="edition-choice-title">
+      <div className="flex min-h-full items-center justify-center">
+        <main className="relative my-auto w-full max-w-2xl rounded-3xl border border-border bg-background p-5 shadow-2xl sm:p-8">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Later sluiten"
+            className="absolute right-4 top-4 inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            <X size={19} />
+          </button>
 
-        <div className="mx-auto mt-8 grid w-full max-w-4xl gap-4 md:grid-cols-2 md:gap-6">
-          <section className="flex min-h-[27rem] flex-col rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary"><CalendarDays size={21} /></div>
-              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Gratis voor jou</span>
-            </div>
-            <h2 className="mt-6 text-xl font-bold">Kennismakingsevent</h2>
-            <ul className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
-              <li>Halve dag, in groep</li>
-              <li>Je eerste stappen worden concreet</li>
-              <li>Normaal €97, voor jou gratis zolang je account actief is</li>
-            </ul>
-            <div className="mt-6 flex-1">
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Kies je moment</p>
-              {isLoading ? (
-                <div className="h-16 animate-pulse rounded-2xl bg-muted" />
-              ) : events.length > 0 ? (
-                <div className="space-y-2">
-                  {events.map(event => (
-                    <button
-                      key={event.id}
-                      type="button"
-                      onClick={() => setSelectedEventId(event.id)}
-                      className={`w-full rounded-2xl border p-3 text-left transition-colors ${selectedEventId === event.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
-                    >
-                      <span className="block text-sm font-semibold">{formatEventDate(event.starts_at)}</span>
-                      <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground"><MapPin size={12} />{event.location} · {event.spots_left} plaatsen</span>
-                    </button>
+          {!confirmed ? (
+            <>
+              <div className="pr-10">
+                <div className="mb-5 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <CheckCircle2 size={23} />
+                </div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Alle video&apos;s bekeken</p>
+                <h1 id="edition-choice-title" className="mt-2 text-balance text-2xl font-bold tracking-tight sm:text-3xl">
+                  Kies de editie waarvoor je kandidaat wilt zijn.
+                </h1>
+                <p className="mt-3 max-w-xl text-pretty text-sm leading-6 text-muted-foreground sm:text-base">
+                  <strong className="font-semibold text-foreground">Je kandidaatstelling verplicht je tot niets.</strong> We bellen je op om samen te bekijken of de editie bij je past.
+                </p>
+              </div>
+
+              <div className="mt-7 space-y-3" aria-label="Beschikbare masterclass-edities">
+                {isLoading ? (
+                  [1, 2, 3].map(item => <div key={item} className="h-20 animate-pulse rounded-2xl bg-muted" />)
+                ) : editions.length > 0 ? (
+                  editions.map(edition => {
+                    const selected = selectedEditionId === edition.id
+                    return (
+                      <button
+                        key={edition.id}
+                        type="button"
+                        onClick={() => setSelectedEditionId(edition.id)}
+                        className={`flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${selected ? 'border-primary bg-primary/[0.06]' : 'border-border bg-card hover:border-primary/40'}`}
+                        aria-pressed={selected}
+                      >
+                        <span className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${selected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                          {selected ? <Check size={18} /> : <CalendarDays size={18} />}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-semibold">{editionLabel(edition)}</span>
+                          <span className="mt-1 block text-sm text-muted-foreground">{formatEditionDate(edition)} · {edition.location}</span>
+                        </span>
+                        <span className="shrink-0 text-xs font-medium text-muted-foreground">{edition.spots_left} plaatsen</span>
+                      </button>
+                    )
+                  })
+                ) : (
+                  <p className="rounded-2xl bg-muted p-4 text-sm text-muted-foreground">Er zijn momenteel geen edities beschikbaar.</p>
+                )}
+              </div>
+
+              {error && <p role="alert" className="mt-4 text-sm font-medium text-destructive">{error}</p>}
+
+              <button
+                type="button"
+                disabled={!selectedEditionId || isSubmitting || isLoading}
+                onClick={nominate}
+                className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                {isSubmitting ? 'Keuze opslaan…' : 'Stel mij kandidaat'}
+              </button>
+              <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">Je hoeft hier geen gegevens opnieuw in te vullen.</p>
+            </>
+          ) : (
+            <div className="py-5 text-center sm:py-8">
+              <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <CheckCircle2 size={29} />
+              </div>
+              <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-primary">Kandidaatstelling ontvangen</p>
+              <h1 id="edition-choice-title" className="mt-2 text-balance text-2xl font-bold tracking-tight sm:text-3xl">Top. Je keuze is ontvangen.</h1>
+              <p className="mx-auto mt-3 max-w-md text-pretty text-sm leading-6 text-muted-foreground sm:text-base">We bellen je binnen 24 uur op om je plek te bespreken en in te plannen.</p>
+              <div className="mx-auto mt-6 max-w-md rounded-2xl bg-primary/[0.06] p-4 text-left">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Jouw keuze</p>
+                <p className="mt-1 font-semibold">{editions.find(edition => edition.id === (existingBooking?.event_id ?? selectedEditionId)) ? editionLabel(editions.find(edition => edition.id === (existingBooking?.event_id ?? selectedEditionId))!) : 'Masterclass-editie'}</p>
+              </div>
+              <button type="button" onClick={onClose} className="mt-7 inline-flex min-h-11 items-center justify-center rounded-xl border border-border px-5 py-3 text-sm font-semibold transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                Sluiten
+              </button>
+              <div className="mt-7 border-t border-border pt-6 text-left">
+                <p className="text-sm font-semibold">Je bonusmateriaal staat nu klaar.</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  {bonusVideos.map(video => (
+                    <a key={video.id} href={`/video/${video.id}`} className="rounded-xl border border-border bg-card p-3 text-sm font-medium transition-colors hover:border-primary/40">{video.title}</a>
                   ))}
                 </div>
-              ) : <p className="text-sm text-muted-foreground">Nieuwe momenten worden binnenkort toegevoegd.</p>}
-            </div>
-            <button
-              type="button"
-              disabled={!selectedEventId || isSubmitting || hasBooked}
-              onClick={() => selectedEventId && bookEvent(selectedEventId)}
-              className="mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              {existingBooking ? 'Plek gereserveerd' : isSubmitting ? 'Plek reserveren…' : 'Reserveer mijn gratis plek'}
-              {!existingBooking && !isSubmitting && <ArrowRight size={17} />}
-            </button>
-          </section>
-
-          <section className="flex min-h-[27rem] flex-col rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary"><PhoneCall size={21} /></div>
-              <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">Persoonlijk</span>
-            </div>
-            <h2 className="mt-6 text-xl font-bold">Strategymeeting</h2>
-            <ul className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
-              <li>1-op-1 op kantoor</li>
-              <li>Anderhalf uur samen naar je volledige situatie kijken</li>
-              <li>We maken ruimte voor jouw cijfers en volgende stap</li>
-            </ul>
-            <div className="mt-6 flex-1 rounded-2xl bg-muted/60 p-4 text-sm leading-6 text-muted-foreground">
-              Liever persoonlijke begeleiding dan een groepsmoment? Vraag je afspraak aan. We bellen je binnen 24 uur om ze in te plannen.
-            </div>
-            <button
-              type="button"
-              disabled={isSubmitting || hasBooked}
-              onClick={requestStrategyMeeting}
-              className="mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-primary bg-background px-5 py-3 text-sm font-bold text-primary transition-colors hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              {choice === 'strategy' ? 'Aanvraag ontvangen' : isSubmitting ? 'Aanvraag versturen…' : 'Ik wil naar kantoor komen'}
-              {choice !== 'strategy' && !isSubmitting && <ArrowRight size={17} />}
-            </button>
-          </section>
-        </div>
-
-        {error && <p role="alert" className="mx-auto mt-5 text-center text-sm font-medium text-destructive">{error}</p>}
-
-        <p className="mx-auto mt-6 text-center text-sm text-muted-foreground">
-          Je plek reserveren of je afspraak aanvragen unlockt meteen je bonusmateriaal.
-        </p>
-        <p className="mx-auto mt-3 flex items-center gap-2 text-center text-xs text-muted-foreground"><Clock3 size={13} /> Je account staat nog 7 dagen open. Plaatsen zijn beperkt.</p>
-
-        {hasBooked && (
-          <section className="mx-auto mt-8 w-full max-w-4xl rounded-3xl border border-primary/20 bg-primary/[0.04] p-6 sm:p-8">
-            <div className="flex items-start gap-3">
-              <Sparkles className="mt-0.5 shrink-0 text-primary" size={20} />
-              <div>
-                <h2 className="font-bold">Je bonusmateriaal is vrijgegeven.</h2>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">Je keuze is ontvangen. Dit materiaal staat nu voor je klaar.</p>
               </div>
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              {bonusVideos.map(video => (
-                <Link key={video.id} href={`/video/${video.id}`} className="rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/40">
-                  <span className="block text-sm font-semibold">{video.title}</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">{video.content_type === 'pdf' ? 'PDF-gids' : `${Math.ceil((video.duration_seconds ?? 0) / 60)} min video`}</span>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
-      </main>
+          )}
+        </main>
+      </div>
     </div>
   )
 }
