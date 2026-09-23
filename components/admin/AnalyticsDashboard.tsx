@@ -8,7 +8,7 @@ type Video = { id: string; order_no: number; section: string; title: string }
 type Progress = { user_id: string; video_id: string; progress_pct: number | null; status: string | null; started_at: string | null; completed_at: string | null; last_activity_at: string | null }
 type Funnel = { user_id: string; videos_completed_count: number | null; all_completed_at: string | null; invest_avond_geclaimd: boolean | null }
 type Booking = { user_id: string; event_id: string | null; booked_at: string | null; status: string | null }
-type Event = { id: string; starts_at: string | null; locatie: string | null; capaciteit: number | null; prijs: number | null }
+type Event = { id: string; starts_at: string | null; location: string | null; capacity: number | null; price_eur: number | null }
 type Trigger = { user_id: string | null; workflow_naam: string | null; status: string | null; created_at: string }
 type Webhook = { user_id: string | null; event_type: string; created_at: string }
 type Payload = { users: User[]; videos: Video[]; progress: Progress[]; funnel: Funnel[]; bookings: Booking[]; events: Event[]; triggers: Trigger[]; webhooks: Webhook[] }
@@ -77,7 +77,7 @@ export function AnalyticsDashboard() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => { const params = new URLSearchParams(); if (from) params.set('from', from); if (to) params.set('to', to); setLoading(true); fetch(`/api/admin/analytics?${params}`).then(async response => { if (!response.ok) throw new Error('Analytics konden niet worden geladen.'); return response.json() }).then(setData).catch(error => setError(error.message)).finally(() => setLoading(false)) }, [from, to])
+  useEffect(() => { const controller = new AbortController(); const timeout = window.setTimeout(() => controller.abort(), 30000); const params = new URLSearchParams(); if (from) params.set('from', from); if (to) params.set('to', to); setLoading(true); setError(null); fetch(`/api/admin/analytics?${params}`, { signal: controller.signal }).then(async response => { const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error ?? 'Analytics konden niet worden geladen.'); return body }).then(setData).catch(error => { if (error.name === 'AbortError') setError('Analytics laden duurt te lang. Probeer opnieuw.'); else setError(error.message) }).finally(() => { window.clearTimeout(timeout); setLoading(false) }); return () => { window.clearTimeout(timeout); controller.abort() } }, [from, to])
 
   const leads = useMemo<Lead[]>(() => { if (!data) return []; const funnel = new Map(data.funnel.map(row => [row.user_id, row])); const progress = new Map<string, Progress[]>(); data.progress.forEach(row => progress.set(row.user_id, [...(progress.get(row.user_id) ?? []), row])); const booked = new Set([...data.bookings.map(row => row.user_id), ...data.webhooks.flatMap(row => row.user_id ? [row.user_id] : [])]); return data.users.map(user => ({ ...user, invest_avond_geclaimd: funnel.get(user.id)?.invest_avond_geclaimd ?? null, completed: funnel.get(user.id)?.videos_completed_count ?? 0, progress: progress.get(user.id) ?? [], booked: booked.has(user.id), triggers: data.triggers.filter(row => row.user_id === user.id) })).filter(lead => (lead.email ?? '').toLowerCase().includes(query.toLowerCase())).sort((a, b) => b.completed - a.completed || (a.email ?? '').localeCompare(b.email ?? '')) }, [data, query])
   const selected = leads.find(lead => lead.id === selectedId) ?? null

@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
   const to = url.searchParams.get('to')
   const dateRange = (query: any, column: string) => {
     if (from) query = query.gte(column, `${from}T00:00:00.000Z`)
-    if (to) query = query.lt(column, `${to}T00:00:00.000Z`)
+    if (to) { const end = new Date(`${to}T00:00:00.000Z`); end.setUTCDate(end.getUTCDate() + 1); query = query.lt(column, end.toISOString()) }
     return query
   }
 
@@ -54,7 +54,10 @@ export async function GET(request: NextRequest) {
         if (error) throw error
         return data ?? []
       }),
-      fetchAll(() => dateRange(supabase.from('demo_invest_trigger_log').select(TRIGGER_COLUMNS).order('created_at', { ascending: false }), 'created_at')),
+      dateRange(supabase.from('demo_invest_trigger_log').select(TRIGGER_COLUMNS).order('created_at', { ascending: false }).limit(5000), 'created_at').then((result: any) => { const { data, error } = result
+        if (error) throw error
+        return data ?? []
+      }),
       fetchAll(() => dateRange(supabase.from('demo_invest_webhook_log').select(WEBHOOK_COLUMNS).eq('event_type', 'call.booked').order('created_at', { ascending: false }), 'created_at')),
     ])
 
