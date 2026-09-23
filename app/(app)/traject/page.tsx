@@ -255,12 +255,12 @@ export default function TrajectPage() {
 
       {/* Bonus videos — available after all six core videos */}
       <section id="bonusmateriaal" className="scroll-mt-6">
-        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex flex-col gap-1">
-            <h2 className="text-sm font-semibold" style={{ color: '#0d0f14' }}>
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-1.5">
+            <h2 className="text-lg font-bold tracking-tight" style={{ color: '#0d0f14' }}>
               Jouw bonusmateriaal
             </h2>
-            <p className="text-xs leading-5" style={{ color: 'rgba(13,15,20,0.5)' }}>
+            <p className="text-sm leading-6" style={{ color: 'rgba(13,15,20,0.5)' }}>
               Na alle 6 kernvideo&apos;s wordt je bonusmateriaal vrijgegeven.
             </p>
           </div>
@@ -271,19 +271,19 @@ export default function TrajectPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           {bonusVideos.map((video) => {
             const isPdf = video.content_type === 'pdf'
             return bonusUnlocked ? (
               <Link
                 key={video.id}
                 href={`/video/${video.id}`}
-                className="group flex flex-col rounded-xl border overflow-hidden hover:-translate-y-0.5 transition-all duration-200"
+                className="group flex flex-col rounded-2xl border overflow-hidden hover:-translate-y-0.5 transition-all duration-200"
                 style={{ background: '#ffffff', borderColor: '#e8ecf4', boxShadow: '0 1px 4px rgba(13,15,20,0.06)' }}
               >
                 {isPdf ? (
                   /* PDF thumbnail — first page rendered by pdf.js, same engine as the viewer */
-                  <div className="relative h-28 overflow-hidden">
+                  <div className="relative h-40 overflow-hidden sm:h-44">
                     <PdfThumbnail pdfUrl={video.video_url} className="absolute inset-0" />
                     <span
                       className="absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded z-10"
@@ -293,7 +293,7 @@ export default function TrajectPage() {
                     </span>
                   </div>
                 ) : (
-                  <div className="relative h-28 overflow-hidden">
+                  <div className="relative h-40 overflow-hidden sm:h-44">
                     <img
                       src={
                         video.title.toLowerCase().includes('technische analyse')
@@ -315,7 +315,7 @@ export default function TrajectPage() {
                     </div>
                   </div>
                 )}
-                <div className="px-3 py-2.5">
+                <div className="px-4 py-4">
                   <p className="text-xs font-semibold truncate" style={{ color: '#0d0f14' }}>{video.title}</p>
                   <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: 'rgba(13,15,20,0.4)' }}>
                     {isPdf ? <><FileText size={9} /> PDF-gids</> : <><Clock size={9} /> {fmt(video.duration_seconds)}</>}
@@ -336,7 +336,7 @@ export default function TrajectPage() {
                     <Lock size={16} color="rgba(255,255,255,0.35)" />
                   </div>
                 ) : (
-                  <div className="relative h-28 overflow-hidden">
+                  <div className="relative h-40 overflow-hidden sm:h-44">
                     <img
                       src={
                         video.title.toLowerCase().includes('technische analyse')
@@ -354,7 +354,7 @@ export default function TrajectPage() {
                     </div>
                   </div>
                 )}
-                <div className="px-3 py-2.5">
+                <div className="px-4 py-4">
                   <p className="text-xs font-semibold truncate" style={{ color: 'rgba(13,15,20,0.5)' }}>{video.title}</p>
                   <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: 'rgba(13,15,20,0.3)' }}>
                     {isPdf ? <><FileText size={9} /> PDF-gids</> : <><Clock size={9} /> {fmt(video.duration_seconds)}</>}
