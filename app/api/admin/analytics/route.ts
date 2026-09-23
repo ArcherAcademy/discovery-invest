@@ -11,15 +11,10 @@ const EVENT_COLUMNS = 'id,starts_at,location,capacity,price_eur'
 const TRIGGER_COLUMNS = 'user_id,workflow_naam,status,created_at'
 const WEBHOOK_COLUMNS = 'user_id,event_type,created_at'
 
-async function fetchAll<T>(query: () => any): Promise<T[]> {
-  const rows: T[] = []
-  const batchSize = 1000
-  for (let from = 0; ; from += batchSize) {
-    const { data, error } = await query().range(from, from + batchSize - 1)
-    if (error) throw error
-    rows.push(...((data ?? []) as T[]))
-    if (!data || data.length < batchSize) return rows
-  }
+async function fetchLimited<T>(query: any, limit: number): Promise<T[]> {
+  const { data, error } = await query.limit(limit)
+  if (error) throw error
+  return (data ?? []) as T[]
 }
 
 export async function GET(request: NextRequest) {
@@ -42,23 +37,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const [users, videos, progress, funnel, bookings, events, triggers, webhooks] = await Promise.all([
-      fetchAll(() => supabase.from('demo_invest_users').select(USER_COLUMNS).order('id')),
-      supabase.from('demo_invest_videos').select(VIDEO_COLUMNS).order('order_no').then(({ data, error }) => {
-        if (error) throw error
-        return data ?? []
-      }),
-      fetchAll(() => dateRange(supabase.from('demo_invest_video_progress').select(PROGRESS_COLUMNS), 'started_at').order('started_at', { ascending: true })),
-      fetchAll(() => supabase.from('demo_invest_user_funnel').select(FUNNEL_COLUMNS).order('user_id')),
-      fetchAll(() => dateRange(supabase.from('demo_invest_event_bookings').select(BOOKING_COLUMNS), 'booked_at').order('booked_at', { ascending: false })),
-      supabase.from('demo_invest_events').select(EVENT_COLUMNS).order('starts_at').then(({ data, error }) => {
-        if (error) throw error
-        return data ?? []
-      }),
-      dateRange(supabase.from('demo_invest_trigger_log').select(TRIGGER_COLUMNS).order('created_at', { ascending: false }).limit(5000), 'created_at').then((result: any) => { const { data, error } = result
-        if (error) throw error
-        return data ?? []
-      }),
-      fetchAll(() => dateRange(supabase.from('demo_invest_webhook_log').select(WEBHOOK_COLUMNS).eq('event_type', 'call.booked').order('created_at', { ascending: false }), 'created_at')),
+      fetchLimited(supabase.from('demo_invest_users').select(USER_COLUMNS).order('id'), 5000),
+      fetchLimited(supabase.from('demo_invest_videos').select(VIDEO_COLUMNS).order('order_no'), 100),
+      fetchLimited(dateRange(supabase.from('demo_invest_video_progress').select(PROGRESS_COLUMNS).order('started_at', { ascending: true }), 'started_at'), 10000),
+      fetchLimited(supabase.from('demo_invest_user_funnel').select(FUNNEL_COLUMNS).order('user_id'), 5000),
+      fetchLimited(dateRange(supabase.from('demo_invest_event_bookings').select(BOOKING_COLUMNS).order('booked_at', { ascending: false }), 'booked_at'), 5000),
+      fetchLimited(supabase.from('demo_invest_events').select(EVENT_COLUMNS).order('starts_at'), 100),
+      fetchLimited(dateRange(supabase.from('demo_invest_trigger_log').select(TRIGGER_COLUMNS).order('created_at', { ascending: false }), 'created_at'), 500),
+      fetchLimited(dateRange(supabase.from('demo_invest_webhook_log').select(WEBHOOK_COLUMNS).eq('event_type', 'call.booked').order('created_at', { ascending: false }), 'created_at'), 5000),
     ])
 
     return NextResponse.json({ users, videos, progress, funnel, bookings, events, triggers, webhooks })
