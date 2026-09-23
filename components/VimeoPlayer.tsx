@@ -123,7 +123,10 @@ export default function VimeoPlayer({
 
   // ── doComplete — called by 'ended' and manual button ──────────────────────
   const doComplete = useCallback(async (source: 'ended' | 'manual') => {
-    if (marked.current) return
+    if (marked.current) {
+      if (source === 'ended' && isLastVideo) onAutoNextRef.current?.()
+      return
+    }
     marked.current = true
 
     try {
