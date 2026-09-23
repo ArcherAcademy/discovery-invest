@@ -102,7 +102,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                         onClick={onNavigate}
                         className={cn(
                           'relative flex items-center gap-2.5 px-3 py-3 sm:py-2 rounded-full text-sm font-medium transition-all duration-150',
-                          !active && item.href === '/masterclass' && 'before:pointer-events-none before:absolute before:-inset-1 before:rounded-full before:border before:border-primary/25 before:opacity-0 before:animate-[signupHalo_3s_ease-out_infinite] motion-reduce:before:animate-none',
+                          !active && item.href === '/masterclass' && 'signup-focus-ring',
                         )}
                         style={
                           active

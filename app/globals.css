@@ -1,19 +1,37 @@
 @import 'tailwindcss';
 
-@keyframes signupHalo {
-  0% {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  20% {
-    opacity: 0.7;
-  }
-  70%,
-  100% {
-    opacity: 0;
-    transform: scale(1.08);
+.signup-focus-ring {
+  isolation: isolate;
+}
+
+.signup-focus-ring::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(from 0deg, transparent 0deg 250deg, color-mix(in srgb, var(--primary) 72%, white) 285deg 345deg, transparent 20deg 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: signupOrbit 2.8s linear infinite;
+}
+
+@keyframes signupOrbit {
+  to {
+    transform: rotate(360deg);
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .signup-focus-ring::before {
+    animation: none;
+  }
+}
+
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
