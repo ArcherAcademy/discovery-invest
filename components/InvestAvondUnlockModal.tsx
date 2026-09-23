@@ -131,18 +131,18 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
                       aria-pressed={isSelected}
                       className={`flex min-h-44 flex-col rounded-2xl border p-3.5 text-left transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:p-5 ${isSelected ? 'border-primary bg-primary/[0.07] shadow-[0_0_0_3px_hsl(var(--primary)/0.12)]' : 'border-border bg-card hover:border-primary/45 hover:bg-primary/[0.025]'}`}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <span className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl border text-center ${isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/20 bg-primary/[0.06] text-primary'}`}>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className={`inline-flex items-baseline gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1.5 ${isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/20 bg-primary/[0.06] text-primary'}`}>
                           <span className="text-[10px] font-bold tracking-[0.16em]">{edition.month}</span>
-                          <span className="text-xl font-bold leading-5">{edition.dates}</span>
-                          <span className="text-[10px]">{edition.year}</span>
+                          <span className="text-xl font-bold leading-none">{edition.dates}</span>
+                          <span className="text-[10px]">&apos;{edition.year.slice(-2)}</span>
                         </span>
                         <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${edition.available ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
                           {edition.status}
                         </span>
                       </div>
-                      <span className="mt-5 block font-semibold text-foreground">{edition.title}</span>
-                      <span className="mt-2 block text-sm leading-5 text-muted-foreground">{edition.detail}</span>
+                      <span className="mt-4 block font-semibold text-foreground">{edition.title}</span>
+                      <span className="mt-1.5 block text-sm leading-5 text-muted-foreground">{edition.detail}</span>
 
                     </button>
                   )
