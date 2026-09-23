@@ -1,9 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { ArrowRight, X } from 'lucide-react'
-
-const EVENT_URL = 'https://workshops.archerinvest.be'
 const INTRO_VIDEO_URL = 'https://player.vimeo.com/video/1229085246?dnt=1&title=0&byline=0&portrait=0&autoplay=1&muted=1&playsinline=1'
 
 interface InvestAvondUnlockModalProps {
@@ -13,6 +12,7 @@ interface InvestAvondUnlockModalProps {
 }
 
 export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: InvestAvondUnlockModalProps) {
+  const router = useRouter()
   const [isUnlocking, setIsUnlocking] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -30,8 +30,8 @@ export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: In
       })
       if (!response.ok) throw new Error('unlock_failed')
       await onUnlocked()
-      window.open(EVENT_URL, '_blank', 'noopener,noreferrer')
       onClose?.()
+      router.push('/kennismakingsevent')
     } catch {
       setError('We konden je bonusmateriaal nog niet vrijgeven. Probeer opnieuw.')
     } finally {

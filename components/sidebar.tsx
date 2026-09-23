@@ -33,9 +33,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         { label: tr.nav.traject, href: '/traject', icon: <PlaySquare size={16} /> },
         {
           label: tr.nav.events,
-          href: 'https://workshops.archerinvest.be',
+          href: '/kennismakingsevent',
           icon: <CalendarDays size={16} />,
-          external: true,
         },
         {
           label: tr.nav.masterclass,
@@ -197,9 +196,8 @@ function MobileBottomNav() {
     { label: tr.nav.traject, href: '/traject', icon: <PlaySquare size={21} /> },
     {
       label: tr.nav.events,
-      href: 'https://workshops.archerinvest.be',
+      href: '/kennismakingsevent',
       icon: <CalendarDays size={21} />,
-      external: true,
     },
     {
       label: tr.nav.masterclass,
