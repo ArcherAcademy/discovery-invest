@@ -82,6 +82,8 @@ interface HubSpotContactSearchResult {
   properties?: {
     email?: string | null
     hubspot_owner_id?: string | null
+    phone?: string | null
+    mobilephone?: string | null
   }
 }
 
@@ -110,6 +112,7 @@ interface HubSpotOwnerResult {
 
 export interface HubSpotAccountOwnerSnapshot {
   ownerIdByEmail: Map<string, string | null>
+  phoneByEmail: Map<string, string | null>
   ownersById: Map<string, HubSpotOwner>
 }
 
@@ -147,6 +150,7 @@ async function hubSpotRequest<T>(path: string, init?: RequestInit): Promise<T> {
 export async function getHubSpotAccountOwnerSnapshot(emails: string[]): Promise<HubSpotAccountOwnerSnapshot> {
   const normalizedEmails = Array.from(new Set(emails.map(email => email.trim().toLowerCase()).filter(Boolean)))
   const ownerIdByEmail = new Map<string, string | null>()
+  const phoneByEmail = new Map<string, string | null>()
   const dynamicOwnersById = new Map<string, HubSpotOwner>()
   const emailByContactId = new Map<string, string>()
   const leadIdsByContactId = new Map<string, string[]>()
@@ -157,7 +161,7 @@ export async function getHubSpotAccountOwnerSnapshot(emails: string[]): Promise<
       method: 'POST',
       body: JSON.stringify({
         idProperty: 'email',
-        properties: ['email', 'hubspot_owner_id'],
+        properties: ['email', 'hubspot_owner_id', 'phone', 'mobilephone'],
         propertiesWithHistory: [],
         inputs: values.map(id => ({ id })),
       }),
@@ -168,7 +172,9 @@ export async function getHubSpotAccountOwnerSnapshot(emails: string[]): Promise<
       const email = contact.properties?.email?.trim().toLowerCase()
       if (!email) continue
       const ownerId = contact.properties?.hubspot_owner_id?.trim() || null
+      const phone = contact.properties?.mobilephone?.trim() || contact.properties?.phone?.trim() || null
       ownerIdByEmail.set(email, ownerId)
+      phoneByEmail.set(email, phone)
       emailByContactId.set(contact.id, email)
     }
 
@@ -252,7 +258,7 @@ export async function getHubSpotAccountOwnerSnapshot(emails: string[]): Promise<
     after = data.paging?.next?.after
   } while (after)
 
-  return { ownerIdByEmail, ownersById: dynamicOwnersById }
+  return { ownerIdByEmail, phoneByEmail, ownersById: dynamicOwnersById }
 }
 
 export { HUBSPOT_OWNERS }

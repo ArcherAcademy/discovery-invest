@@ -150,12 +150,14 @@ export async function GET(req: NextRequest) {
   // HubSpot is de source of truth voor zowel de actuele contact-owner als de naam.
   // Bij een tijdelijke API-fout blijven de opgeslagen owner en webhookhistoriek beschikbaar.
   let liveOwnerIdByEmail = new Map<string, string | null>()
+  let livePhoneByEmail = new Map<string, string | null>()
   let liveOwnersById = new Map<string, { name: string }>()
   try {
     const snapshot = await getHubSpotAccountOwnerSnapshot(
       usersData.map(user => (user.email ?? '').trim()).filter(Boolean),
     )
     liveOwnerIdByEmail = snapshot.ownerIdByEmail
+    livePhoneByEmail = snapshot.phoneByEmail
     liveOwnersById = snapshot.ownersById
   } catch (error) {
     console.error('[admin/data] Actuele HubSpot owners ophalen mislukt; lokale fallback wordt gebruikt:', error)
@@ -180,6 +182,7 @@ export async function GET(req: NextRequest) {
       ...user,
       ...callState,
       hubspot_owner_id: ownerId,
+      phone: livePhoneByEmail.get(email) ?? null,
       opvolging_actief: !followUpDisabledUserIds.has(user.id),
       instroom: instroomByEmail.get(email) ?? 'onbekend',
     }

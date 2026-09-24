@@ -20,6 +20,8 @@ interface AdminUser extends DemoUser {
   funnel?: DemoUserFunnel
   /** Numerieke HubSpot owner-ID — wordt via bookingOwners naar een naam vertaald. */
   hubspot_owner_id?: string | null
+  /** Actueel telefoonnummer uit HubSpot; mobiel krijgt voorrang. */
+  phone?: string | null
   /** Herkomst van het account, server-side bepaald uit de eerste bekende instroom. */
   instroom?: 'vermogenstest' | 'discovery' | 'onbekend'
   // Live afgeleide call-status en opvolgvlag — server-side samengevoegd in /api/admin/data.
@@ -719,7 +721,10 @@ export default function AdminPage() {
         // meebewegen met de gekozen periode.
         const scopedUsers = users.filter(u => {
           const q = accountsFilter.query.trim().toLowerCase()
-          const queryOk = !q || (u.email ?? '').toLowerCase().includes(q) || (u.name ?? '').toLowerCase().includes(q)
+          const queryOk = !q
+  || (u.email ?? '').toLowerCase().includes(q)
+  || (u.name ?? '').toLowerCase().includes(q)
+  || (u.phone ?? '').toLowerCase().includes(q)
           const videosOk = !onlyWithVideos || (u.funnel?.videos_completed_count ?? 0) >= 1
           let dateOk = true
           if (createdFromStart !== null || createdToEnd !== null) {
@@ -828,7 +833,7 @@ export default function AdminPage() {
               </div>
               <input
                 type="text"
-                placeholder="Zoek op naam of e-mail..."
+                placeholder="Zoek op naam, e-mail of telefoon..."
                 value={accountsFilter.query}
                 onChange={e => {
                   setAccountsFilter(f => ({ ...f, query: e.target.value }))
@@ -956,7 +961,7 @@ export default function AdminPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e8ecf4', background: '#F5F8FF' }}>
-                      {['Naam', 'E-mail', 'Instroom', 'Lead owner', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
+                      {['Naam', 'E-mail', 'Telefoon', 'Instroom', 'Lead owner', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
                         <th key={h} className="px-4 py-3 text-left font-semibold" style={{ color: 'rgba(13,15,20,0.45)' }}>{h}</th>
                       ))}
                     </tr>
@@ -977,10 +982,17 @@ export default function AdminPage() {
                             {u.name || <span style={{ color: 'rgba(13,15,20,0.3)' }}>—</span>}
                           </td>
 
-                          {/* E-mail */}
-                          <td className="px-4 py-3" style={{ color: 'rgba(13,15,20,0.6)' }}>{u.email}</td>
+  {/* E-mail */}
+  <td className="px-4 py-3" style={{ color: 'rgba(13,15,20,0.6)' }}>{u.email}</td>
 
-                          {/* Instroom / herkomst */}
+  {/* Telefoonnummer uit HubSpot */}
+  <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'rgba(13,15,20,0.6)' }}>
+  {u.phone
+  ? <a href={`tel:${u.phone}`} className="hover:underline">{u.phone}</a>
+  : <span style={{ color: 'rgba(13,15,20,0.3)' }}>—</span>}
+  </td>
+
+  {/* Instroom / herkomst */}
                           <td className="px-4 py-3 whitespace-nowrap">
                             {(() => {
                               const instroom = u.instroom ?? 'onbekend'
@@ -1148,7 +1160,7 @@ export default function AdminPage() {
                     })}
                     {filtered.length === 0 && (
                       <tr>
-                        <td colSpan={13} className="px-4 py-8 text-center text-xs" style={{ color: 'rgba(13,15,20,0.35)' }}>
+                        <td colSpan={15} className="px-4 py-8 text-center text-xs" style={{ color: 'rgba(13,15,20,0.35)' }}>
                           Geen accounts gevonden
                         </td>
                       </tr>
