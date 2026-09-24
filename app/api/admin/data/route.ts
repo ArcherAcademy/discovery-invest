@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminOrMentor } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getAllCallUserStates } from '@/lib/call-booking-data'
-import { extractHubSpotOwnerId } from '@/lib/hubspot-owners'
+import { extractHubSpotOwnerId, getHubSpotAccountOwnerSnapshot } from '@/lib/hubspot-owners'
 
 /**
  * GET /api/admin/data
@@ -147,23 +147,39 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Map van HubSpot owner-id → accountmanagernaam, uit de boekingslinks.
+  // HubSpot is de source of truth voor zowel de actuele contact-owner als de naam.
+  // Bij een tijdelijke API-fout blijven de opgeslagen owner en webhookhistoriek beschikbaar.
+  let liveOwnerIdByEmail = new Map<string, string | null>()
+  let liveOwnersById = new Map<string, { name: string }>()
+  try {
+    const snapshot = await getHubSpotAccountOwnerSnapshot(
+      usersData.map(user => (user.email ?? '').trim()).filter(Boolean),
+    )
+    liveOwnerIdByEmail = snapshot.ownerIdByEmail
+    liveOwnersById = snapshot.ownersById
+  } catch (error) {
+    console.error('[admin/data] Actuele HubSpot owners ophalen mislukt; lokale fallback wordt gebruikt:', error)
+  }
+
   const ownerNames: Record<string, string> = {}
   for (const row of (bookingLinksData ?? []) as { hubspot_owner_id: string | null; naam: string | null }[]) {
     const id = (row.hubspot_owner_id ?? '').trim()
     if (id && row.naam) ownerNames[id] = row.naam
   }
+  for (const [id, owner] of liveOwnersById) ownerNames[id] = owner.name
 
   const followUpDisabledUserIds = new Set((followUpDisabledData ?? []).map(row => row.user_id))
   const users = (usersData ?? []).map(user => {
     const callState = callStates.get(user.id)
     const email = (user.email ?? '').trim().toLowerCase()
     const storedOwnerId = ((callState?.contact_owner_email ?? user.hubspot_owner_id) as string | null | undefined)?.trim()
+    const fallbackOwnerId = storedOwnerId || historicalOwnerByEmail.get(email) || null
+    const ownerId = liveOwnerIdByEmail.has(email) ? liveOwnerIdByEmail.get(email) ?? null : fallbackOwnerId
 
     return {
       ...user,
       ...callState,
-      hubspot_owner_id: storedOwnerId || historicalOwnerByEmail.get(email) || null,
+      hubspot_owner_id: ownerId,
       opvolging_actief: !followUpDisabledUserIds.has(user.id),
       instroom: instroomByEmail.get(email) ?? 'onbekend',
     }
