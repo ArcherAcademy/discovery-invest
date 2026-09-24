@@ -78,9 +78,25 @@ export function getHubSpotOwnerName(ownerId: string | null | undefined, fallback
 }
 
 interface HubSpotContactSearchResult {
+  id: string
   properties?: {
     email?: string | null
     hubspot_owner_id?: string | null
+  }
+}
+
+interface HubSpotAssociationResult {
+  from: { id: string }
+  to?: { toObjectId?: number; id?: string }[]
+}
+
+interface HubSpotLeadResult {
+  id: string
+  updatedAt?: string
+  properties?: {
+    hubspot_owner_id?: string | null
+    hs_owner_id_calculated?: string | null
+    hs_all_owner_ids?: string | null
   }
 }
 
@@ -132,6 +148,8 @@ export async function getHubSpotAccountOwnerSnapshot(emails: string[]): Promise<
   const normalizedEmails = Array.from(new Set(emails.map(email => email.trim().toLowerCase()).filter(Boolean)))
   const ownerIdByEmail = new Map<string, string | null>()
   const dynamicOwnersById = new Map<string, HubSpotOwner>()
+  const emailByContactId = new Map<string, string>()
+  const leadIdsByContactId = new Map<string, string[]>()
 
   for (let index = 0; index < normalizedEmails.length; index += 100) {
     const values = normalizedEmails.slice(index, index + 100)
@@ -145,15 +163,72 @@ export async function getHubSpotAccountOwnerSnapshot(emails: string[]): Promise<
       }),
     })
 
-    for (const contact of data.results ?? []) {
+    const contacts = data.results ?? []
+    for (const contact of contacts) {
       const email = contact.properties?.email?.trim().toLowerCase()
       if (!email) continue
       const ownerId = contact.properties?.hubspot_owner_id?.trim() || null
       ownerIdByEmail.set(email, ownerId)
+      emailByContactId.set(contact.id, email)
+    }
+
+    if (contacts.length > 0) {
+      const associations = await hubSpotRequest<{ results?: HubSpotAssociationResult[] }>(
+        '/crm/v4/associations/contacts/leads/batch/read',
+        {
+          method: 'POST',
+          body: JSON.stringify({ inputs: contacts.map(contact => ({ id: contact.id })) }),
+        },
+      )
+
+      for (const association of associations.results ?? []) {
+        const leadIds = (association.to ?? [])
+          .map(lead => String(lead.toObjectId ?? lead.id ?? ''))
+          .filter(Boolean)
+        if (leadIds.length > 0) leadIdsByContactId.set(association.from.id, leadIds)
+      }
     }
 
     // Houd de requests onder HubSpots secondly limiet, ook bij 1.000+ accounts.
     if (index + 100 < normalizedEmails.length) await wait(150)
+  }
+
+  const uniqueLeadIds = Array.from(new Set(Array.from(leadIdsByContactId.values()).flat()))
+  const leadsById = new Map<string, HubSpotLeadResult>()
+  for (let index = 0; index < uniqueLeadIds.length; index += 100) {
+    const leadIds = uniqueLeadIds.slice(index, index + 100)
+    const data = await hubSpotRequest<{ results?: HubSpotLeadResult[] }>('/crm/v3/objects/leads/batch/read', {
+      method: 'POST',
+      body: JSON.stringify({
+        properties: ['hubspot_owner_id', 'hs_owner_id_calculated', 'hs_all_owner_ids'],
+        propertiesWithHistory: [],
+        inputs: leadIds.map(id => ({ id })),
+      }),
+    })
+    for (const lead of data.results ?? []) leadsById.set(lead.id, lead)
+    if (index + 100 < uniqueLeadIds.length) await wait(150)
+  }
+
+  for (const [contactId, leadIds] of leadIdsByContactId) {
+    const email = emailByContactId.get(contactId)
+    if (!email) continue
+
+    const newestLeadWithOwner = leadIds
+      .map(leadId => leadsById.get(leadId))
+      .filter((lead): lead is HubSpotLeadResult => Boolean(lead))
+      .sort((first, second) => (second.updatedAt ?? '').localeCompare(first.updatedAt ?? ''))
+      .find(lead => Boolean(
+        lead.properties?.hubspot_owner_id?.trim()
+        || lead.properties?.hs_owner_id_calculated?.trim()
+        || lead.properties?.hs_all_owner_ids?.split(';')[0]?.trim(),
+      ))
+
+    const leadOwnerId = newestLeadWithOwner?.properties?.hubspot_owner_id?.trim()
+      || newestLeadWithOwner?.properties?.hs_owner_id_calculated?.trim()
+      || newestLeadWithOwner?.properties?.hs_all_owner_ids?.split(';')[0]?.trim()
+      || null
+
+    if (leadOwnerId) ownerIdByEmail.set(email, leadOwnerId)
   }
 
   let after: string | undefined
