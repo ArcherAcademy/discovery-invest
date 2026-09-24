@@ -97,25 +97,35 @@ export interface HubSpotAccountOwnerSnapshot {
   ownersById: Map<string, HubSpotOwner>
 }
 
+const wait = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds))
+
 async function hubSpotRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const token = process.env.HUBSPOT_ACCESS_TOKEN
   if (!token) throw new Error('HUBSPOT_ACCESS_TOKEN ontbreekt')
 
-  const response = await fetch(`https://api.hubapi.com${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...init?.headers,
-    },
-  })
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const response = await fetch(`https://api.hubapi.com${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...init?.headers,
+      },
+    })
 
-  if (!response.ok) {
+    if (response.ok) return response.json() as Promise<T>
+
+    if (response.status === 429 && attempt < 3) {
+      const retryAfter = Number(response.headers.get('retry-after'))
+      await wait(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1_000 : 500 * (attempt + 1))
+      continue
+    }
+
     const body = await response.text()
     throw new Error(`HubSpot API ${response.status}: ${body.slice(0, 300)}`)
   }
 
-  return response.json() as Promise<T>
+  throw new Error('HubSpot API kon niet worden bereikt')
 }
 
 export async function getHubSpotAccountOwnerSnapshot(emails: string[]): Promise<HubSpotAccountOwnerSnapshot> {
@@ -125,12 +135,13 @@ export async function getHubSpotAccountOwnerSnapshot(emails: string[]): Promise<
 
   for (let index = 0; index < normalizedEmails.length; index += 100) {
     const values = normalizedEmails.slice(index, index + 100)
-    const data = await hubSpotRequest<{ results?: HubSpotContactSearchResult[] }>('/crm/v3/objects/contacts/search', {
+    const data = await hubSpotRequest<{ results?: HubSpotContactSearchResult[] }>('/crm/v3/objects/contacts/batch/read', {
       method: 'POST',
       body: JSON.stringify({
-        filterGroups: [{ filters: [{ propertyName: 'email', operator: 'IN', values }] }],
+        idProperty: 'email',
         properties: ['email', 'hubspot_owner_id'],
-        limit: 100,
+        propertiesWithHistory: [],
+        inputs: values.map(id => ({ id })),
       }),
     })
 
@@ -140,6 +151,9 @@ export async function getHubSpotAccountOwnerSnapshot(emails: string[]): Promise<
       const ownerId = contact.properties?.hubspot_owner_id?.trim() || null
       ownerIdByEmail.set(email, ownerId)
     }
+
+    // Houd de requests onder HubSpots secondly limiet, ook bij 1.000+ accounts.
+    if (index + 100 < normalizedEmails.length) await wait(150)
   }
 
   let after: string | undefined
