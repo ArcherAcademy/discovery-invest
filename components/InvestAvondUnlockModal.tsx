@@ -56,6 +56,8 @@ interface InvestAvondUnlockModalProps {
 export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: InvestAvondUnlockModalProps) {
   const [selectedEdition, setSelectedEdition] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   if (!open) return null
 
@@ -64,7 +66,29 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
   function close() {
     setSelectedEdition(null)
     setConfirmed(false)
+    setSubmitting(false)
+    setSubmitError(null)
     onClose?.()
+  }
+
+  async function submitCandidate() {
+    if (!selectedEdition || submitting) return
+
+    setSubmitting(true)
+    setSubmitError(null)
+    try {
+      const response = await fetch('/api/invest-avond/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ edition: selectedEdition }),
+      })
+      if (!response.ok) throw new Error('submission_failed')
+      setConfirmed(true)
+    } catch {
+      setSubmitError('Je keuze kon niet worden verstuurd. Probeer het opnieuw.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -151,12 +175,13 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
 
               <button
                 type="button"
-                disabled={!selectedEdition}
-                onClick={() => setConfirmed(true)}
+                disabled={!selectedEdition || submitting}
+                onClick={submitCandidate}
                 className="mt-7 inline-flex min-h-13 w-full items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 Stel mij kandidaat
               </button>
+              {submitError ? <p role="alert" className="mt-3 text-center text-xs leading-5 text-destructive">{submitError}</p> : null}
               <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">Geen betaling. Geen verplichting.</p>
             </>
           ) : (
