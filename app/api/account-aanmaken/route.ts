@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { updateCallUserState } from '@/lib/call-booking-data'
 import { emitEvent } from '@/lib/emit-event'
 import type { DemoUser } from '@/lib/types'
-import { getHubSpotOwner } from '@/lib/hubspot-owners'
+import { extractHubSpotOwnerId, getHubSpotOwner } from '@/lib/hubspot-owners'
 
 // ── CORS helpers ──────────────────────────────────────────────────────────────
 // Allow any origin so both the Lovable marketing site and HubSpot can call this.
@@ -178,19 +178,33 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   }
 
   const name = [voornaam, achternaam].filter(Boolean).join(' ') || email.split('@')[0]
-  const contactOwnerCandidate = pick(
-    body,
-    'hubspot_owner_id',
-    'contact_owner_id',
-    'owner_id',
-    'contacteigenaar_id',
-  )
-  // Een HubSpot owner-ID is numeriek. Gelijknamige marketingvelden zoals
-  // `contactowner` bevatten antwoorden als "Social media" en zijn géén owner.
-  const contactOwnerId = /^\d+$/.test(contactOwnerCandidate) ? contactOwnerCandidate : null
+  let contactOwnerId = extractHubSpotOwnerId(body)
+
+  // Niet elke HubSpot-workflow stuurt de owner opnieuw mee. Gebruik daarom de
+  // meest recente geldige owner uit elke eerdere webhook voor hetzelfde adres.
+  if (!contactOwnerId) {
+    const { data: previousWebhooks, error: historyError } = await supabase
+      .from('demo_invest_account_webhook_log')
+      .select('payload_json')
+      .ilike('email', escapeLike(email))
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(100)
+
+    if (historyError) {
+      console.error('[v0] account-aanmaken: ownerhistoriek ophalen mislukt:', historyError.message)
+    } else {
+      for (const webhook of previousWebhooks ?? []) {
+        contactOwnerId = extractHubSpotOwnerId(webhook.payload_json)
+        if (contactOwnerId) break
+      }
+    }
+  }
+
   const hubSpotOwner = getHubSpotOwner(contactOwnerId)
   const payloadWithOwner = {
     ...body,
+    ...(contactOwnerId ? { _hubspot_owner_id: contactOwnerId } : {}),
     ...(hubSpotOwner
       ? {
           _hubspot_owner_name: hubSpotOwner.name,

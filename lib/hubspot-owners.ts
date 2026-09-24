@@ -32,6 +32,42 @@ const HUBSPOT_OWNERS: readonly HubSpotOwner[] = [
 
 const ownersById = new Map(HUBSPOT_OWNERS.map(owner => [owner.id, owner]))
 
+const OWNER_ID_KEYS = [
+  'hubspot_owner_id',
+  'contact_owner_id',
+  'owner_id',
+  'contacteigenaar_id',
+  '_hubspot_owner_id',
+] as const
+
+function scalarText(value: unknown): string {
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (value && typeof value === 'object' && !Array.isArray(value) && 'value' in value) {
+    return scalarText((value as { value?: unknown }).value)
+  }
+  return ''
+}
+
+export function extractHubSpotOwnerId(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+
+  const body = payload as Record<string, unknown>
+  const properties = body.properties && typeof body.properties === 'object' && !Array.isArray(body.properties)
+    ? body.properties as Record<string, unknown>
+    : null
+
+  for (const source of [body, properties]) {
+    if (!source) continue
+    for (const key of OWNER_ID_KEYS) {
+      const candidate = scalarText(source[key])
+      if (/^\d+$/.test(candidate)) return candidate
+    }
+  }
+
+  return null
+}
+
 export function getHubSpotOwner(ownerId: string | null | undefined): HubSpotOwner | null {
   const normalizedId = typeof ownerId === 'string' ? ownerId.trim() : ''
   return normalizedId ? ownersById.get(normalizedId) ?? null : null
