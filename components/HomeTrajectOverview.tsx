@@ -39,6 +39,12 @@ const CORE_THUMBNAILS = [
   '/video-6-thumbnail.png',
 ]
 
+const BONUS_DESCRIPTIONS: Record<string, string> = {
+  'binnenkijken in de vierdaagse': 'Een echt fragment uit dag 1, zodat je nu al voelt hoe de vierdaagse werkt.',
+  'de vermogenskloof': 'Waarom de meeste mensen achterop raken, en hoe jij aan de juiste kant belandt.',
+  'technische analyse': 'Hoe je je instapmoment kiest met een plan, in plaats van te gokken.',
+}
+
 function formatDuration(minutes: number, contentType: string) {
   if (contentType === 'pdf') return 'PDF'
   return minutes > 0 ? `${minutes} min` : 'Video'
@@ -189,6 +195,7 @@ export function HomeTrajectOverview({
 
             {bonusVideos.map((video) => {
               const isPdf = video.contentType === 'pdf'
+              const description = BONUS_DESCRIPTIONS[video.title.toLowerCase()]
               const item = (
                 <div className="flex min-h-24 items-center gap-4 px-5 py-4 sm:px-7">
                   {isPdf ? (
@@ -205,12 +212,19 @@ export function HomeTrajectOverview({
                       completed={video.status === 'completed'}
                     />
                   )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold transition-colors group-hover:text-primary-foreground">{video.title}</p>
-                    <p className="flex items-center gap-1 text-xs text-muted-foreground transition-colors group-hover:text-primary-foreground/70">
-                      {!isPdf ? <Clock size={11} /> : null}
-                      {formatDuration(video.duration, video.contentType)}
-                    </p>
+                  <div className="grid min-w-0 flex-1 gap-1 sm:grid-cols-[150px_1fr] sm:items-center sm:gap-5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold transition-colors group-hover:text-primary-foreground">{video.title}</p>
+                      <p className="flex items-center gap-1 text-xs text-muted-foreground transition-colors group-hover:text-primary-foreground/70">
+                        {!isPdf ? <Clock size={11} /> : null}
+                        {formatDuration(video.duration, video.contentType)}
+                      </p>
+                    </div>
+                    {description ? (
+                      <p className="hidden truncate text-sm text-muted-foreground transition-colors group-hover:text-primary-foreground/75 sm:block">
+                        {description}
+                      </p>
+                    ) : null}
                   </div>
                   {allCoreCompleted ? (
                     <ChevronRight size={20} className="text-muted-foreground transition-all duration-300 group-hover:translate-x-1 group-hover:text-primary-foreground" />
