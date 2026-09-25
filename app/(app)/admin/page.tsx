@@ -1692,7 +1692,7 @@ export default function AdminPage() {
             ? `${log.response_status ? `HTTP ${log.response_status} · ` : ''}Webhook geaccepteerd door HubSpot. Dit betekent niet dat de mail effectief is afgeleverd.`
             : log.reden ?? 'Geen reden geregistreerd.'
           return { log, account, category, channel, detail }
-        }).filter(row => {
+        }).filter(row => row.category !== 'skipped').filter(row => {
           const ts = new Date(row.log.created_at).getTime()
           const dateOk = historyFilter.periode === 'alles' ? true : historyFilter.periode === 'vandaag' ? ts >= startOfDay : ts >= startOfWeek
           const fromOk = !historyFilter.from || ts >= new Date(`${historyFilter.from}T00:00:00`).getTime()
@@ -1717,7 +1717,7 @@ export default function AdminPage() {
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <h2 className="text-lg font-semibold" style={{ color: '#0d0f14' }}>Trigger history</h2>
-                <p className="text-xs mt-1" style={{ color: 'rgba(13,15,20,0.48)' }}>Een 202 betekent aangenomen door HubSpot, niet dat de mail verzonden is.</p>
+                <p className="text-xs mt-1" style={{ color: 'rgba(13,15,20,0.48)' }}>Alleen aangenomen triggers en echte problemen worden hier getoond.</p>
               </div>
               <div className="flex rounded-xl overflow-hidden border" style={{ borderColor: '#e2e8f0' }}>
                 {([['all', 'Alle triggers'], ['leads', 'Per lead']] as const).map(([value, label]) => (
@@ -1815,7 +1815,7 @@ export default function AdminPage() {
 
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               <div className="rounded-2xl border p-4" style={{ background: '#fff', borderColor: '#e8ecf4' }}><p className="text-[11px] uppercase tracking-wide" style={{ color: '#64748b' }}>Evaluaties</p><p className="text-2xl font-semibold mt-1" style={{ color: '#0d0f14' }}>{rows.length}</p></div>
-              {(['accepted', 'skipped', 'problem', 'failed'] as const).map(key => <div key={key} className="rounded-2xl border p-4" style={{ background: categoryMeta[key].bg, borderColor: 'transparent' }}><p className="text-[11px] font-medium" style={{ color: categoryMeta[key].color }}>{categoryMeta[key].short}</p><p className="text-2xl font-semibold mt-1" style={{ color: categoryMeta[key].color }}>{counts[key]}</p></div>)}
+              {(['accepted', 'problem', 'failed'] as const).map(key => <div key={key} className="rounded-2xl border p-4" style={{ background: categoryMeta[key].bg, borderColor: 'transparent' }}><p className="text-[11px] font-medium" style={{ color: categoryMeta[key].color }}>{categoryMeta[key].short}</p><p className="text-2xl font-semibold mt-1" style={{ color: categoryMeta[key].color }}>{counts[key]}</p></div>)}
               <div className="rounded-2xl border p-4" style={{ background: '#fff', borderColor: '#e8ecf4' }}><p className="text-[11px] uppercase tracking-wide" style={{ color: '#64748b' }}>Unieke leads</p><p className="text-2xl font-semibold mt-1" style={{ color: '#0d0f14' }}>{uniqueLeads}</p></div>
             </div>
 
@@ -1823,7 +1823,7 @@ export default function AdminPage() {
               <div className="flex flex-wrap gap-2 items-center">
                 <div className="relative"><Search className="absolute left-3 top-2.5 size-3.5" style={{ color: '#94a3b8' }} /><input type="search" placeholder="Zoek lead of e-mail" value={historyFilter.query} onChange={e => setHistoryFilter(f => ({ ...f, query: e.target.value }))} className="rounded-xl border py-2 pl-8 pr-3 text-xs outline-none" style={{ borderColor: '#e2e8f0', minWidth: 220 }} /></div>
                 <select value={historyFilter.workflow} onChange={e => setHistoryFilter(f => ({ ...f, workflow: e.target.value }))} className="rounded-xl border px-3 py-2 text-xs outline-none" style={{ borderColor: '#e2e8f0' }}><option value="">Alle workflows</option>{WORKFLOWS.map(w => <option key={w.naam} value={w.naam}>W{w.nummer} · {w.label}</option>)}</select>
-                <select value={historyFilter.status} onChange={e => setHistoryFilter(f => ({ ...f, status: e.target.value as '' | HistoryCategory }))} className="rounded-xl border px-3 py-2 text-xs outline-none" style={{ borderColor: '#e2e8f0' }}><option value="">Alle statussen</option><option value="accepted">Aangenomen door HubSpot</option><option value="skipped">Niet aan de beurt</option><option value="problem">Onderdrukt door probleem</option><option value="failed">Mislukt</option></select>
+                <select value={historyFilter.status} onChange={e => setHistoryFilter(f => ({ ...f, status: e.target.value as '' | HistoryCategory }))} className="rounded-xl border px-3 py-2 text-xs outline-none" style={{ borderColor: '#e2e8f0' }}><option value="">Alle statussen</option><option value="accepted">Aangenomen door HubSpot</option><option value="problem">Onderdrukt door probleem</option><option value="failed">Mislukt</option></select>
                 <select value={historyFilter.channel} onChange={e => setHistoryFilter(f => ({ ...f, channel: e.target.value as '' | HistoryChannel }))} className="rounded-xl border px-3 py-2 text-xs outline-none" style={{ borderColor: '#e2e8f0' }}><option value="">Alle kanalen</option><option value="hubspot">HubSpot mail-webhook</option><option value="form">Form-submit</option><option value="funnel">Funnel-event</option></select>
                 <div className="flex rounded-xl overflow-hidden border" style={{ borderColor: '#e2e8f0' }}>{(['vandaag', 'week', 'alles'] as const).map(p => <button key={p} onClick={() => setHistoryFilter(f => ({ ...f, periode: p }))} className="px-3 py-2 text-xs capitalize" style={historyFilter.periode === p ? { background: '#2500F5', color: '#fff' } : { background: '#fff', color: '#64748b' }}>{p}</button>)}</div>
               </div>
