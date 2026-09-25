@@ -167,6 +167,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                   videoDbId={video.id}
                   thumbnailUrl={video.thumbnail_url}
                   completed={completed}
+                  initialProgressPct={progressMap.get(video.id)?.progress_pct ?? 0}
                   nextVideoTitle={nextVideo?.title ?? null}
                   nextContentType={nextVideo?.content_type ?? null}
                   isLastVideo={isLastCoreVideo}

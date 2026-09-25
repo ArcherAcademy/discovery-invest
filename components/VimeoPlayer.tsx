@@ -13,6 +13,51 @@ function parseVimeoId(src: string): number | null {
 
 type VimeoUrl = `https://vimeo.com/${string}` | `https://player.vimeo.com/video/${string}`
 
+const HEARTBEAT_INTERVAL_MS = 5_000
+const PLAYER_CALL_TIMEOUT_MS = 4_000
+const MAX_REQUEST_ATTEMPTS = 3
+
+function wait(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error('player_timeout')), timeoutMs)
+    }),
+  ])
+}
+
+async function postWithRetry(url: string, body: Record<string, unknown>, keepalive = false) {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= MAX_REQUEST_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        keepalive,
+      })
+
+      if (response.ok) return response
+
+      const responseBody = await response.text().catch(() => '')
+      lastError = new Error(`${response.status}: ${responseBody}`)
+      if (response.status < 500 && response.status !== 408 && response.status !== 429) break
+    } catch (error) {
+      lastError = error
+    }
+
+    if (attempt < MAX_REQUEST_ATTEMPTS) await wait(400 * 2 ** (attempt - 1))
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('request_failed')
+}
+
 interface VimeoPlayerProps {
   src: string
   videoDbId: string
@@ -49,6 +94,8 @@ export default function VimeoPlayer({
   const lastTrackedProgressRef = useRef(Math.floor(initialProgressPct / 10) * 10)
   const progressRequestRef = useRef<Promise<void>>(Promise.resolve())
   const countdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const heartbeatRef = useRef<(() => Promise<void>) | null>(null)
+  const heartbeatFailuresRef = useRef(0)
   const onAutoNextRef = useRef(onAutoNext)
   useEffect(() => { onAutoNextRef.current = onAutoNext }, [onAutoNext])
 
@@ -57,6 +104,9 @@ export default function VimeoPlayer({
   const [countdown, setCountdown] = useState<number | null>(null)
   const [cancelled, setCancelled] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [trackingError, setTrackingError] = useState<string | null>(null)
+  const [retrying, setRetrying] = useState(false)
+  const [playerRetryKey, setPlayerRetryKey] = useState(0)
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(fallbackThumbnailUrl)
 
   const vimeoId = parseVimeoId(src)
@@ -68,14 +118,21 @@ export default function VimeoPlayer({
     startedTrackedRef.current = false
     lastTrackedProgressRef.current = Math.floor(initialProgressPct / 10) * 10
     progressRequestRef.current = Promise.resolve()
+    heartbeatFailuresRef.current = 0
     setEnded(false)
     setHasStarted(false)
     setCountdown(null)
     setCancelled(false)
     setErrorMsg(null)
+    setTrackingError(null)
+    setRetrying(false)
     setThumbnailUrl(fallbackThumbnailUrl)
     if (countdownTimerRef.current) clearTimeout(countdownTimerRef.current)
-  }, [videoDbId])
+  }, [videoDbId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (completed) marked.current = true
+  }, [completed])
 
   // ── Countdown logic — fully imperative, immune to React batching races ────
   // Declared BEFORE doComplete because doComplete's deps array references it.
@@ -107,61 +164,52 @@ export default function VimeoPlayer({
     progressRequestRef.current = progressRequestRef.current
       .catch(() => undefined)
       .then(async () => {
-        const response = await fetch('/api/video-progress', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videoId: videoDbId, action, progressPct }),
-          keepalive: true,
-        })
-        if (!response.ok) {
-          const body = await response.text().catch(() => '')
-          console.error('[v0] video-progress opslaan mislukt:', response.status, body)
+        try {
+          await postWithRetry('/api/video-progress', { videoId: videoDbId, action, progressPct }, true)
+          setTrackingError(null)
+        } catch (error) {
+          console.error('[v0] video-progress opslaan mislukt na retries:', error)
+          if (!marked.current) {
+            setTrackingError('Je videovoortgang kon niet worden opgeslagen. Controleer je verbinding en probeer opnieuw.')
+          }
         }
       })
   }, [videoDbId])
 
-  // ── doComplete — called by 'ended' and manual button ──────────────────────
-  const doComplete = useCallback(async (source: 'ended' | 'manual') => {
+  // ── doComplete — called at 90%, by 'ended' and by the manual fallback ─────
+  const doComplete = useCallback(async (source: 'threshold' | 'ended' | 'manual') => {
     if (marked.current) {
       if (source === 'ended' && isLastVideo) onAutoNextRef.current?.()
+      if (source === 'ended' && !isLastVideo && onAutoNextRef.current) startCountdown(5)
       return
     }
     marked.current = true
+    setRetrying(source === 'manual')
 
     try {
-      const res = await fetch('/api/video-complete', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: videoDbId }),
-      })
-
-      if (res.ok) {
-        setErrorMsg(null)
-        onCompleted?.()
-        onUnlockNext?.()
-        // Start countdown to next video (only when triggered by 'ended', not manual)
-        if (source === 'ended' && !isLastVideo && onAutoNextRef.current) {
-          startCountdown(5)
-        }
-      } else {
-        // Log full technical detail server/console-side only — never render it.
-        const body = await res.text().catch(() => '')
-        console.error('[v0] video-complete failed:', res.status, body)
-        setErrorMsg('Er ging iets mis bij het opslaan, probeer opnieuw.')
-        marked.current = false // allow retry
+      await postWithRetry('/api/video-complete', { videoId: videoDbId })
+      setErrorMsg(null)
+      setTrackingError(null)
+      onCompleted?.()
+      onUnlockNext?.()
+      if (source === 'ended' && !isLastVideo && onAutoNextRef.current) {
+        startCountdown(5)
       }
-    } catch (err) {
-      console.error('[v0] video-complete network error:', err)
-      setErrorMsg('Er ging iets mis bij het opslaan, probeer opnieuw.')
+    } catch (error) {
+      console.error('[v0] video-complete mislukt na retries:', error)
+      setErrorMsg('Je voltooiing kon niet worden opgeslagen. Probeer opnieuw om verder te gaan.')
       marked.current = false
+    } finally {
+      setRetrying(false)
     }
   }, [videoDbId, onCompleted, onUnlockNext, isLastVideo, startCountdown])
 
-  // ── Player init ────────────────────────────────────────────────────────────
+  // ── Player init + onafhankelijke hartslag ──────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || !vimeoId) return
+
+    containerRef.current.replaceChildren()
+    let disposed = false
 
     const player = new Player(containerRef.current, {
       url: vimeoUrl,
@@ -175,52 +223,92 @@ export default function VimeoPlayer({
     })
     playerRef.current = player
 
-    player.ready().then(async () => {
-      try {
-        const d = await player.getDuration()
-        if (d && d > 0) {
-          onRealDuration?.(d)
-          if (!completed && initialProgressPct > 0 && initialProgressPct < 90) {
-            await player.setCurrentTime(d * (initialProgressPct / 100))
-          }
-        }
-      } catch { /* ignore */ }
-    }).catch((err: unknown) => {
-      console.error('[v0] Vimeo player failed to load:', err)
-      setErrorMsg('Er ging iets mis bij het laden van de video, probeer opnieuw.')
-    })
-
-    player.on('error', (err: unknown) => {
-      console.error('[v0] Vimeo player SDK error:', err)
-      setErrorMsg('Er ging iets mis bij het laden van de video, probeer opnieuw.')
-    })
-
-    const handlePlay = () => {
+    const registerStarted = () => {
       setHasStarted(true)
       if (marked.current || startedTrackedRef.current) return
       startedTrackedRef.current = true
       trackProgress('started')
     }
 
-    const handleTimeUpdate = ({ percent }: { percent: number }) => {
-      if (marked.current || !Number.isFinite(percent)) return
-      const progressPct = Math.min(99, Math.floor((percent * 100) / 10) * 10)
+    const registerPercent = (percent: number) => {
+      if (!Number.isFinite(percent) || percent < 0) return
+      if (percent > 0) registerStarted()
+
+      // Completion is checked on every event/poll, before 10%-step throttling.
+      if (percent >= 0.9) {
+        void doComplete('threshold')
+        return
+      }
+      if (marked.current) return
+
+      const progressPct = Math.min(89, Math.floor((percent * 100) / 10) * 10)
       if (progressPct < 10 || progressPct <= lastTrackedProgressRef.current) return
       lastTrackedProgressRef.current = progressPct
       trackProgress('progress', progressPct)
     }
 
+    const heartbeat = async () => {
+      try {
+        const [currentTime, duration] = await Promise.all([
+          withTimeout(player.getCurrentTime(), PLAYER_CALL_TIMEOUT_MS),
+          withTimeout(player.getDuration(), PLAYER_CALL_TIMEOUT_MS),
+        ])
+        if (disposed || !duration || duration <= 0) return
+
+        heartbeatFailuresRef.current = 0
+        onRealDuration?.(duration)
+        registerPercent(currentTime / duration)
+        setErrorMsg(current => current?.includes('laden van de video') ? null : current)
+      } catch (error) {
+        if (disposed) return
+        heartbeatFailuresRef.current += 1
+        if (heartbeatFailuresRef.current >= 4) {
+          console.error('[v0] Vimeo hartslag faalt herhaaldelijk:', error)
+          setErrorMsg('Er ging iets mis bij het laden van de video, probeer opnieuw.')
+        }
+      }
+    }
+    heartbeatRef.current = heartbeat
+
+    player.ready().then(async () => {
+      try {
+        const duration = await withTimeout(player.getDuration(), PLAYER_CALL_TIMEOUT_MS)
+        if (disposed || !duration || duration <= 0) return
+        onRealDuration?.(duration)
+        if (!completed && initialProgressPct > 0 && initialProgressPct < 90) {
+          await withTimeout(player.setCurrentTime(duration * (initialProgressPct / 100)), PLAYER_CALL_TIMEOUT_MS)
+        }
+        await heartbeat()
+      } catch (error) {
+        console.error('[v0] Vimeo initialisatie nog niet klaar; hartslag blijft proberen:', error)
+      }
+    }).catch((error: unknown) => {
+      console.error('[v0] Vimeo player ready mislukt; hartslag blijft proberen:', error)
+    })
+
+    player.on('error', (error: unknown) => {
+      console.error('[v0] Vimeo player SDK error:', error)
+      setErrorMsg('Er ging iets mis bij het laden van de video, probeer opnieuw.')
+    })
+
+    const handlePlay = () => registerStarted()
+    const handleTimeUpdate = ({ percent }: { percent: number }) => registerPercent(percent)
     const handleEnded = () => {
       setEnded(true)
-      if (isLastVideo) onAutoNextRef.current?.()
-      doComplete('ended')
+      void doComplete('ended')
     }
 
     player.on('play', handlePlay)
     player.on('timeupdate', handleTimeUpdate)
     player.on('ended', handleEnded)
 
+    void heartbeat()
+    const heartbeatTimer = window.setInterval(() => void heartbeat(), HEARTBEAT_INTERVAL_MS)
+
     return () => {
+      disposed = true
+      window.clearInterval(heartbeatTimer)
+      heartbeatRef.current = null
       player.off('play', handlePlay)
       player.off('timeupdate', handleTimeUpdate)
       player.off('ended', handleEnded)
@@ -228,7 +316,7 @@ export default function VimeoPlayer({
       player.destroy().catch(() => {})
       playerRef.current = null
     }
-  }, [src, vimeoId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [src, vimeoId, playerRetryKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!vimeoId) {
     return (
@@ -247,6 +335,24 @@ export default function VimeoPlayer({
       setHasStarted(true)
     } catch (error) {
       console.error('[v0] Vimeo play starten mislukt:', error)
+      setErrorMsg('Er ging iets mis bij het laden van de video, probeer opnieuw.')
+    }
+  }
+
+  const retryPlayer = () => {
+    heartbeatFailuresRef.current = 0
+    setErrorMsg(null)
+    setTrackingError(null)
+    setPlayerRetryKey(key => key + 1)
+  }
+
+  const retryTracking = async () => {
+    setRetrying(true)
+    setTrackingError(null)
+    try {
+      await heartbeatRef.current?.()
+    } finally {
+      setRetrying(false)
     }
   }
 
@@ -284,15 +390,36 @@ export default function VimeoPlayer({
               <p className="text-base font-bold text-primary-foreground">Video kan hier niet afspelen</p>
               <p className="text-sm leading-5 text-primary-foreground/65">Open de video rechtstreeks in Vimeo om meteen verder te kijken.</p>
             </div>
-            <a
-              href={vimeoPageUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground shadow-lg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-            >
-              <ExternalLink size={16} />
-              Open video
-            </a>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={retryPlayer}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground shadow-lg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              >
+                <RefreshCw size={16} />
+                Probeer opnieuw
+              </button>
+              <a
+                href={vimeoPageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-primary-foreground/25 px-5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary-foreground/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              >
+                <ExternalLink size={16} />
+                Open in Vimeo
+              </a>
+              {!completed && (
+                <button
+                  type="button"
+                  onClick={() => doComplete('manual')}
+                  disabled={retrying}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-primary-foreground/25 px-5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary-foreground/10 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                  <CheckCircle2 size={16} />
+                  Markeer als bekeken
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -406,24 +533,36 @@ export default function VimeoPlayer({
         )}
       </div>
 
-      {/* Error + fallback button — only shown on error */}
-      {((errorMsg && !playerLoadError) || (ended && !marked.current)) && (
-        <div className="flex items-center justify-between gap-3 mt-2 px-1">
-          {errorMsg && !playerLoadError && (
-            <span className="text-xs" style={{ color: '#dc2626' }}>
-              {errorMsg}
-            </span>
-          )}
-          {!marked.current && ended && (
-            <button
-              onClick={() => doComplete('manual')}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-colors shrink-0"
-              style={{ background: 'rgba(37,0,245,0.08)', color: '#2500F5' }}
-            >
-              <RefreshCw size={11} />
-              Markeer als bekeken
-            </button>
-          )}
+      {/* Opslagstatus en expliciete uitweg — voortgang mag nooit stil falen. */}
+      {((errorMsg && !playerLoadError) || trackingError || (ended && !marked.current)) && (
+        <div className="mt-3 flex flex-col gap-2 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+          <p role="alert" className="text-sm leading-5 text-destructive">
+            {errorMsg && !playerLoadError ? errorMsg : trackingError ?? 'Je video is afgelopen, maar de voltooiing is nog niet opgeslagen.'}
+          </p>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {trackingError && (
+              <button
+                type="button"
+                onClick={retryTracking}
+                disabled={retrying}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-secondary px-3 text-sm font-semibold text-secondary-foreground transition-opacity hover:opacity-80 disabled:opacity-50"
+              >
+                <RefreshCw size={14} />
+                Opnieuw proberen
+              </button>
+            )}
+            {!marked.current && (ended || Boolean(errorMsg)) && (
+              <button
+                type="button"
+                onClick={() => doComplete('manual')}
+                disabled={retrying}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                <CheckCircle2 size={14} />
+                Markeer als bekeken
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
       allowed: false,
       reason: 'previous_not_completed',
       previousVideoId: previousVideo.id,
-      message: `Kijk eerst de vorige video volledig af (80%+) om deze video te ontgrendelen.`,
+      message: `Kijk eerst de vorige video volledig af (90%+) om deze video te ontgrendelen.`,
     })
   }
 

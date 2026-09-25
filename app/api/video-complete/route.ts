@@ -13,15 +13,35 @@ export async function POST(req: NextRequest) {
   const supabase = createAdminClient()
   const now = new Date().toISOString()
 
-  // ── 1. Fetch existing progress row ─────────────────────────────────────────
+  // ── 1. Enforce the same sequential access rules server-side ────────────────
+  const [{ data: targetVideo, error: targetError }, { data: coreVideos, error: coreErr }, { data: completedBefore }] = await Promise.all([
+    supabase.from('demo_invest_videos').select('id, section, order_no').eq('id', videoId).maybeSingle(),
+    supabase.from('demo_invest_videos').select('id, order_no').eq('section', 'core').order('order_no'),
+    supabase.from('demo_invest_video_progress').select('video_id').eq('user_id', authUser.id).eq('status', 'completed'),
+  ])
+
+  if (targetError || !targetVideo || coreErr || !coreVideos) {
+    return NextResponse.json({ error: 'video_lookup_failed' }, { status: targetVideo ? 500 : 404 })
+  }
+
+  const completedBeforeIds = new Set((completedBefore ?? []).map(row => row.video_id))
+  const coreIndex = coreVideos.findIndex(video => video.id === videoId)
+
+  if (targetVideo.section === 'core' && coreIndex > 0 && !completedBeforeIds.has(coreVideos[coreIndex - 1].id)) {
+    return NextResponse.json({ error: 'previous_video_not_completed' }, { status: 403 })
+  }
+  if (targetVideo.section === 'bonus' && coreVideos.some(video => !completedBeforeIds.has(video.id))) {
+    return NextResponse.json({ error: 'core_videos_not_completed' }, { status: 403 })
+  }
+
   const { data: existing } = await supabase
     .from('demo_invest_video_progress')
-    .select('started_at, status')
+    .select('started_at, completed_at, status')
     .eq('user_id', authUser.id)
     .eq('video_id', videoId)
     .maybeSingle()
 
-  // ── 2. Upsert completed row ────────────────────────────────────────────────
+  // ── 2. Upsert completed row idempotently ──────────────────────────────────
   const { data: row, error: progressError } = await supabase
     .from('demo_invest_video_progress')
     .upsert({
@@ -30,7 +50,7 @@ export async function POST(req: NextRequest) {
       status: 'completed',
       progress_pct: 100,
       started_at: existing?.started_at ?? now,
-      completed_at: now,
+      completed_at: existing?.completed_at ?? now,
       last_activity_at: now,
     }, { onConflict: 'user_id,video_id' })
     .select()
@@ -42,17 +62,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 3. Recount completed core videos ──────────────────────────────────────
-  const { data: coreVideos, error: coreErr } = await supabase
-    .from('demo_invest_videos')
-    .select('id')
-    .eq('section', 'core')
-
-  if (coreErr) {
-    console.error('[video-complete] core videos fetch failed:', coreErr)
-    return NextResponse.json({ error: coreErr.message }, { status: 500 })
-  }
-
-  const coreIds = (coreVideos ?? []).map((v: { id: string }) => v.id)
+  const coreIds = coreVideos.map((video: { id: string }) => video.id)
 
   const { data: completedRows, error: countErr } = await supabase
     .from('demo_invest_video_progress')
