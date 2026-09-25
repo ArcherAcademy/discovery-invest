@@ -134,15 +134,15 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
                           <Check size={18} strokeWidth={2.5} aria-hidden="true" />
                         </span>
                       ) : null}
-                      <div className="flex items-start justify-between gap-4 pr-8">
-                        <span className="text-lg font-semibold tracking-tight text-foreground">
+                      <div className="pr-8">
+                        <span className="block whitespace-nowrap text-base font-semibold tracking-tight text-foreground sm:text-[17px]">
                           {edition.dates} {edition.title.replace('Editie ', '')}
                         </span>
-                        <span className="shrink-0 text-xs font-medium text-muted-foreground">
-                          {edition.status}
-                        </span>
+                        <span className="mt-2 block text-sm leading-5 text-muted-foreground">{edition.detail}</span>
                       </div>
-                      <span className="mt-3 text-sm leading-5 text-muted-foreground">{edition.detail}</span>
+                      <span className="mt-auto pt-5 text-xs font-medium text-muted-foreground">
+                        {edition.status}
+                      </span>
                     </button>
                   )
                 })}
