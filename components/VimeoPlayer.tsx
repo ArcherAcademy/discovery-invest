@@ -192,7 +192,9 @@ export default function VimeoPlayer({
       setTrackingError(null)
       onCompleted?.()
       onUnlockNext?.()
-      if (source === 'ended' && !isLastVideo && onAutoNextRef.current) {
+      if (isLastVideo) {
+        onAutoNextRef.current?.()
+      } else if (source === 'ended' && onAutoNextRef.current) {
         startCountdown(5)
       }
     } catch (error) {
