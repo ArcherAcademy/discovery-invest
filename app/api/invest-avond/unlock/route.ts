@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/auth'
 import { getHubSpotAccountOwnerSnapshot } from '@/lib/hubspot-owners'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -6,10 +6,12 @@ import { createAdminClient } from '@/lib/supabase/admin'
 const HUBSPOT_PORTAL_ID = '25799192'
 const HUBSPOT_FORM_ID = '8492815c-48c5-4307-97dd-2663db2f1a8a'
 const TEAM_MEMBER_FIELD = 'via_welk_archer_team_member_heb_je_deze_link_toegestuurd_gekregen_'
-const EDITION_VALUES: Record<string, string> = {
-  'februari-2027': 'februari 2027',
-  'juni-2027': 'juni 2027',
-  'oktober-2027': 'oktober 2027',
+const N8N_EDITION_WEBHOOK_URL = process.env.N8N_DISCOVERY_EDITIE_WEBHOOK_URL
+  ?? 'https://n8n.archer-server.com/webhook-test/discovery-editie-keuze'
+const EDITIONS: Record<string, { hubSpotValue: string; title: string }> = {
+  'februari-2027': { hubSpotValue: 'februari 2027', title: 'Editie februari 2027' },
+  'juni-2027': { hubSpotValue: 'juni 2027', title: 'Editie juni 2027' },
+  'oktober-2027': { hubSpotValue: 'oktober 2027', title: 'Editie oktober 2027' },
 }
 const TEAM_MEMBER_VALUES = new Set([
   'Anthony', 'Armani', 'Bjorn', 'Kevin', 'Lennard', 'Nicolas', 'Jietse', 'Bert',
@@ -21,8 +23,8 @@ export async function POST(req: NextRequest) {
   if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json().catch(() => null) as { edition?: string } | null
-  const preferredEdition = body?.edition ? EDITION_VALUES[body.edition] : null
-  if (!preferredEdition) {
+  const selectedEdition = body?.edition ? EDITIONS[body.edition] : null
+  if (!selectedEdition) {
     return NextResponse.json({ error: 'invalid_edition' }, { status: 400 })
   }
 
@@ -67,16 +69,22 @@ export async function POST(req: NextRequest) {
   const forwardedFor = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
   const hutk = req.cookies.get('hubspotutk')?.value
 
+  const leadData = {
+    voornaam: firstName,
+    naam: lastName,
+    email: authUser.email,
+    telefoon: phone ?? '',
+  }
   const fields = [
-    { objectTypeId: '0-1', name: 'firstname', value: firstName },
-    { objectTypeId: '0-1', name: 'lastname', value: lastName },
-    { objectTypeId: '0-1', name: 'email', value: authUser.email },
-    { objectTypeId: '0-1', name: 'voorkeurseditie', value: preferredEdition },
+    { objectTypeId: '0-1', name: 'firstname', value: leadData.voornaam },
+    { objectTypeId: '0-1', name: 'lastname', value: leadData.naam },
+    { objectTypeId: '0-1', name: 'email', value: leadData.email },
+    { objectTypeId: '0-1', name: 'voorkeurseditie', value: selectedEdition.hubSpotValue },
     { objectTypeId: '0-1', name: TEAM_MEMBER_FIELD, value: teamMember },
   ]
-  if (phone) fields.splice(2, 0, { objectTypeId: '0-1', name: 'phone', value: phone })
+  if (leadData.telefoon) fields.splice(2, 0, { objectTypeId: '0-1', name: 'phone', value: leadData.telefoon })
 
-  const hubSpotResponse = await fetch(
+  const hubSpotSubmission = fetch(
     `https://api.hsforms.com/submissions/v3/integration/submit/${HUBSPOT_PORTAL_ID}/${HUBSPOT_FORM_ID}`,
     {
       method: 'POST',
@@ -93,6 +101,36 @@ export async function POST(req: NextRequest) {
       }),
     },
   )
+
+  const n8nSubmission = fetch(N8N_EDITION_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...leadData,
+      gekozen_editie: selectedEdition.title,
+      lead_owner: {
+        naam: ownerName ?? '',
+        telegram_chat_id: '',
+      },
+    }),
+    signal: AbortSignal.timeout(5_000),
+  }).then(async response => {
+    if (!response.ok) {
+      const responseBody = await response.text().catch(() => '')
+      throw new Error(`${response.status}: ${responseBody.slice(0, 300)}`)
+    }
+  }).catch(error => {
+    console.error('[invest-avond/unlock] n8n-webhook mislukt:', error)
+  })
+  after(() => n8nSubmission)
+
+  let hubSpotResponse: Response
+  try {
+    hubSpotResponse = await hubSpotSubmission
+  } catch (error) {
+    console.error('[invest-avond/unlock] HubSpot formulier kon niet worden bereikt:', error)
+    return NextResponse.json({ error: 'hubspot_submission_failed' }, { status: 502 })
+  }
 
   if (!hubSpotResponse.ok) {
     const responseBody = await hubSpotResponse.text()
