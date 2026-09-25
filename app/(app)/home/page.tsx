@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { Play } from 'lucide-react'
 import VimeoPlayer from '@/components/VimeoPlayer'
 import InvestAvondUnlockModal from '@/components/InvestAvondUnlockModal'
+import PlatformIntroModal from '@/components/PlatformIntroModal'
 import { HomeTrajectOverview } from '@/components/HomeTrajectOverview'
 import { VermogensavondCta } from '@/components/VermogensavondCta'
 import { useApp } from '@/components/app-context'
@@ -81,6 +82,8 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
+      <PlatformIntroModal />
+
       <p className="text-sm font-semibold text-muted-foreground">
         Welkom terug, <span className="text-primary">{firstName}</span>
       </p>
