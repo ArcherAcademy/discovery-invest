@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowRight, Check, X } from 'lucide-react'
+import { ArrowRight, CalendarDays, Check, MapPin, Users, X } from 'lucide-react'
 
 type Edition = {
   id: string
@@ -95,7 +95,7 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
       aria-labelledby="edition-choice-title"
     >
       <div className="flex min-h-full items-center justify-center">
-        <main className="relative my-auto max-h-[min(92vh,800px)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-border/80 bg-background p-6 shadow-[0_24px_80px_rgba(13,15,20,0.2)] sm:p-8 lg:p-10">
+        <main className="relative my-auto max-h-[min(92vh,760px)] w-full max-w-4xl overflow-y-auto rounded-[1.75rem] border border-border/80 bg-background shadow-[0_28px_90px_rgba(13,15,20,0.24)]">
           <button
             type="button"
             onClick={close}
@@ -107,56 +107,95 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
 
           {!confirmed ? (
             <>
-              <div className="max-w-xl pr-10 sm:pr-12">
-                <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Invest Masterclass</p>
-                <h1 id="edition-choice-title" className="mt-3 max-w-lg text-pretty text-3xl font-semibold tracking-[-0.04em] sm:text-4xl sm:leading-[1.08]">
-                  Kies je voorkeursdatum.
-                </h1>
-                <p className="mt-4 max-w-md text-pretty text-sm leading-6 text-muted-foreground sm:text-[15px]">
-                  We nemen daarna persoonlijk contact met je op. Geen betaling vooraf en geen verplichting.
-                </p>
+              <div className="border-b border-border/70 px-6 pb-6 pt-8 sm:px-9 sm:pb-7 sm:pt-9">
+                <div className="flex items-start gap-4 pr-10">
+                  <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <CalendarDays size={21} strokeWidth={1.8} aria-hidden="true" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Invest Masterclass</p>
+                    <h1 id="edition-choice-title" className="mt-2 text-balance text-2xl font-semibold tracking-[-0.035em] text-foreground sm:text-[30px]">
+                      Plan je eerste stap.
+                    </h1>
+                    <p className="mt-2 max-w-xl text-pretty text-sm leading-6 text-muted-foreground">
+                      Kies een periode die voor jou past. We nemen daarna persoonlijk contact met je op.
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-8 grid gap-3 lg:grid-cols-3" aria-label="Beschikbare masterclass-edities">
-                {EDITIONS.map(edition => {
-                  const isSelected = selectedEdition === edition.id
-                  return (
-                    <button
-                      key={edition.id}
-                      type="button"
-                      onClick={() => setSelectedEdition(edition.id)}
-                      aria-pressed={isSelected}
-                      className={`relative flex min-h-36 flex-col rounded-xl border p-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:p-5 ${isSelected ? 'border-primary bg-primary/[0.04]' : 'border-border bg-card hover:border-foreground/35'}`}
-                    >
-                      {isSelected ? (
-                        <span className="absolute right-4 top-4 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-label="Geselecteerd">
-                          <Check size={13} strokeWidth={3} aria-hidden="true" />
-                        </span>
-                      ) : null}
-                      <div className="pr-7">
-                        <span className="block whitespace-nowrap text-base font-semibold tracking-tight text-foreground sm:text-[17px]">
-                          {edition.dates} {edition.title.replace('Editie ', '')}
-                        </span>
-                        <span className="mt-2 block text-sm leading-5 text-muted-foreground">{edition.detail}</span>
+              <div className="grid gap-6 p-6 sm:p-9 lg:grid-cols-[1.2fr_0.8fr] lg:gap-10">
+                <section aria-labelledby="edition-list-title">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 id="edition-list-title" className="text-sm font-semibold text-foreground">Beschikbare edities</h2>
+                    <span className="text-xs text-muted-foreground">2027</span>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-border/80 bg-card" aria-label="Beschikbare masterclass-edities">
+                    {EDITIONS.map((edition, index) => {
+                      const isSelected = selectedEdition === edition.id
+                      const isAvailable = edition.status === 'Beschikbare plaatsen'
+                      return (
+                        <button
+                          key={edition.id}
+                          type="button"
+                          onClick={() => setSelectedEdition(edition.id)}
+                          aria-pressed={isSelected}
+                          className={`group flex w-full items-center gap-4 px-4 py-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring sm:px-5 ${index > 0 ? 'border-t border-border/70' : ''} ${isSelected ? 'bg-primary/[0.055]' : 'hover:bg-muted/45'}`}
+                        >
+                          <span className={`flex size-14 shrink-0 flex-col items-center justify-center rounded-xl border ${isSelected ? 'border-primary/30 bg-primary text-primary-foreground' : 'border-border bg-background text-foreground'}`}>
+                            <span className="text-[10px] font-bold uppercase tracking-[0.14em]">{edition.month}</span>
+                            <span className="mt-0.5 text-xl font-semibold leading-none">{edition.dates.split('–')[0]}</span>
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[15px] font-semibold tracking-tight text-foreground">{edition.title.replace('Editie ', '')}</span>
+                            <span className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin size={12} aria-hidden="true" />{edition.detail}</span>
+                          </span>
+                          <span className="flex shrink-0 items-center gap-2 text-right">
+                            <span className={`hidden text-xs sm:block ${isAvailable ? 'font-medium text-primary' : 'text-muted-foreground'}`}>{isAvailable ? 'Beschikbaar' : 'Wachtlijst'}</span>
+                            <span className={`flex size-5 items-center justify-center rounded-full border ${isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-transparent'}`} aria-label={isSelected ? 'Geselecteerd' : undefined}>
+                              <Check size={12} strokeWidth={3} aria-hidden="true" />
+                            </span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </section>
+
+                <aside className="flex flex-col rounded-2xl bg-muted/45 p-5 sm:p-6" aria-live="polite">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Jouw keuze</p>
+                  {selected ? (
+                    <>
+                      <div className="mt-5 flex items-start gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-background text-primary shadow-sm"><CalendarDays size={18} aria-hidden="true" /></div>
+                        <div>
+                          <p className="text-lg font-semibold tracking-tight text-foreground">{selected.dates} {selected.title.replace('Editie ', '')}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">{selected.detail}</p>
+                        </div>
                       </div>
-                      <span className={`mt-auto pt-5 text-xs ${edition.id === 'februari-2027' ? 'font-medium text-primary' : 'text-muted-foreground'}`}>
-                        {edition.status}
-                      </span>
-                    </button>
-                  )
-                })}
+                      <div className="mt-6 space-y-3 border-t border-border/70 pt-5 text-sm text-muted-foreground">
+                        <p className="flex items-center gap-2"><Users size={15} aria-hidden="true" /> Persoonlijke opvolging door ons team</p>
+                        <p className="flex items-center gap-2"><Check size={15} aria-hidden="true" /> Geen betaling vooraf</p>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="mt-5 flex flex-1 flex-col justify-center">
+                      <p className="text-lg font-semibold tracking-tight text-foreground">Nog geen datum gekozen</p>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">Selecteer links een editie om je aanvraag te starten.</p>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!selectedEdition || submitting}
+                    onClick={submitCandidate}
+                    className="mt-8 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    {submitting ? 'Bezig met versturen…' : selected ? 'Deze datum kiezen' : 'Kies eerst een datum'}
+                    <ArrowRight size={16} aria-hidden="true" />
+                  </button>
+                  {submitError ? <p role="alert" className="mt-3 text-center text-xs leading-5 text-destructive">{submitError}</p> : null}
+                </aside>
               </div>
-
-              <button
-                type="button"
-                disabled={!selectedEdition || submitting}
-                onClick={submitCandidate}
-                className="mt-7 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              >
-                {selected ? `Verder met ${selected.title.replace('Editie ', '')}` : 'Kies je datum'}
-                <ArrowRight size={16} aria-hidden="true" />
-              </button>
-              {submitError ? <p role="alert" className="mt-3 text-center text-xs leading-5 text-destructive">{submitError}</p> : null}
             </>
           ) : (
             <div className="mx-auto max-w-xl py-8 text-center sm:py-12">
