@@ -71,6 +71,7 @@ interface VimeoPlayerProps {
   onRealDuration?: (seconds: number) => void
   onCompleted?: () => void
   onAutoNext?: () => void          // called when countdown finishes
+  playLabel?: string
 }
 
 export default function VimeoPlayer({
@@ -86,6 +87,7 @@ export default function VimeoPlayer({
   onRealDuration,
   onCompleted,
   onAutoNext,
+  playLabel,
 }: VimeoPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<Player | null>(null)
@@ -371,8 +373,13 @@ export default function VimeoPlayer({
             className="absolute inset-0 z-10 flex items-center justify-center overflow-hidden bg-black focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-white"
           >
             <img src={thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" />
-            <span className="relative flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl transition-transform hover:scale-105">
-              <Play size={24} fill="currentColor" className="ml-1" />
+            <span className="absolute inset-0 bg-foreground/20" aria-hidden="true" />
+            <span className={playLabel
+              ? 'relative inline-flex min-h-12 items-center gap-2 rounded-full bg-primary px-6 text-sm font-bold text-primary-foreground shadow-xl transition-transform hover:scale-105 sm:text-base'
+              : 'relative flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl transition-transform hover:scale-105'
+            }>
+              <Play size={playLabel ? 18 : 24} fill="currentColor" className={playLabel ? '' : 'ml-1'} />
+              {playLabel ? <span>{playLabel}</span> : null}
             </span>
           </button>
         )}

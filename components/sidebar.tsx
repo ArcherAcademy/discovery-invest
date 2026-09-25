@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
-import { Clock, Settings, LogOut, Home, PlaySquare, CalendarDays, GraduationCap, ShieldCheck, BarChart3 } from 'lucide-react'
+import { Clock, Settings, LogOut, Home, PlaySquare, ListChecks, ShieldCheck, BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp } from './app-context'
 import { SidebarCallStatus } from './SidebarCallStatus'
@@ -31,16 +31,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       items: [
         { label: tr.nav.home, href: '/home', icon: <Home size={16} /> },
         { label: tr.nav.traject, href: '/traject', icon: <PlaySquare size={16} /> },
-        {
-          label: tr.nav.events,
-          href: '/kennismakingsevent',
-          icon: <CalendarDays size={16} />,
-        },
-        {
-          label: tr.nav.masterclass,
-          href: '/masterclass',
-          icon: <GraduationCap size={16} />,
-        },
+        { label: 'Mijn voortgang', href: '/traject#voortgang', icon: <ListChecks size={16} /> },
       ],
     },
     {
@@ -196,16 +187,7 @@ function MobileBottomNav() {
   const items: NavItem[] = [
     { label: tr.nav.home, href: '/home', icon: <Home size={21} /> },
     { label: tr.nav.traject, href: '/traject', icon: <PlaySquare size={21} /> },
-    {
-      label: tr.nav.events,
-      href: '/kennismakingsevent',
-      icon: <CalendarDays size={21} />,
-    },
-    {
-      label: tr.nav.masterclass,
-      href: '/masterclass',
-      icon: <GraduationCap size={21} />,
-    },
+    { label: 'Mijn voortgang', href: '/traject#voortgang', icon: <ListChecks size={21} /> },
   ]
 
   if (isMentorOrAdmin) {

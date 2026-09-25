@@ -2,11 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useApp } from './app-context'
 
 export function SignupBanner() {
   const pathname = usePathname()
+  const { coreCompleted, loading } = useApp()
 
-  if (pathname === '/masterclass') return null
+  if (pathname === '/masterclass' || (pathname === '/home' && !loading && coreCompleted === 0)) return null
 
   return (
     <div className="relative z-30 border-b border-primary/10 bg-background/80 px-4 py-2 backdrop-blur-md sm:px-6">

@@ -52,8 +52,9 @@ export default function TrajectPage() {
       </div>
 
       {/* Compact progress strip */}
-      <div
-        className="flex items-center gap-5 px-5 py-4 rounded-2xl border"
+  <div
+  id="voortgang"
+  className="flex items-center gap-5 px-5 py-4 rounded-2xl border"
         style={{ background: '#ffffff', borderColor: '#e8ecf4' }}
       >
         <div className="flex-1">

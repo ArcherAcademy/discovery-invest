@@ -78,6 +78,63 @@ export default function HomePage() {
     ?? displayVideos.at(-1)
     ?? null
   const featuredNextVideo = featuredVideo ? displayVideos[featuredVideo.index + 1] ?? null : null
+  const isFirstVisit = !isLoading && coreCompleted === 0 && displayVideos[0]?.status === 'not_started'
+
+  if (isFirstVisit && featuredVideo) {
+    return (
+      <div className="mx-auto flex max-w-5xl flex-col gap-5">
+        <header className="flex flex-col gap-1">
+          <p className="text-pretty text-sm font-semibold text-foreground">
+            Welkom terug, {firstName}. Je account staat klaar.
+          </p>
+          <p className="text-sm text-muted-foreground">Begin hieronder met video 1.</p>
+        </header>
+
+        <section className="flex flex-col gap-6 rounded-2xl border border-border bg-card p-5 text-card-foreground shadow-sm sm:p-8 lg:p-10">
+          <div className="flex flex-col gap-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">
+              Je gratis Invest Discovery begint hier
+            </p>
+            <div className="flex max-w-3xl flex-col gap-3">
+              <h1 className="text-balance text-3xl font-bold leading-tight tracking-tight sm:text-5xl">
+                Start met video 1: ontdek waar jouw vermogen vandaag echt staat.
+              </h1>
+              <p className="text-pretty text-base leading-7 text-muted-foreground sm:text-lg">
+                In deze eerste video ontdek je waarom hard werken en sparen alleen niet automatisch betekenen dat je vermogen groeit.
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl bg-foreground shadow-lg">
+            <VimeoPlayer
+              key={featuredVideo.id}
+              src={coreVideos[0]?.video_url ?? ''}
+              videoDbId={featuredVideo.id}
+              thumbnailUrl="/images/video-1-thumbnail.png"
+              completed={false}
+              initialProgressPct={0}
+              nextVideoTitle={displayVideos[1]?.title ?? null}
+              nextContentType={displayVideos[1]?.contentType ?? null}
+              playLabel="Start video 1"
+              onCompleted={() => refresh()}
+              onUnlockNext={() => refresh()}
+            />
+          </div>
+
+          <div id="voortgang" className="flex flex-col gap-2" aria-label="Voortgang videoreeks">
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span className="font-semibold text-foreground">0 van 6 video&apos;s bekeken</span>
+              <span className="text-muted-foreground">Video 1 van 6</span>
+            </div>
+            <progress value={0} max={6} className="h-2 w-full overflow-hidden rounded-full bg-muted accent-primary" aria-label="0 van 6 video&apos;s bekeken" />
+            <p className="text-sm leading-6 text-muted-foreground">
+              Duur: ongeveer 5 minuten. Daarna komt video 2 automatisch vrij.
+            </p>
+          </div>
+        </section>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
