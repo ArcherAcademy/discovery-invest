@@ -41,18 +41,13 @@ export default function PlatformIntroModal() {
         </button>
 
         <div className="relative aspect-video overflow-hidden rounded-2xl bg-transparent">
-          <video
-            autoPlay
-            muted
-            controls
-            playsInline
-            preload="metadata"
-            className="absolute inset-0 size-full object-cover"
-            aria-label="Introductievideo Archer Invest"
-          >
-            <source src="/hero-intro.mp4" type="video/mp4" />
-            Je browser ondersteunt deze video niet.
-          </video>
+          <iframe
+            src="https://player.vimeo.com/video/1230237190?badge=0&autopause=0&player_id=0&app_id=58479"
+            title="Pop-up video"
+            allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+            referrerPolicy="strict-origin-when-cross-origin"
+            className="absolute inset-0 size-full border-0"
+          />
         </div>
       </div>
     </div>
