@@ -95,7 +95,7 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
       aria-labelledby="edition-choice-title"
     >
       <div className="flex min-h-full items-center justify-center">
-        <main className="relative my-auto max-h-[min(92vh,800px)] w-full max-w-4xl overflow-y-auto rounded-xl border border-border/80 bg-background p-6 shadow-[0_24px_80px_rgba(13,15,20,0.22)] sm:p-9 lg:p-12">
+        <main className="relative my-auto max-h-[min(92vh,800px)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-border/80 bg-background p-6 shadow-[0_24px_80px_rgba(13,15,20,0.2)] sm:p-8 lg:p-10">
           <button
             type="button"
             onClick={close}
@@ -107,18 +107,17 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
 
           {!confirmed ? (
             <>
-              <div className="max-w-2xl pr-10 sm:pr-12">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Invest Masterclass</p>
-                <h1 id="edition-choice-title" className="mt-4 max-w-xl text-pretty text-3xl font-semibold tracking-[-0.035em] sm:text-4xl lg:text-[2.65rem] lg:leading-[1.08]">
-                  Kies een datum die voor jou past.
+              <div className="max-w-xl pr-10 sm:pr-12">
+                <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Invest Masterclass</p>
+                <h1 id="edition-choice-title" className="mt-3 max-w-lg text-pretty text-3xl font-semibold tracking-[-0.04em] sm:text-4xl sm:leading-[1.08]">
+                  Kies je voorkeursdatum.
                 </h1>
-                <p className="mt-5 max-w-xl text-pretty text-[15px] leading-7 text-muted-foreground">
-                  Selecteer je voorkeurseditie. We nemen daarna persoonlijk contact met je op.
+                <p className="mt-4 max-w-md text-pretty text-sm leading-6 text-muted-foreground sm:text-[15px]">
+                  We nemen daarna persoonlijk contact met je op. Geen betaling vooraf en geen verplichting.
                 </p>
-                <p className="mt-3 text-sm text-foreground">Geen betaling vooraf en geen verplichting.</p>
               </div>
 
-              <div className="mt-9 grid gap-3 lg:grid-cols-3" aria-label="Beschikbare masterclass-edities">
+              <div className="mt-8 grid gap-3 lg:grid-cols-3" aria-label="Beschikbare masterclass-edities">
                 {EDITIONS.map(edition => {
                   const isSelected = selectedEdition === edition.id
                   return (
@@ -127,20 +126,20 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
                       type="button"
                       onClick={() => setSelectedEdition(edition.id)}
                       aria-pressed={isSelected}
-                      className={`relative flex min-h-40 flex-col rounded-lg border p-5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${isSelected ? 'border-foreground bg-card' : 'border-border bg-card hover:border-foreground/40'}`}
+                      className={`relative flex min-h-36 flex-col rounded-xl border p-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:p-5 ${isSelected ? 'border-primary bg-primary/[0.04]' : 'border-border bg-card hover:border-foreground/35'}`}
                     >
                       {isSelected ? (
-                        <span className="absolute right-5 top-5 text-primary" aria-label="Geselecteerd">
-                          <Check size={18} strokeWidth={2.5} aria-hidden="true" />
+                        <span className="absolute right-4 top-4 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-label="Geselecteerd">
+                          <Check size={13} strokeWidth={3} aria-hidden="true" />
                         </span>
                       ) : null}
-                      <div className="pr-8">
+                      <div className="pr-7">
                         <span className="block whitespace-nowrap text-base font-semibold tracking-tight text-foreground sm:text-[17px]">
                           {edition.dates} {edition.title.replace('Editie ', '')}
                         </span>
                         <span className="mt-2 block text-sm leading-5 text-muted-foreground">{edition.detail}</span>
                       </div>
-                      <span className="mt-auto pt-5 text-xs font-medium text-muted-foreground">
+                      <span className={`mt-auto pt-5 text-xs ${edition.id === 'februari-2027' ? 'font-medium text-primary' : 'text-muted-foreground'}`}>
                         {edition.status}
                       </span>
                     </button>
@@ -152,9 +151,9 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
                 type="button"
                 disabled={!selectedEdition || submitting}
                 onClick={submitCandidate}
-                className="mt-8 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="mt-7 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
-                {selected ? `Verder met ${selected.title.replace('Editie ', '')}` : 'Kies je voorkeurseditie'}
+                {selected ? `Verder met ${selected.title.replace('Editie ', '')}` : 'Kies je datum'}
                 <ArrowRight size={16} aria-hidden="true" />
               </button>
               {submitError ? <p role="alert" className="mt-3 text-center text-xs leading-5 text-destructive">{submitError}</p> : null}
