@@ -95,7 +95,7 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
       aria-labelledby="edition-choice-title"
     >
       <div className="flex min-h-full items-center justify-center">
-        <main className="relative my-auto max-h-[min(92vh,800px)] w-full max-w-5xl overflow-y-auto rounded-[1.75rem] border border-border bg-background p-5 shadow-2xl sm:p-8 lg:p-10">
+        <main className="relative my-auto max-h-[min(92vh,800px)] w-full max-w-4xl overflow-y-auto rounded-xl border border-border/80 bg-background p-6 shadow-[0_24px_80px_rgba(13,15,20,0.22)] sm:p-9 lg:p-12">
           <button
             type="button"
             onClick={close}
@@ -107,18 +107,18 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
 
           {!confirmed ? (
             <>
-              <div className="max-w-3xl pr-10 sm:pr-12">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Kies je datum</p>
-                <h1 id="edition-choice-title" className="mt-3 text-balance text-3xl font-bold tracking-tight sm:text-4xl lg:text-[2.65rem]">
+              <div className="max-w-2xl pr-10 sm:pr-12">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Invest Masterclass</p>
+                <h1 id="edition-choice-title" className="mt-4 max-w-xl text-pretty text-3xl font-semibold tracking-[-0.035em] sm:text-4xl lg:text-[2.75rem] lg:leading-[1.08]">
                   Wanneer wil je jouw vermogensplan bouwen?
                 </h1>
-                <p className="mt-4 max-w-2xl text-pretty text-sm leading-6 text-muted-foreground sm:text-base">
-                  Kies hieronder je voorkeurseditie. Daarna neemt iemand van ons team contact met je op om je situatie te bespreken en je plaats te bevestigen.
+                <p className="mt-5 max-w-xl text-pretty text-[15px] leading-7 text-muted-foreground">
+                  Kies je voorkeurseditie. We nemen daarna persoonlijk contact met je op om je plaats en situatie te bespreken.
                 </p>
-                <p className="mt-3 text-sm font-medium text-foreground">Je betaalt nu niets en je bent nergens toe verplicht.</p>
+                <p className="mt-3 text-sm text-foreground">Geen betaling vooraf. Geen verplichting.</p>
               </div>
 
-              <div className="mt-7 grid gap-3 lg:grid-cols-3" aria-label="Beschikbare masterclass-edities">
+              <div className="mt-9 grid gap-3 lg:grid-cols-3" aria-label="Beschikbare masterclass-edities">
                 {EDITIONS.map(edition => {
                   const isSelected = selectedEdition === edition.id
                   return (
@@ -127,25 +127,27 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
                       type="button"
                       onClick={() => setSelectedEdition(edition.id)}
                       aria-pressed={isSelected}
-                      className={`relative flex min-h-44 flex-col rounded-2xl border-2 p-4 text-left transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:p-5 ${isSelected ? 'border-foreground bg-primary/10 shadow-[0_0_0_3px_hsl(var(--primary)/0.16)]' : 'border-border bg-card hover:border-primary/45 hover:bg-primary/[0.025]'}`}
+                      className={`relative flex min-h-40 flex-col rounded-lg border p-5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${isSelected ? 'border-foreground bg-card' : 'border-border bg-card hover:border-foreground/40'}`}
                     >
                       {isSelected ? (
-                        <span className="absolute right-4 top-4 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-label="Geselecteerd">
-                          <Check size={15} strokeWidth={3} aria-hidden="true" />
+                        <span className="absolute right-5 top-5 text-primary" aria-label="Geselecteerd">
+                          <Check size={18} strokeWidth={2.5} aria-hidden="true" />
                         </span>
                       ) : null}
-                      <div className="flex items-start justify-between gap-3 pr-8">
-                        <span className={`inline-flex items-baseline gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1.5 ${isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/20 bg-primary/[0.06] text-primary'}`}>
-                          <span className="text-[10px] font-bold tracking-[0.16em]">{edition.month}</span>
-                          <span className="text-xl font-bold leading-none">{edition.dates}</span>
-                          <span className="text-[10px]">&apos;{edition.year.slice(-2)}</span>
+                      <div className="flex items-start gap-3 pr-8">
+                        <span className="flex flex-col border-r border-border pr-3 text-primary">
+                          <span className="text-[10px] font-semibold tracking-[0.18em]">{edition.month}</span>
+                          <span className="mt-1 text-2xl font-semibold leading-none tracking-tight">{edition.dates}</span>
+                          <span className="mt-1 text-[10px] text-muted-foreground">{edition.year}</span>
                         </span>
-                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${edition.id === 'februari-2027' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
-                          {edition.status}
+                        <span className="flex min-h-[4.75rem] flex-col justify-center">
+                          <span className="font-medium text-foreground">{edition.title.replace('Editie ', '')}</span>
+                          <span className="mt-1 text-sm leading-5 text-muted-foreground">{edition.detail}</span>
                         </span>
                       </div>
-                      <span className="mt-5 block font-semibold text-foreground">{edition.title}</span>
-                      <span className="mt-1.5 block text-sm leading-5 text-muted-foreground">{edition.detail}</span>
+                      <span className="mt-auto pt-5 text-xs font-medium text-muted-foreground">
+                        {edition.status}
+                      </span>
                     </button>
                   )
                 })}
@@ -155,10 +157,10 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
                 type="button"
                 disabled={!selectedEdition || submitting}
                 onClick={submitCandidate}
-                className="mt-7 inline-flex min-h-13 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="mt-8 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
-                {selected ? `Doorgaan met ${selected.title.replace('Editie ', '')}` : 'Mijn voorkeursdatum kiezen'}
-                <ArrowRight size={17} aria-hidden="true" />
+                {selected ? `Verder met ${selected.title.replace('Editie ', '')}` : 'Kies je voorkeurseditie'}
+                <ArrowRight size={16} aria-hidden="true" />
               </button>
               {submitError ? <p role="alert" className="mt-3 text-center text-xs leading-5 text-destructive">{submitError}</p> : null}
             </>
