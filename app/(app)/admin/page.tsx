@@ -12,6 +12,7 @@ import { InhaalrondeModal } from '@/components/admin/InhaalrondeModal'
 import { UserFollowUpControl } from '@/components/admin/UserFollowUpControl'
 import { BookingLinksTab } from '@/components/admin/BookingLinksTab'
 import { CallBookingsOverview } from '@/components/admin/CallBookingsOverview'
+import { MailFlowBlueprint } from '@/components/admin/MailFlowBlueprint'
 import type { DemoUser, DemoUserFunnel, DemoWebhookLog, DemoTriggerLog, DemoWebhookConfig, AccountWebhookLog, DemoQuizSubmission } from '@/lib/types'
 import { QUIZ_QUESTIONS } from '@/lib/quiz-data'
 import { hasPermanentAccess, isTrialExpired, trialDaysRemaining } from '@/lib/access'
@@ -1524,6 +1525,8 @@ export default function AdminPage() {
       {/* Workflows tab */}
       {tab === 'workflows' && (
         <div className="space-y-6">
+
+          <MailFlowBlueprint />
 
           {/* Test trigger strip */}
           <div className="flex items-center justify-between px-4 py-3 rounded-2xl" style={{ background: 'rgba(37,0,245,0.05)', border: '1px solid rgba(37,0,245,0.12)' }}>
