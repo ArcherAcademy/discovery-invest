@@ -30,23 +30,17 @@ export default function PlatformIntroModal() {
       aria-modal="true"
       aria-labelledby="platform-intro-title"
     >
-      <div className="relative w-full max-w-4xl overflow-hidden rounded-xl bg-foreground shadow-2xl">
-        <div className="flex items-center justify-between px-4 py-3 text-primary-foreground sm:px-5">
-          <p id="platform-intro-title" className="text-xs font-medium uppercase tracking-[0.16em] text-primary-foreground/70">
-            Archer Invest
-          </p>
-          <button
-            type="button"
-            onClick={close}
-            aria-label="Introductievideo sluiten"
-            className="inline-flex size-8 items-center justify-center rounded-full text-primary-foreground/70 transition-colors hover:bg-primary-foreground/10 hover:text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-foreground"
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
-        </div>
+      <div className="relative w-full max-w-4xl overflow-hidden rounded-lg bg-foreground shadow-2xl">
+        <button
+          type="button"
+          onClick={close}
+          aria-label="Introductievideo sluiten"
+          className="absolute right-3 top-3 z-10 inline-flex size-8 items-center justify-center rounded-full bg-foreground/55 text-primary-foreground/80 backdrop-blur-sm transition-colors hover:bg-foreground/80 hover:text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-foreground"
+        >
+          <X size={17} aria-hidden="true" />
+        </button>
 
-        <div className="px-0 pb-0 sm:px-3 sm:pb-3">
-          <div className="relative aspect-video overflow-hidden bg-foreground sm:rounded-lg">
+        <div className="relative aspect-video overflow-hidden">
             <iframe
               src="https://player.vimeo.com/video/1230237190?badge=0&autopause=0&player_id=0&app_id=58479"
               title="Introductievideo Archer Invest"
