@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowRight, Check, CheckCircle2, X } from 'lucide-react'
+import { ArrowRight, Check, X } from 'lucide-react'
 
 type Edition = {
   id: string
@@ -10,8 +10,7 @@ type Edition = {
   year: string
   title: string
   detail: string
-  status: 'Beschikbare plaatsen' | 'Interesse doorgeven'
-  available: boolean
+  status: 'Beschikbare plaatsen' | 'Op de wachtlijst'
 }
 
 const EDITIONS: Edition[] = [
@@ -23,7 +22,6 @@ const EDITIONS: Edition[] = [
     title: 'Editie februari 2027',
     detail: 'Antwerpen · Handelsbeurs',
     status: 'Beschikbare plaatsen',
-    available: true,
   },
   {
     id: 'juni-2027',
@@ -32,8 +30,7 @@ const EDITIONS: Edition[] = [
     year: "'27",
     title: 'Editie juni 2027',
     detail: 'Antwerpen · Handelsbeurs',
-    status: 'Interesse doorgeven',
-    available: true,
+    status: 'Op de wachtlijst',
   },
   {
     id: 'oktober-2027',
@@ -42,8 +39,7 @@ const EDITIONS: Edition[] = [
     year: "'27",
     title: 'Editie oktober 2027',
     detail: 'Antwerpen · Handelsbeurs',
-    status: 'Interesse doorgeven',
-    available: true,
+    status: 'Op de wachtlijst',
   },
 ]
 
@@ -111,40 +107,18 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
 
           {!confirmed ? (
             <>
-              <div className="max-w-2xl pr-10 sm:pr-12">
-                <div className="mb-6 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <CheckCircle2 size={23} />
-                </div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Kies je voorkeursdatum</p>
+              <div className="max-w-3xl pr-10 sm:pr-12">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Kies je datum</p>
                 <h1 id="edition-choice-title" className="mt-3 text-balance text-3xl font-bold tracking-tight sm:text-4xl lg:text-[2.65rem]">
-                  Kies de editie die bij jou past.
+                  Wanneer wil je jouw vermogensplan bouwen?
                 </h1>
-                <p className="mt-4 max-w-3xl text-pretty text-sm leading-6 text-muted-foreground sm:text-base">
-                  <strong className="font-semibold text-foreground">Je kandidaatstelling verplicht je tot niets.</strong> Daarna neemt iemand van ons team contact met je op om je situatie te bespreken en te bekijken of de Invest Masterclass bij je past.
+                <p className="mt-4 max-w-2xl text-pretty text-sm leading-6 text-muted-foreground sm:text-base">
+                  Kies hieronder je voorkeurseditie. Daarna neemt iemand van ons team contact met je op om je situatie te bespreken en je plaats te bevestigen.
                 </p>
+                <p className="mt-3 text-sm font-medium text-foreground">Je betaalt nu niets en je bent nergens toe verplicht.</p>
               </div>
 
-              <section className="mt-6 rounded-2xl border border-border/70 bg-card/60 px-4 py-4 sm:px-5" aria-labelledby="masterclass-takeaways-title">
-                <h2 id="masterclass-takeaways-title" className="text-sm font-semibold text-foreground">Wat je meeneemt uit de Masterclass</h2>
-                <ul className="mt-3 grid gap-x-6 gap-y-2 text-xs leading-5 text-muted-foreground sm:grid-cols-2">
-                  {[
-                    'Je persoonlijke levensprojectie met jouw cijfers',
-                    'Je GGR berekend, voor en na',
-                    'Je verdeling over de 12 domeinen, vastgelegd',
-                    'Je plan voor de komende 12 maanden op papier',
-                    'De vermogensplanner, voor altijd',
-                    '3 maanden 1-op-1 begeleiding met een vermogensexpert',
-                    'Een netwerk van 100 ondernemers',
-                  ].map(item => (
-                    <li key={item} className="flex items-start gap-2">
-                      <Check size={14} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-
-              <div className="mt-6 grid gap-3 lg:grid-cols-3" aria-label="Beschikbare masterclass-edities">
+              <div className="mt-7 grid gap-3 lg:grid-cols-3" aria-label="Beschikbare masterclass-edities">
                 {EDITIONS.map(edition => {
                   const isSelected = selectedEdition === edition.id
                   return (
@@ -153,21 +127,25 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
                       type="button"
                       onClick={() => setSelectedEdition(edition.id)}
                       aria-pressed={isSelected}
-                      className={`flex min-h-44 flex-col rounded-2xl border p-3.5 text-left transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:p-5 ${isSelected ? 'border-primary bg-primary/[0.07] shadow-[0_0_0_3px_hsl(var(--primary)/0.12)]' : 'border-border bg-card hover:border-primary/45 hover:bg-primary/[0.025]'}`}
+                      className={`relative flex min-h-44 flex-col rounded-2xl border-2 p-4 text-left transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:p-5 ${isSelected ? 'border-foreground bg-primary/10 shadow-[0_0_0_3px_hsl(var(--primary)/0.16)]' : 'border-border bg-card hover:border-primary/45 hover:bg-primary/[0.025]'}`}
                     >
-                      <div className="flex items-center justify-between gap-3">
+                      {isSelected ? (
+                        <span className="absolute right-4 top-4 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-label="Geselecteerd">
+                          <Check size={15} strokeWidth={3} aria-hidden="true" />
+                        </span>
+                      ) : null}
+                      <div className="flex items-start justify-between gap-3 pr-8">
                         <span className={`inline-flex items-baseline gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1.5 ${isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/20 bg-primary/[0.06] text-primary'}`}>
                           <span className="text-[10px] font-bold tracking-[0.16em]">{edition.month}</span>
                           <span className="text-xl font-bold leading-none">{edition.dates}</span>
                           <span className="text-[10px]">&apos;{edition.year.slice(-2)}</span>
                         </span>
-                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${edition.available ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${edition.id === 'februari-2027' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
                           {edition.status}
                         </span>
                       </div>
-                      <span className="mt-4 block font-semibold text-foreground">{edition.title}</span>
+                      <span className="mt-5 block font-semibold text-foreground">{edition.title}</span>
                       <span className="mt-1.5 block text-sm leading-5 text-muted-foreground">{edition.detail}</span>
-
                     </button>
                   )
                 })}
@@ -177,12 +155,12 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
                 type="button"
                 disabled={!selectedEdition || submitting}
                 onClick={submitCandidate}
-                className="mt-7 inline-flex min-h-13 w-full items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="mt-7 inline-flex min-h-13 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
-                Stel mij kandidaat
+                {selected ? `Doorgaan met ${selected.title.replace('Editie ', '')}` : 'Mijn voorkeursdatum kiezen'}
+                <ArrowRight size={17} aria-hidden="true" />
               </button>
               {submitError ? <p role="alert" className="mt-3 text-center text-xs leading-5 text-destructive">{submitError}</p> : null}
-              <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">Geen betaling. Geen verplichting.</p>
             </>
           ) : (
             <div className="mx-auto max-w-xl py-8 text-center sm:py-12">
