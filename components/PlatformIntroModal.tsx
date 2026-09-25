@@ -41,14 +41,13 @@ export default function PlatformIntroModal() {
         </button>
 
         <div className="relative aspect-video overflow-hidden">
-            <iframe
-              src="https://player.vimeo.com/video/1230237190?badge=0&autopause=0&player_id=0&app_id=58479"
-              title="Introductievideo Archer Invest"
-              allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
-              referrerPolicy="strict-origin-when-cross-origin"
-              className="absolute inset-0 size-full"
-            />
-          </div>
+          <iframe
+            src="https://player.vimeo.com/video/1230237190?badge=0&autopause=0&player_id=0&app_id=58479"
+            title="Introductievideo Archer Invest"
+            allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+            referrerPolicy="strict-origin-when-cross-origin"
+            className="absolute inset-0 size-full"
+          />
         </div>
       </div>
     </div>
