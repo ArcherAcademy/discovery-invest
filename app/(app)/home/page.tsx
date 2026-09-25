@@ -1,7 +1,5 @@
 'use client'
 
-'use client'
-
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -73,14 +71,10 @@ export default function HomePage() {
         ? 'Bekijk je bonus'
         : 'Naar je traject'
 
-  const featuredVideo = displayVideos.find(video => video.status === 'in_progress')
-    ?? nextIncompleteCore
-    ?? displayVideos.at(-1)
-    ?? null
+  const featuredVideo = displayVideos[0] ?? null
   const featuredNextVideo = featuredVideo ? displayVideos[featuredVideo.index + 1] ?? null : null
-  const isFirstVisit = !isLoading && coreCompleted === 0 && displayVideos[0]?.status === 'not_started'
 
-  if (isFirstVisit && featuredVideo) {
+  if (featuredVideo) {
     return (
       <div className="mx-auto flex max-w-5xl flex-col gap-5">
         <header className="flex flex-col gap-1">
