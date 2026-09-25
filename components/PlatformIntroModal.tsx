@@ -3,21 +3,32 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 
-const INTRO_COOKIE = 'archer_platform_intro_seen'
+const INTRO_COOKIE_PREFIX = 'archer_platform_intro_seen'
 
-export default function PlatformIntroModal() {
+interface PlatformIntroModalProps {
+  accountKey: string | null
+}
+
+export default function PlatformIntroModal({ accountKey }: PlatformIntroModalProps) {
   const [open, setOpen] = useState(false)
+  const cookieName = accountKey
+    ? `${INTRO_COOKIE_PREFIX}_${accountKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+    : null
 
   useEffect(() => {
+    if (!cookieName) return
+
     const hasSeenIntro = document.cookie
       .split('; ')
-      .some(cookie => cookie.startsWith(`${INTRO_COOKIE}=`))
+      .some(cookie => cookie.startsWith(`${cookieName}=`))
 
     if (!hasSeenIntro) setOpen(true)
-  }, [])
+  }, [cookieName])
 
   function close() {
-    document.cookie = `${INTRO_COOKIE}=1; Max-Age=31536000; Path=/; SameSite=Lax`
+    if (cookieName) {
+      document.cookie = `${cookieName}=1; Max-Age=31536000; Path=/; SameSite=Lax`
+    }
     setOpen(false)
   }
 

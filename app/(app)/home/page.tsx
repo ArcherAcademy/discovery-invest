@@ -82,7 +82,7 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
-      <PlatformIntroModal />
+      <PlatformIntroModal accountKey={user?.id ?? user?.email ?? null} />
 
       <p className="text-sm font-semibold text-muted-foreground">
         Welkom terug, <span className="text-primary">{firstName}</span>
