@@ -2,6 +2,7 @@
 
 import { Check, Clock3, MessageCircle, Mail, Send, TriangleAlert } from 'lucide-react'
 import { WORKFLOWS } from '@/lib/workflow-engine'
+import { HUBSPOT_CODE } from '@/lib/hubspot-codes'
 
 type FlowStatus = 'live' | 'planned' | 'retiring' | 'signal'
 type FlowChannel = 'Mail' | 'WhatsApp' | 'Mail + WhatsApp' | 'Telegram'
@@ -110,6 +111,21 @@ export function MailFlowBlueprint() {
                         </div>
                         <p className="mt-1 text-[11px] leading-relaxed" style={{ color: '#64748b' }}>{item.trigger}</p>
                         {item.requirement && <p className="mt-1 text-[10px]" style={{ color: '#2563eb' }}>Nodig: {item.requirement}</p>}
+                        {item.channel === 'Mail' && (
+                          <details className="mt-2 rounded-xl border px-2.5 py-2" style={{ background: '#f8fafc', borderColor: '#e2e8f0' }}>
+                            <summary className="cursor-pointer text-[10px] font-semibold" style={{ color: '#334155' }}>Wat gaat naar HubSpot?</summary>
+                            <div className="mt-2 space-y-1 font-mono text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
+                              <p><span style={{ color: '#2500F5' }}>workflow</span>: {item.workflow ? (HUBSPOT_CODE[item.workflow] ?? item.workflow) : 'nog geen code gekoppeld'}</p>
+                              <p><span style={{ color: '#2500F5' }}>email</span>: user.email</p>
+                              <p><span style={{ color: '#2500F5' }}>naam</span>: user.name ?? &apos;&apos;</p>
+                              <p><span style={{ color: '#2500F5' }}>contact_owner_email</span>: actuele eigenaar of null</p>
+                              <p><span style={{ color: '#2500F5' }}>appointment_url</span>: booking link of null</p>
+                              <p><span style={{ color: '#2500F5' }}>appointment_owner_name</span>: eigenaar van booking link of null</p>
+                              <p><span style={{ color: '#2500F5' }}>appointment_link_is_fallback</span>: true/false/null</p>
+                            </div>
+                            <p className="mt-2 text-[9px] leading-relaxed" style={{ color: '#94a3b8' }}>De waarden met <code>user.</code> en “actuele” worden pas ingevuld bij het versturen. De centrale webhook ontvangt dit als één JSON-POST.</p>
+                          </details>
+                        )}
                       </div>
                       <span className="flex shrink-0 items-center gap-1 text-[10px]" style={{ color: '#94a3b8' }}><ChannelIcon className="size-3" />{item.channel}</span>
                     </div>
