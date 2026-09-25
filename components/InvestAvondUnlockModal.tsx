@@ -50,7 +50,7 @@ interface InvestAvondUnlockModalProps {
 }
 
 export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: InvestAvondUnlockModalProps) {
-  const [selectedEdition, setSelectedEdition] = useState<string | null>(null)
+  const [selectedEdition, setSelectedEdition] = useState<string | null>('februari-2027')
   const [confirmed, setConfirmed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -60,7 +60,7 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
   const selected = EDITIONS.find(edition => edition.id === selectedEdition)
 
   function close() {
-    setSelectedEdition(null)
+    setSelectedEdition('februari-2027')
     setConfirmed(false)
     setSubmitting(false)
     setSubmitError(null)
