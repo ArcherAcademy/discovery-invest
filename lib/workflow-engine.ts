@@ -413,9 +413,13 @@ async function attemptFire(
       suppressReden = 'onbekende workflow'
   }
 
-  // Alleen een kandidaat die na de verse herlezing afketst wordt individueel gelogd.
+  // Kandidaten kunnen intussen veranderd zijn. Verwachte business-voorwaarden
+  // zijn geen fout en mogen de triggerhistorie niet vervuilen; alleen echte
+  // configuratie- of dataproblemen blijven als onderdrukt besluit zichtbaar.
   if (!conditionMet) {
-    await logDecision(supabase, userId, user.email, workflow, 'onderdrukt', suppressReden, null, extraPayload)
+    if (!isRoutineSuppression(suppressReden)) {
+      await logDecision(supabase, userId, user.email, workflow, 'onderdrukt', suppressReden, null, extraPayload)
+    }
     return 'suppressed'
   }
 
@@ -544,6 +548,23 @@ async function attemptFire(
 }
 
 // ── Log helper ───────────────────────────────────────────────
+
+function isRoutineSuppression(reason: string): boolean {
+  const normalized = reason.toLowerCase()
+  return normalized.includes('niet geactiveerd')
+    || normalized.includes('nog niet geactiveerd')
+    || normalized.includes('account inmiddels geactiveerd')
+    || normalized.includes('drempel')
+    || normalized.includes('venster')
+    || normalized.includes('nog niet alle')
+    || normalized.includes('alle kernvideo')
+    || normalized.includes('video ') && normalized.includes('niet de eerstvolgende')
+    || normalized.includes('te recent actief')
+    || normalized.includes('cap bereikt')
+    || normalized.includes('event al geboekt')
+    || normalized.includes('geen actieve boeking')
+    || normalized.includes('trial al verlopen')
+}
 
 async function logDecision(
   supabase: SupabaseClient,

@@ -31,7 +31,7 @@ interface AdminUser extends DemoUser {
 }
 
 type AccountStatus = 'aangemaakt' | 'geactiveerd'
-type HistoryCategory = 'accepted' | 'intentional' | 'problem' | 'failed'
+type HistoryCategory = 'accepted' | 'skipped' | 'problem' | 'failed'
 type HistoryChannel = 'hubspot' | 'form' | 'funnel'
 
 type Tab = 'overview' | 'accounts' | 'users' | 'mentors' | 'webhooks' | 'workflows' | 'history' | 'account_logs' | 'voortgang'
@@ -1669,11 +1669,11 @@ export default function AdminPage() {
           if (log.status === 'gefaald') return 'failed'
           if (log.status === 'no_endpoint') return 'problem'
           const reason = (log.reden ?? '').toLowerCase()
-          return /ontbrekend|geen |leeg|endpoint|webhook|fout|error|invalid|missing/.test(reason) ? 'problem' : 'intentional'
+          return /geen centrale webhook|deliveryclaim|gebruiker niet gevonden|geen trial_expires_at|endpoint|webhook|fout|error|invalid|missing/.test(reason) ? 'problem' : 'skipped'
         }
         const categoryMeta: Record<HistoryCategory, { label: string; short: string; bg: string; color: string }> = {
           accepted: { label: 'Aangenomen door HubSpot', short: 'Aangenomen', bg: 'rgba(34,197,94,0.12)', color: '#15803d' },
-          intentional: { label: 'Bewust onderdrukt', short: 'Bewust onderdrukt', bg: '#f1f5f9', color: '#475569' },
+          skipped: { label: 'Niet aan de beurt', short: 'Niet aan de beurt', bg: '#f1f5f9', color: '#475569' },
           problem: { label: 'Onderdrukt door probleem', short: 'Probleem', bg: 'rgba(234,179,8,0.14)', color: '#a16207' },
           failed: { label: 'Mislukt', short: 'Mislukt', bg: 'rgba(239,68,68,0.12)', color: '#dc2626' },
         }
@@ -1705,7 +1705,7 @@ export default function AdminPage() {
             && (!historyFilter.status || row.category === historyFilter.status)
             && (!historyFilter.channel || row.channel.value === historyFilter.channel)
         }).sort((a, b) => new Date(b.log.created_at).getTime() - new Date(a.log.created_at).getTime())
-        const counts = rows.reduce<Record<HistoryCategory, number>>((acc, row) => ({ ...acc, [row.category]: acc[row.category] + 1 }), { accepted: 0, intentional: 0, problem: 0, failed: 0 })
+        const counts = rows.reduce<Record<HistoryCategory, number>>((acc, row) => ({ ...acc, [row.category]: acc[row.category] + 1 }), { accepted: 0, skipped: 0, problem: 0, failed: 0 })
         const uniqueLeads = new Set(rows.map(row => row.log.user_id || row.log.contact_email)).size
         const leadGroups = Array.from(new Set(rows.map(row => row.log.user_id || row.log.contact_email))).map(key => ({
           key,
@@ -1727,8 +1727,8 @@ export default function AdminPage() {
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-              <div className="rounded-2xl border p-4" style={{ background: '#fff', borderColor: '#e8ecf4' }}><p className="text-[11px] uppercase tracking-wide" style={{ color: '#64748b' }}>Triggers</p><p className="text-2xl font-semibold mt-1" style={{ color: '#0d0f14' }}>{rows.length}</p></div>
-              {(['accepted', 'intentional', 'problem', 'failed'] as const).map(key => <div key={key} className="rounded-2xl border p-4" style={{ background: categoryMeta[key].bg, borderColor: 'transparent' }}><p className="text-[11px] font-medium" style={{ color: categoryMeta[key].color }}>{categoryMeta[key].short}</p><p className="text-2xl font-semibold mt-1" style={{ color: categoryMeta[key].color }}>{counts[key]}</p></div>)}
+              <div className="rounded-2xl border p-4" style={{ background: '#fff', borderColor: '#e8ecf4' }}><p className="text-[11px] uppercase tracking-wide" style={{ color: '#64748b' }}>Evaluaties</p><p className="text-2xl font-semibold mt-1" style={{ color: '#0d0f14' }}>{rows.length}</p></div>
+              {(['accepted', 'skipped', 'problem', 'failed'] as const).map(key => <div key={key} className="rounded-2xl border p-4" style={{ background: categoryMeta[key].bg, borderColor: 'transparent' }}><p className="text-[11px] font-medium" style={{ color: categoryMeta[key].color }}>{categoryMeta[key].short}</p><p className="text-2xl font-semibold mt-1" style={{ color: categoryMeta[key].color }}>{counts[key]}</p></div>)}
               <div className="rounded-2xl border p-4" style={{ background: '#fff', borderColor: '#e8ecf4' }}><p className="text-[11px] uppercase tracking-wide" style={{ color: '#64748b' }}>Unieke leads</p><p className="text-2xl font-semibold mt-1" style={{ color: '#0d0f14' }}>{uniqueLeads}</p></div>
             </div>
 
@@ -1736,7 +1736,7 @@ export default function AdminPage() {
               <div className="flex flex-wrap gap-2 items-center">
                 <div className="relative"><Search className="absolute left-3 top-2.5 size-3.5" style={{ color: '#94a3b8' }} /><input type="search" placeholder="Zoek lead of e-mail" value={historyFilter.query} onChange={e => setHistoryFilter(f => ({ ...f, query: e.target.value }))} className="rounded-xl border py-2 pl-8 pr-3 text-xs outline-none" style={{ borderColor: '#e2e8f0', minWidth: 220 }} /></div>
                 <select value={historyFilter.workflow} onChange={e => setHistoryFilter(f => ({ ...f, workflow: e.target.value }))} className="rounded-xl border px-3 py-2 text-xs outline-none" style={{ borderColor: '#e2e8f0' }}><option value="">Alle workflows</option>{WORKFLOWS.map(w => <option key={w.naam} value={w.naam}>W{w.nummer} · {w.label}</option>)}</select>
-                <select value={historyFilter.status} onChange={e => setHistoryFilter(f => ({ ...f, status: e.target.value as '' | HistoryCategory }))} className="rounded-xl border px-3 py-2 text-xs outline-none" style={{ borderColor: '#e2e8f0' }}><option value="">Alle statussen</option><option value="accepted">Aangenomen door HubSpot</option><option value="intentional">Bewust onderdrukt</option><option value="problem">Onderdrukt door probleem</option><option value="failed">Mislukt</option></select>
+                <select value={historyFilter.status} onChange={e => setHistoryFilter(f => ({ ...f, status: e.target.value as '' | HistoryCategory }))} className="rounded-xl border px-3 py-2 text-xs outline-none" style={{ borderColor: '#e2e8f0' }}><option value="">Alle statussen</option><option value="accepted">Aangenomen door HubSpot</option><option value="skipped">Niet aan de beurt</option><option value="problem">Onderdrukt door probleem</option><option value="failed">Mislukt</option></select>
                 <select value={historyFilter.channel} onChange={e => setHistoryFilter(f => ({ ...f, channel: e.target.value as '' | HistoryChannel }))} className="rounded-xl border px-3 py-2 text-xs outline-none" style={{ borderColor: '#e2e8f0' }}><option value="">Alle kanalen</option><option value="hubspot">HubSpot mail-webhook</option><option value="form">Form-submit</option><option value="funnel">Funnel-event</option></select>
                 <div className="flex rounded-xl overflow-hidden border" style={{ borderColor: '#e2e8f0' }}>{(['vandaag', 'week', 'alles'] as const).map(p => <button key={p} onClick={() => setHistoryFilter(f => ({ ...f, periode: p }))} className="px-3 py-2 text-xs capitalize" style={historyFilter.periode === p ? { background: '#2500F5', color: '#fff' } : { background: '#fff', color: '#64748b' }}>{p}</button>)}</div>
               </div>
