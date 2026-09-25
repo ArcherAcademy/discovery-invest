@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useApp } from '@/components/app-context'
 import { useRouter } from 'next/navigation'
 import { t } from '@/lib/i18n'
@@ -31,6 +31,8 @@ interface AdminUser extends DemoUser {
 }
 
 type AccountStatus = 'aangemaakt' | 'geactiveerd'
+type HistoryCategory = 'accepted' | 'intentional' | 'problem' | 'failed'
+type HistoryChannel = 'hubspot' | 'form' | 'funnel'
 
 type Tab = 'overview' | 'accounts' | 'users' | 'mentors' | 'webhooks' | 'workflows' | 'history' | 'account_logs' | 'voortgang'
 
@@ -79,7 +81,17 @@ export default function AdminPage() {
   const [onlyWithVideos, setOnlyWithVideos] = useState(false)
   const [createdFrom, setCreatedFrom] = useState('')
   const [createdTo, setCreatedTo] = useState('')
-  const [historyFilter, setHistoryFilter] = useState<{ email: string; workflow: string; periode: 'vandaag' | 'week' | 'alles' }>({ email: '', workflow: '', periode: 'alles' })
+  const [historyFilter, setHistoryFilter] = useState<{
+    query: string
+    workflow: string
+    status: '' | HistoryCategory
+    channel: '' | HistoryChannel
+    periode: 'vandaag' | 'week' | 'alles'
+    from: string
+    to: string
+  }>({ query: '', workflow: '', status: '', channel: '', periode: 'alles', from: '', to: '' })
+  const [historyView, setHistoryView] = useState<'all' | 'leads'>('all')
+  const [expandedHistory, setExpandedHistory] = useState<string | null>(null)
   const [evaluatorRunning, setEvaluatorRunning] = useState(false)
   const [evaluatorResult, setEvaluatorResult] = useState<{ usersProcessed: number; triggered: number; suppressed: number } | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<{ userId: string; email: string } | null>(null)
@@ -1651,137 +1663,87 @@ export default function AdminPage() {
         const now2 = new Date()
         const startOfDay = new Date(now2.getFullYear(), now2.getMonth(), now2.getDate()).getTime()
         const startOfWeek = startOfDay - 6 * 24 * 60 * 60 * 1000
-
-        const filtered = triggerLog.filter(l => {
-          const ts = new Date(l.created_at).getTime()
-          const periodeOk =
-            historyFilter.periode === 'alles' ? true :
-            historyFilter.periode === 'vandaag' ? ts >= startOfDay :
-            ts >= startOfWeek
-          const emailOk = !historyFilter.email || l.contact_email.toLowerCase().includes(historyFilter.email.toLowerCase())
-          const workflowOk = !historyFilter.workflow || l.workflow_naam === historyFilter.workflow
-          return periodeOk && emailOk && workflowOk
-        })
+        const userById = new Map(users.map(item => [item.id, item]))
+        const classify = (log: DemoTriggerLog): HistoryCategory => {
+          if (log.status === 'verstuurd') return 'accepted'
+          if (log.status === 'gefaald') return 'failed'
+          if (log.status === 'no_endpoint') return 'problem'
+          const reason = (log.reden ?? '').toLowerCase()
+          return /ontbrekend|geen |leeg|endpoint|webhook|fout|error|invalid|missing/.test(reason) ? 'problem' : 'intentional'
+        }
+        const categoryMeta: Record<HistoryCategory, { label: string; short: string; bg: string; color: string }> = {
+          accepted: { label: 'Aangenomen door HubSpot', short: 'Aangenomen', bg: 'rgba(34,197,94,0.12)', color: '#15803d' },
+          intentional: { label: 'Bewust onderdrukt', short: 'Bewust onderdrukt', bg: '#f1f5f9', color: '#475569' },
+          problem: { label: 'Onderdrukt door probleem', short: 'Probleem', bg: 'rgba(234,179,8,0.14)', color: '#a16207' },
+          failed: { label: 'Mislukt', short: 'Mislukt', bg: 'rgba(239,68,68,0.12)', color: '#dc2626' },
+        }
+        const channelFor = (log: DemoTriggerLog): { value: HistoryChannel; label: string } => {
+          const payload = log.payload_json ?? {}
+          const event = typeof payload.event === 'string' ? payload.event : ''
+          if (event.includes('form') || log.workflow_naam.includes('boek')) return { value: 'form', label: 'Form-submit' }
+          if (event.includes('funnel') || event.includes('video') || log.workflow_naam.includes('video')) return { value: 'funnel', label: 'Funnel-event' }
+          return { value: 'hubspot', label: 'HubSpot mail-webhook' }
+        }
+        const rows = triggerLog.map(log => {
+          const account = userById.get(log.user_id)
+          const category = classify(log)
+          const channel = channelFor(log)
+          const detail = log.status === 'verstuurd'
+            ? `${log.response_status ? `HTTP ${log.response_status} · ` : ''}Webhook geaccepteerd door HubSpot. Dit betekent niet dat de mail effectief is afgeleverd.`
+            : log.reden ?? 'Geen reden geregistreerd.'
+          return { log, account, category, channel, detail }
+        }).filter(row => {
+          const ts = new Date(row.log.created_at).getTime()
+          const dateOk = historyFilter.periode === 'alles' ? true : historyFilter.periode === 'vandaag' ? ts >= startOfDay : ts >= startOfWeek
+          const fromOk = !historyFilter.from || ts >= new Date(`${historyFilter.from}T00:00:00`).getTime()
+          const toOk = !historyFilter.to || ts <= new Date(`${historyFilter.to}T23:59:59`).getTime()
+          const q = historyFilter.query.trim().toLowerCase()
+          const accountText = `${row.account?.name ?? ''} ${row.log.contact_email}`.toLowerCase()
+          return dateOk && fromOk && toOk
+            && (!q || accountText.includes(q))
+            && (!historyFilter.workflow || row.log.workflow_naam === historyFilter.workflow)
+            && (!historyFilter.status || row.category === historyFilter.status)
+            && (!historyFilter.channel || row.channel.value === historyFilter.channel)
+        }).sort((a, b) => new Date(b.log.created_at).getTime() - new Date(a.log.created_at).getTime())
+        const counts = rows.reduce<Record<HistoryCategory, number>>((acc, row) => ({ ...acc, [row.category]: acc[row.category] + 1 }), { accepted: 0, intentional: 0, problem: 0, failed: 0 })
+        const uniqueLeads = new Set(rows.map(row => row.log.user_id || row.log.contact_email)).size
+        const leadGroups = Array.from(new Set(rows.map(row => row.log.user_id || row.log.contact_email))).map(key => ({
+          key,
+          items: rows.filter(row => (row.log.user_id || row.log.contact_email) === key),
+        }))
 
         return (
           <div className="space-y-4">
-            {/* Filters */}
-            <div className="flex flex-wrap gap-3 items-center">
-              <div className="flex rounded-xl overflow-hidden border" style={{ borderColor: '#e8ecf4' }}>
-                {(['vandaag', 'week', 'alles'] as const).map(p => (
-                  <button
-                    key={p}
-                    onClick={() => setHistoryFilter(f => ({ ...f, periode: p }))}
-                    className="px-3 py-2 text-xs font-medium capitalize transition-all"
-                    style={historyFilter.periode === p
-                      ? { background: '#2500F5', color: '#fff' }
-                      : { background: '#fff', color: 'rgba(13,15,20,0.55)' }
-                    }
-                  >
-                    {p}
-                  </button>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="text-lg font-semibold" style={{ color: '#0d0f14' }}>Trigger history</h2>
+                <p className="text-xs mt-1" style={{ color: 'rgba(13,15,20,0.48)' }}>Een 202 betekent aangenomen door HubSpot, niet dat de mail verzonden is.</p>
+              </div>
+              <div className="flex rounded-xl overflow-hidden border" style={{ borderColor: '#e2e8f0' }}>
+                {([['all', 'Alle triggers'], ['leads', 'Per lead']] as const).map(([value, label]) => (
+                  <button key={value} onClick={() => setHistoryView(value)} className="px-3 py-2 text-xs font-medium" style={historyView === value ? { background: '#2500F5', color: '#fff' } : { background: '#fff', color: '#64748b' }}>{label}</button>
                 ))}
               </div>
-              <input
-                type="text"
-                placeholder="Filter op e-mail..."
-                value={historyFilter.email}
-                onChange={e => setHistoryFilter(f => ({ ...f, email: e.target.value }))}
-                className="rounded-xl px-3 py-2 text-xs border outline-none"
-                style={{ background: '#fff', borderColor: '#e8ecf4', color: '#0d0f14', minWidth: 180 }}
-              />
-              <select
-                value={historyFilter.workflow}
-                onChange={e => setHistoryFilter(f => ({ ...f, workflow: e.target.value }))}
-                className="rounded-xl px-3 py-2 text-xs border outline-none"
-                style={{ background: '#fff', borderColor: '#e8ecf4', color: '#0d0f14' }}
-              >
-                <option value="">Alle workflows</option>
-                {WORKFLOWS.map(w => (
-                  <option key={w.naam} value={w.naam}>W{w.nummer} · {w.label}</option>
-                ))}
-              </select>
-              <span className="text-xs" style={{ color: 'rgba(13,15,20,0.4)' }}>{filtered.length} rijen</span>
             </div>
 
-            {/* Table */}
-            <div className="rounded-2xl border overflow-hidden relative" style={{ background: '#ffffff', borderColor: '#e8ecf4' }}>
-            <div className="sm:hidden pointer-events-none absolute right-0 top-0 bottom-0 w-6 z-10" style={{ background: 'linear-gradient(to right, transparent, #ffffff)' }} />
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #e8ecf4', background: '#F5F8FF' }}>
-                      {['Tijdstip', 'Workflow', 'Account', 'Status', 'Reden', 'Payload'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left font-semibold" style={{ color: 'rgba(13,15,20,0.45)' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map(log => {
-                      const isExpanded = expandedPayload === log.id
-                      return (
-                        <tr key={log.id} style={{ borderBottom: '1px solid #f0f3fb' }} className="hover:bg-[#F5F8FF] transition-colors align-top">
-                          <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'rgba(13,15,20,0.45)' }}>
-                            {new Date(log.created_at).toLocaleString('nl-BE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <span className="font-semibold" style={{ color: '#0d0f14' }}>W{log.workflow_nummer}</span>
-                            <span className="ml-1" style={{ color: 'rgba(13,15,20,0.45)' }}>· {log.workflow_naam}</span>
-                          </td>
-                          <td className="px-4 py-3" style={{ color: 'rgba(13,15,20,0.55)' }}>{log.contact_email}</td>
-                          <td className="px-4 py-3">
-                            <span
-                              className="px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap"
-                              style={{
-                                background:
-                                  log.status === 'verstuurd' ? 'rgba(34,197,94,0.12)' :
-                                  log.status === 'onderdrukt' ? '#f0f3fb' :
-                                  log.status === 'no_endpoint' ? 'rgba(234,179,8,0.1)' :
-                                  'rgba(239,68,68,0.1)',
-                                color:
-                                  log.status === 'verstuurd' ? '#16a34a' :
-                                  log.status === 'onderdrukt' ? 'rgba(13,15,20,0.4)' :
-                                  log.status === 'no_endpoint' ? '#854d0e' :
-                                  '#ef4444',
-                              }}
-                            >
-                              {log.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 max-w-xs truncate" style={{ color: 'rgba(13,15,20,0.4)' }}>
-                            {log.reden ?? '—'}
-                          </td>
-                          <td className="px-4 py-3">
-                            <button
-                              onClick={() => setExpandedPayload(isExpanded ? null : log.id)}
-                              className="text-[10px] transition-colors"
-                              style={{ color: 'rgba(13,15,20,0.4)' }}
-                            >
-                              {isExpanded ? 'verbergen' : 'toon'}
-                            </button>
-                            {isExpanded && (
-                              <pre
-                                className="mt-2 text-[10px] leading-relaxed rounded-lg p-2 overflow-x-auto max-w-sm"
-                                style={{ background: '#F5F8FF', color: '#2500F5', border: '1px solid #e8ecf4' }}
-                              >
-                                {JSON.stringify(log.payload_json, null, 2)}
-                              </pre>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                    {filtered.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-xs" style={{ color: 'rgba(13,15,20,0.35)' }}>
-                          Geen trigger-events gevonden
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              <div className="rounded-2xl border p-4" style={{ background: '#fff', borderColor: '#e8ecf4' }}><p className="text-[11px] uppercase tracking-wide" style={{ color: '#64748b' }}>Triggers</p><p className="text-2xl font-semibold mt-1" style={{ color: '#0d0f14' }}>{rows.length}</p></div>
+              {(['accepted', 'intentional', 'problem', 'failed'] as const).map(key => <div key={key} className="rounded-2xl border p-4" style={{ background: categoryMeta[key].bg, borderColor: 'transparent' }}><p className="text-[11px] font-medium" style={{ color: categoryMeta[key].color }}>{categoryMeta[key].short}</p><p className="text-2xl font-semibold mt-1" style={{ color: categoryMeta[key].color }}>{counts[key]}</p></div>)}
+              <div className="rounded-2xl border p-4" style={{ background: '#fff', borderColor: '#e8ecf4' }}><p className="text-[11px] uppercase tracking-wide" style={{ color: '#64748b' }}>Unieke leads</p><p className="text-2xl font-semibold mt-1" style={{ color: '#0d0f14' }}>{uniqueLeads}</p></div>
             </div>
+
+            <div className="rounded-2xl border p-3 space-y-3" style={{ background: '#fff', borderColor: '#e8ecf4' }}>
+              <div className="flex flex-wrap gap-2 items-center">
+                <div className="relative"><Search className="absolute left-3 top-2.5 size-3.5" style={{ color: '#94a3b8' }} /><input type="search" placeholder="Zoek lead of e-mail" value={historyFilter.query} onChange={e => setHistoryFilter(f => ({ ...f, query: e.target.value }))} className="rounded-xl border py-2 pl-8 pr-3 text-xs outline-none" style={{ borderColor: '#e2e8f0', minWidth: 220 }} /></div>
+                <select value={historyFilter.workflow} onChange={e => setHistoryFilter(f => ({ ...f, workflow: e.target.value }))} className="rounded-xl border px-3 py-2 text-xs outline-none" style={{ borderColor: '#e2e8f0' }}><option value="">Alle workflows</option>{WORKFLOWS.map(w => <option key={w.naam} value={w.naam}>W{w.nummer} · {w.label}</option>)}</select>
+                <select value={historyFilter.status} onChange={e => setHistoryFilter(f => ({ ...f, status: e.target.value as '' | HistoryCategory }))} className="rounded-xl border px-3 py-2 text-xs outline-none" style={{ borderColor: '#e2e8f0' }}><option value="">Alle statussen</option><option value="accepted">Aangenomen door HubSpot</option><option value="intentional">Bewust onderdrukt</option><option value="problem">Onderdrukt door probleem</option><option value="failed">Mislukt</option></select>
+                <select value={historyFilter.channel} onChange={e => setHistoryFilter(f => ({ ...f, channel: e.target.value as '' | HistoryChannel }))} className="rounded-xl border px-3 py-2 text-xs outline-none" style={{ borderColor: '#e2e8f0' }}><option value="">Alle kanalen</option><option value="hubspot">HubSpot mail-webhook</option><option value="form">Form-submit</option><option value="funnel">Funnel-event</option></select>
+                <div className="flex rounded-xl overflow-hidden border" style={{ borderColor: '#e2e8f0' }}>{(['vandaag', 'week', 'alles'] as const).map(p => <button key={p} onClick={() => setHistoryFilter(f => ({ ...f, periode: p }))} className="px-3 py-2 text-xs capitalize" style={historyFilter.periode === p ? { background: '#2500F5', color: '#fff' } : { background: '#fff', color: '#64748b' }}>{p}</button>)}</div>
+              </div>
+              <div className="flex flex-wrap gap-2 items-center"><label className="text-[11px]" style={{ color: '#64748b' }}>Van <input type="date" value={historyFilter.from} onChange={e => setHistoryFilter(f => ({ ...f, from: e.target.value }))} className="ml-1 rounded-lg border px-2 py-1.5 text-xs" style={{ borderColor: '#e2e8f0' }} /></label><label className="text-[11px]" style={{ color: '#64748b' }}>Tot <input type="date" value={historyFilter.to} onChange={e => setHistoryFilter(f => ({ ...f, to: e.target.value }))} className="ml-1 rounded-lg border px-2 py-1.5 text-xs" style={{ borderColor: '#e2e8f0' }} /></label><span className="text-xs ml-auto" style={{ color: '#64748b' }}>{rows.length} resultaten</span></div>
+            </div>
+
+            {historyView === 'leads' ? <div className="space-y-3">{leadGroups.map(group => { const first = group.items[0]; return <div key={group.key} className="rounded-2xl border overflow-hidden" style={{ background: '#fff', borderColor: '#e8ecf4' }}><div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid #f1f5f9' }}><span><span className="block font-semibold text-sm" style={{ color: '#0d0f14' }}>{first.account?.name || 'Onbekende lead'}</span><span className="block text-xs mt-1" style={{ color: '#64748b' }}>{first.log.contact_email}</span></span><span className="text-xs" style={{ color: '#64748b' }}>{group.items.length} triggers</span></div><div className="divide-y" style={{ borderColor: '#f1f5f9' }}>{group.items.map(({ log, category, channel, detail }) => { const meta = categoryMeta[category]; return <button key={log.id} onClick={() => setExpandedHistory(expandedHistory === log.id ? null : log.id)} className="w-full px-4 py-3 text-left flex flex-wrap items-center gap-x-4 gap-y-1 hover:bg-slate-50"><span className="w-28 text-[11px]" style={{ color: '#64748b' }}>{new Date(log.created_at).toLocaleString('nl-BE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span><span className="font-medium text-xs" style={{ color: '#0f172a' }}>W{log.workflow_nummer} · {log.workflow_naam}</span><span className="text-[11px]" style={{ color: '#64748b' }}>{channel.label}</span><span className="rounded-full px-2 py-1 text-[10px] font-semibold" style={{ background: meta.bg, color: meta.color }}>{meta.short}</span><span className="basis-full text-xs" style={{ color: '#64748b' }}>{detail}</span></button>})}</div></div>})}</div> : <div className="rounded-2xl border overflow-hidden" style={{ background: '#fff', borderColor: '#e8ecf4' }}><div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr style={{ borderBottom: '1px solid #e8ecf4', background: '#f8fafc' }}>{['Tijdstip', 'Lead', 'Trigger / workflow', 'Kanaal', 'Status', 'Reden / detail'].map(header => <th key={header} className="px-4 py-3 text-left font-semibold whitespace-nowrap" style={{ color: '#64748b' }}>{header}</th>)}</tr></thead><tbody>{rows.map(({ log, account, category, channel, detail }) => { const meta = categoryMeta[category]; const isExpanded = expandedHistory === log.id; const payloadKeys = Object.keys(log.payload_json ?? {}).filter(key => !/token|secret|authorization|password/i.test(key)); return <Fragment key={log.id}><tr onClick={() => setExpandedHistory(isExpanded ? null : log.id)} className="cursor-pointer align-top hover:bg-slate-50" style={{ borderBottom: isExpanded ? '0' : '1px solid #f1f5f9' }}><td className="px-4 py-3 whitespace-nowrap" style={{ color: '#64748b' }}>{new Date(log.created_at).toLocaleString('nl-BE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td><td className="px-4 py-3 min-w-[190px]"><span className="block font-medium" style={{ color: '#0f172a' }}>{account?.name || 'Onbekende lead'}</span><span className="block mt-0.5" style={{ color: '#64748b' }}>{log.contact_email}</span></td><td className="px-4 py-3 min-w-[190px]"><span className="block font-semibold" style={{ color: '#0f172a' }}>W{log.workflow_nummer} · {log.workflow_naam}</span><span className="block mt-0.5" style={{ color: '#64748b' }}>{WORKFLOWS.find(w => w.naam === log.workflow_naam)?.label || 'Workflow trigger'}</span></td><td className="px-4 py-3 whitespace-nowrap" style={{ color: '#64748b' }}>{channel.label}</td><td className="px-4 py-3"><span className="inline-flex rounded-full px-2 py-1 text-[10px] font-semibold whitespace-nowrap" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span></td><td className="px-4 py-3 min-w-[260px] max-w-[360px]" style={{ color: '#475569' }}>{detail}</td></tr>{isExpanded && <tr key={`${log.id}-detail`} style={{ borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}><td colSpan={6} className="px-4 pb-4 pt-0"><div className="rounded-xl border p-3" style={{ background: '#fff', borderColor: '#e2e8f0' }}><p className="text-xs font-semibold" style={{ color: '#0f172a' }}>Triggerdetails</p><div className="grid sm:grid-cols-3 gap-3 mt-3 text-xs"><div><span className="block" style={{ color: '#94a3b8' }}>Branch / reden</span><span style={{ color: '#475569' }}>{log.reden || 'Geen reden geregistreerd.'}</span></div><div><span className="block" style={{ color: '#94a3b8' }}>HTTP-resultaat</span><span style={{ color: '#475569' }}>{log.response_status || 'Geen HTTP-respons'}</span></div><div><span className="block" style={{ color: '#94a3b8' }}>Meegestuurde velden</span><span style={{ color: '#475569' }}>{payloadKeys.length ? payloadKeys.join(', ') : 'Geen velden'}</span></div></div></div></td></tr>}</Fragment>})}{rows.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center" style={{ color: '#64748b' }}>Geen trigger-events gevonden voor deze filters.</td></tr>}</tbody></table></div></div>}
           </div>
         )
       })()}
