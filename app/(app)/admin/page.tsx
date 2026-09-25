@@ -1726,6 +1726,93 @@ export default function AdminPage() {
               </div>
             </div>
 
+            <section aria-labelledby="mailflow-structuur-title" className="rounded-2xl border p-4 sm:p-5" style={{ background: '#ffffff', borderColor: '#e8ecf4' }}>
+              <div className="flex flex-col gap-1">
+                <h3 id="mailflow-structuur-title" className="text-sm font-semibold" style={{ color: '#0d0f14' }}>Mailflow-structuur</h3>
+                <p className="text-xs" style={{ color: '#64748b' }}>Documentatie van de huidige flow en de geplande herziening. Dit overzicht wijzigt geen triggers of workflows.</p>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border p-3" style={{ background: '#fffaf0', borderColor: '#f5d9a8' }}>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: '#a16207' }}>Gedeelde randvoorwaarde</p>
+                  <p className="mt-1 text-xs font-semibold" style={{ color: '#713f12' }}>WEBHOOK_ENDPOINT nog niet ingesteld</p>
+                  <p className="mt-1 text-xs leading-relaxed" style={{ color: '#92400e' }}>Nodig om nieuwe uitgaande webhook- en HubSpot-berichten technisch te kunnen afleveren.</p>
+                </div>
+                <div className="rounded-xl border p-3" style={{ background: '#fffaf0', borderColor: '#f5d9a8' }}>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: '#a16207' }}>Gedeelde randvoorwaarde</p>
+                  <p className="mt-1 text-xs font-semibold" style={{ color: '#713f12' }}>WhatsApp-provider nog niet gekoppeld</p>
+                  <p className="mt-1 text-xs leading-relaxed" style={{ color: '#92400e' }}>Nodig voor elk nieuw WhatsApp-bericht en de bijbehorende afleverstatus.</p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                {[
+                  {
+                    title: 'BLIJFT',
+                    subtitle: 'Bestaande flow',
+                    background: '#ecfdf5',
+                    border: '#bbf7d0',
+                    color: '#15803d',
+                    items: [
+                      'Welkom na activatie',
+                      'Activatie-reminders: 2u, 24u en 72u',
+                      'Video-reminders voor video 2 t/m 6',
+                      'Opvolging na alle kernvideo’s en inactiviteit',
+                    ],
+                  },
+                  {
+                    title: 'GAAT WEG',
+                    subtitle: 'Wordt uitgefaseerd',
+                    background: '#f8fafc',
+                    border: '#cbd5e1',
+                    color: '#64748b',
+                    items: [
+                      'Workshop: 1 week voor het event',
+                      'Workshop-boeking bevestigd',
+                    ],
+                  },
+                  {
+                    title: 'KOMT ERBIJ',
+                    subtitle: 'Nieuwe berichten',
+                    background: '#eff6ff',
+                    border: '#bfdbfe',
+                    color: '#1d4ed8',
+                    items: [
+                      { label: 'Nieuwe trial-opvolging', need: 'WEBHOOK_ENDPOINT' },
+                      { label: 'Persoonlijke WhatsApp-opvolging', need: 'WhatsApp-provider' },
+                      { label: 'Nieuwe conversie-reminder', need: 'WEBHOOK_ENDPOINT' },
+                    ],
+                  },
+                ].map((column) => (
+                  <div key={column.title} className="rounded-xl border p-4" style={{ background: column.background, borderColor: column.border }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-bold tracking-[0.14em]" style={{ color: column.color }}>{column.title}</p>
+                        <p className="mt-1 text-xs" style={{ color: column.color }}>{column.subtitle}</p>
+                      </div>
+                      <span className="mt-0.5 size-2 rounded-full" style={{ background: column.color }} aria-hidden="true" />
+                    </div>
+                    <ul className={`mt-4 flex flex-col gap-2.5 ${column.title === 'GAAT WEG' ? 'line-through' : ''}`}>
+                      {column.items.map((item) => {
+                        const isNewMessage = typeof item !== 'string'
+                        return (
+                          <li key={isNewMessage ? item.label : item} className="text-xs leading-relaxed" style={{ color: column.title === 'GAAT WEG' ? '#64748b' : '#334155' }}>
+                            <span className="mr-2" style={{ color: column.color }}>•</span>
+                            {isNewMessage ? (
+                              <span className="inline-flex flex-wrap items-center gap-1.5">
+                                <span>{item.label}</span>
+                                <span className="rounded-full border px-1.5 py-0.5 text-[10px] font-medium no-underline" style={{ borderColor: column.border, color: column.color, background: '#ffffff' }}>nodig voor: {item.need}</span>
+                              </span>
+                            ) : item}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </section>
+
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               <div className="rounded-2xl border p-4" style={{ background: '#fff', borderColor: '#e8ecf4' }}><p className="text-[11px] uppercase tracking-wide" style={{ color: '#64748b' }}>Evaluaties</p><p className="text-2xl font-semibold mt-1" style={{ color: '#0d0f14' }}>{rows.length}</p></div>
               {(['accepted', 'skipped', 'problem', 'failed'] as const).map(key => <div key={key} className="rounded-2xl border p-4" style={{ background: categoryMeta[key].bg, borderColor: 'transparent' }}><p className="text-[11px] font-medium" style={{ color: categoryMeta[key].color }}>{categoryMeta[key].short}</p><p className="text-2xl font-semibold mt-1" style={{ color: categoryMeta[key].color }}>{counts[key]}</p></div>)}
