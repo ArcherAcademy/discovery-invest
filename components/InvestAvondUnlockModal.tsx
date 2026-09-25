@@ -109,13 +109,13 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
             <>
               <div className="max-w-2xl pr-10 sm:pr-12">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Invest Masterclass</p>
-                <h1 id="edition-choice-title" className="mt-4 max-w-xl text-pretty text-3xl font-semibold tracking-[-0.035em] sm:text-4xl lg:text-[2.75rem] lg:leading-[1.08]">
-                  Wanneer wil je jouw vermogensplan bouwen?
+                <h1 id="edition-choice-title" className="mt-4 max-w-xl text-pretty text-3xl font-semibold tracking-[-0.035em] sm:text-4xl lg:text-[2.65rem] lg:leading-[1.08]">
+                  Kies een datum die voor jou past.
                 </h1>
                 <p className="mt-5 max-w-xl text-pretty text-[15px] leading-7 text-muted-foreground">
-                  Kies je voorkeurseditie. We nemen daarna persoonlijk contact met je op om je plaats en situatie te bespreken.
+                  Selecteer je voorkeurseditie. We nemen daarna persoonlijk contact met je op.
                 </p>
-                <p className="mt-3 text-sm text-foreground">Geen betaling vooraf. Geen verplichting.</p>
+                <p className="mt-3 text-sm text-foreground">Geen betaling vooraf en geen verplichting.</p>
               </div>
 
               <div className="mt-9 grid gap-3 lg:grid-cols-3" aria-label="Beschikbare masterclass-edities">
@@ -134,20 +134,15 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
                           <Check size={18} strokeWidth={2.5} aria-hidden="true" />
                         </span>
                       ) : null}
-                      <div className="flex items-start gap-3 pr-8">
-                        <span className="flex flex-col border-r border-border pr-3 text-primary">
-                          <span className="text-[10px] font-semibold tracking-[0.18em]">{edition.month}</span>
-                          <span className="mt-1 text-2xl font-semibold leading-none tracking-tight">{edition.dates}</span>
-                          <span className="mt-1 text-[10px] text-muted-foreground">{edition.year}</span>
+                      <div className="flex items-start justify-between gap-4 pr-8">
+                        <span className="text-lg font-semibold tracking-tight text-foreground">
+                          {edition.dates} {edition.title.replace('Editie ', '')}
                         </span>
-                        <span className="flex min-h-[4.75rem] flex-col justify-center">
-                          <span className="font-medium text-foreground">{edition.title.replace('Editie ', '')}</span>
-                          <span className="mt-1 text-sm leading-5 text-muted-foreground">{edition.detail}</span>
+                        <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                          {edition.status}
                         </span>
                       </div>
-                      <span className="mt-auto pt-5 text-xs font-medium text-muted-foreground">
-                        {edition.status}
-                      </span>
+                      <span className="mt-3 text-sm leading-5 text-muted-foreground">{edition.detail}</span>
                     </button>
                   )
                 })}
