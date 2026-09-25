@@ -1,19 +1,16 @@
 /**
  * Archer Invest Demo — Workflow Orchestrator
  *
- * Stricte regels (zie spec):
+ * Strikte regels:
  *
- * 1. NOOIT VOORUIT PLANNEN — beslissing valt pas op het moment van verzenden.
- * 2. VERSE HERLEZING vlak voor elke verzending — state wordt opnieuw gelezen
- *    uit Supabase, niet vertrouwd op eerder gebulkte data.
- * 3. HARDE DATABASEGRENDEL — INSERT in demo_invest_trigger_sent met UNIQUE
- *    (user_id, workflow_naam). Een dubbele run faalt fysiek op de constraint.
- * 4. EERST WEGSCHRIJVEN, DAN STUREN — volgorde: INSERT trigger_sent →
- *    verse voorwaardecheck → webhook → log.
- * 5. ONDERDRUKKING BIJ TOESTANDSWIJZIGING — evaluator toetst altijd verse
- *    state, vertrouwt nooit blind op eerdere instant-event-onderdrukking.
- * 6. ALLES LOGGEN — elke beslissing (verstuurd / onderdrukt / gefaald /
- *    no_endpoint) in demo_invest_trigger_log.
+ * 1. DE DATABASE SELECTEERT — de evaluator ontvangt alleen kandidaten die in
+ *    het huidige tijdvenster vallen en nog geen send-once-markering hebben.
+ * 2. VERSE HERLEZING — vlak voor verzending wordt de toestand opnieuw gelezen.
+ * 3. HERSTELBARE CLAIM — een korte claim voorkomt dubbele parallelle verzending;
+ *    demo_invest_trigger_sent wordt pas na een geslaagde webhook gezet.
+ * 4. GEEN INHAALVERZENDING — kandidaatselectie gebruikt een begrensd tijdvenster.
+ * 5. GERICHTE LOGGING — routine-onderdrukkingen worden niet meer gegenereerd;
+ *    alleen kandidaten en een samenvatting per evaluatorrun worden gelogd.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -81,14 +78,10 @@ function minutesUntil(date: string | null): number {
   return (new Date(date).getTime() - Date.now()) / 60000
 }
 
-// ── Core: attempt to fire one workflow for one user ──────────
+// ── Core: attempt to fire one workflow for one candidate ─────
 //
-// Strict volgorde (regels 3 + 4):
-//   (a) INSERT into demo_invest_trigger_sent — faalt atomisch als al aanwezig
-//   (b) Verse herlezing van user/funnel/progress uit Supabase (regel 1 + 2)
-//   (c) Volledige voorwaardecheck op verse data — onderdrukt als niet voldaan
-//   (d) Webhook afvuren
-//   (e) Resultaat loggen in demo_invest_trigger_log (regel 6)
+// De kandidaat kwam al uit een gerichte SQL-query. We herlezen de toestand,
+// claimen pas vlak voor de POST en finaliseren trigger_sent pas na HTTP-succes.
 
 async function attemptFire(
   supabase: SupabaseClient,
@@ -97,21 +90,9 @@ async function attemptFire(
   configMap: Map<string, DemoWebhookConfig>,
   thresholds: Map<string, number>,
   coreVideoIds: string[],
-): Promise<'triggered' | 'suppressed' | 'already_sent'> {
+): Promise<'triggered' | 'suppressed' | 'failed' | 'already_sent'> {
 
-  // ── Stap (a): Databasegrendel ────────────────────────────
-  // Probeer de "verstuurd"-markering te reserveren. Als de UNIQUE constraint
-  // faalt, is deze workflow al verstuurd voor deze gebruiker — stop direct.
-  const { error: lockError } = await supabase
-    .from('demo_invest_trigger_sent')
-    .insert({ user_id: userId, workflow_naam: workflow.naam })
-
-  if (lockError) {
-    // Duplicate key = al verstuurd. Niets loggen, gewoon stoppen.
-    return 'already_sent'
-  }
-
-  // ── Stap (b): Verse herlezing ────────────────────────────
+  // Verse herlezing vlak voor verzending.
   const [
     { data: freshUser },
     { data: freshFunnelRows },
@@ -135,13 +116,7 @@ async function attemptFire(
   }
 
   if (followUpDisabled) {
-    await supabase
-      .from('demo_invest_trigger_sent')
-      .delete()
-      .eq('user_id', userId)
-      .eq('workflow_naam', workflow.naam)
-
-    await logDecision(supabase, userId, user.email, workflow, 'onderdrukt', 'automatische opvolging uitgeschakeld', null, {})
+    await logDecision(supabase, userId, user.email, workflow, 'onderdrukt', 'automatische opvolging uitgeschakeld na kandidaatselectie', null, {})
     return 'suppressed'
   }
 
@@ -438,14 +413,8 @@ async function attemptFire(
       suppressReden = 'onbekende workflow'
   }
 
-  // Voorwaarde niet voldaan — verwijder de grendel en log als onderdrukt
+  // Alleen een kandidaat die na de verse herlezing afketst wordt individueel gelogd.
   if (!conditionMet) {
-    await supabase
-      .from('demo_invest_trigger_sent')
-      .delete()
-      .eq('user_id', userId)
-      .eq('workflow_naam', workflow.naam)
-
     await logDecision(supabase, userId, user.email, workflow, 'onderdrukt', suppressReden, null, extraPayload)
     return 'suppressed'
   }
@@ -472,60 +441,86 @@ async function attemptFire(
 
   if (!isActive) {
     status = 'onderdrukt'
-    logReden = 'workflow uitgeschakeld'
-    await supabase
-      .from('demo_invest_trigger_sent')
-      .delete()
-      .eq('user_id', userId)
-      .eq('workflow_naam', workflow.naam)
+    logReden = 'workflow uitgeschakeld na kandidaatselectie'
   } else if (!centralUrl) {
     status = 'no_endpoint'
     logReden = 'geen centrale webhook URL geconfigureerd (HUBSPOT_WEBHOOK_URL of __central__ rij)'
-    await supabase
-      .from('demo_invest_trigger_sent')
-      .delete()
-      .eq('user_id', userId)
-      .eq('workflow_naam', workflow.naam)
   } else {
-  const hubspotCode = HUBSPOT_CODE[workflow.naam] ?? workflow.naam
-  const callState = await getCallUserState(supabase, user.id)
-  const booking = await resolveBookingLink(supabase, callState.contact_owner_email)
-  const outboundBody = JSON.stringify({
-  workflow: hubspotCode,
-  email:    user.email,
-  naam:     user.name ?? '',
-  contact_owner_email: callState.contact_owner_email,
-  appointment_url: booking?.booking_url ?? null,
-  appointment_owner_name: booking?.owner_name ?? null,
-  appointment_link_is_fallback: booking?.is_fallback ?? null,
-  })
-    try {
-      const res = await fetch(centralUrl, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    outboundBody,
-        signal:  AbortSignal.timeout(8000),
-      })
-      responseStatus = String(res.status)
-      status = res.ok ? 'verstuurd' : 'gefaald'
-      if (!res.ok) {
-        logReden = `HTTP ${res.status}`
-        await supabase
-          .from('demo_invest_trigger_sent')
-          .delete()
-          .eq('user_id', userId)
-          .eq('workflow_naam', workflow.naam)
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'unknown'
-      responseStatus = `fetch_error: ${msg}`
+    const claimToken = crypto.randomUUID()
+    const { data: claimed, error: claimError } = await supabase.rpc('demo_invest_claim_delivery', {
+      p_user_id: userId,
+      p_workflow_naam: workflow.naam,
+      p_claim_token: claimToken,
+      p_ttl_seconds: 900,
+    })
+
+    if (claimError) {
       status = 'gefaald'
-      logReden = msg
-      await supabase
-        .from('demo_invest_trigger_sent')
-        .delete()
-        .eq('user_id', userId)
-        .eq('workflow_naam', workflow.naam)
+      logReden = `deliveryclaim mislukt: ${claimError.message}`
+    } else if (!claimed) {
+      return 'already_sent'
+    } else {
+      try {
+        const hubspotCode = HUBSPOT_CODE[workflow.naam] ?? workflow.naam
+        const callState = await getCallUserState(supabase, user.id)
+        const booking = await resolveBookingLink(supabase, callState.contact_owner_email)
+        const outboundBody = JSON.stringify({
+          workflow: hubspotCode,
+          email: user.email,
+          naam: user.name ?? '',
+          contact_owner_email: callState.contact_owner_email,
+          appointment_url: booking?.booking_url ?? null,
+          appointment_owner_name: booking?.owner_name ?? null,
+          appointment_link_is_fallback: booking?.is_fallback ?? null,
+        })
+
+        const res = await fetch(centralUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: outboundBody,
+          signal: AbortSignal.timeout(8000),
+        })
+        responseStatus = String(res.status)
+
+        if (!res.ok) {
+          status = 'gefaald'
+          logReden = `HTTP ${res.status}`
+          await supabase.rpc('demo_invest_release_delivery', {
+            p_user_id: userId,
+            p_workflow_naam: workflow.naam,
+            p_claim_token: claimToken,
+          })
+        } else {
+          let finalized = false
+          let finalizeError: string | null = null
+
+          for (let attempt = 0; attempt < 3 && !finalized; attempt++) {
+            const { data, error } = await supabase.rpc('demo_invest_finalize_delivery', {
+              p_user_id: userId,
+              p_workflow_naam: workflow.naam,
+              p_claim_token: claimToken,
+              p_response_status: responseStatus,
+            })
+            finalized = data === true
+            finalizeError = error?.message ?? null
+          }
+
+          if (!finalized) {
+            status = 'gefaald'
+            logReden = `webhook geaccepteerd maar send-once-finalisatie mislukt: ${finalizeError ?? 'claim niet gevonden'}`
+          }
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'unknown'
+        responseStatus = `fetch_error: ${msg}`
+        status = 'gefaald'
+        logReden = msg
+        await supabase.rpc('demo_invest_release_delivery', {
+          p_user_id: userId,
+          p_workflow_naam: workflow.naam,
+          p_claim_token: claimToken,
+        })
+      }
     }
   }
 
@@ -543,7 +538,9 @@ async function attemptFire(
   // ── Stap (e): Log het resultaat ──────────────────────────
   await logDecision(supabase, userId, user.email, workflow, status, logReden, responseStatus, payload)
 
-  return status === 'verstuurd' ? 'triggered' : 'suppressed'
+  if (status === 'verstuurd') return 'triggered'
+  if (status === 'gefaald' || status === 'no_endpoint') return 'failed'
+  return 'suppressed'
 }
 
 // ── Log helper ───────────────────────────────────────────────
@@ -604,51 +601,165 @@ export async function fireInstant(
 
 // ── Public: clock evaluator (called by cron) ─────────────────
 
+export interface EvaluatorResult {
+  leaseAcquired: boolean
+  dryRun: boolean
+  usersProcessed: number
+  candidates: number
+  triggered: number
+  suppressed: number
+  failed: number
+  durationMs: number
+  candidatesByWorkflow: Record<string, number>
+}
+
 export async function runEvaluator(
   supabase: SupabaseClient,
-): Promise<{ usersProcessed: number; triggered: number; suppressed: number }> {
+  options: { dryRun?: boolean; now?: Date; lookbackMinutes?: number; candidateLimit?: number } = {},
+): Promise<EvaluatorResult> {
+  const startedAt = Date.now()
+  const dryRun = options.dryRun ?? false
+  const now = options.now ?? new Date()
+  const lookbackMinutes = options.lookbackMinutes ?? 30
+  const candidateLimit = options.candidateLimit ?? 250
+  const ownerId = crypto.randomUUID()
+  const candidatesByWorkflow: Record<string, number> = {}
 
-  // Laad config — eenmalig voor de hele evaluator-run
-  const [{ data: configRows }, { data: cfgValues }, { data: videosData }] = await Promise.all([
-    supabase.from('demo_invest_webhook_config').select('*'),
-    supabase.from('demo_invest_config').select('*'),
-    supabase.from('demo_invest_videos').select('id, order_no').eq('section', 'core').order('order_no'),
-  ])
+  if (!dryRun) {
+    const { data: leaseAcquired, error: leaseError } = await supabase.rpc('demo_invest_acquire_evaluator_lease', {
+      p_owner: ownerId,
+      p_ttl_seconds: 600,
+    })
 
-  const configMap = new Map<string, DemoWebhookConfig>(
-    (configRows ?? []).map((r: DemoWebhookConfig) => [r.trigger_naam, r])
-  )
-  const thresholds = new Map<string, number>(
-    (cfgValues ?? []).map((r: DemoConfig) => [r.sleutel, Number(r.waarde)])
-  )
-  const coreVideoIds = (videosData ?? []).map((v: { id: string }) => v.id)
-
-  // Laad ALLE gebruikers — zowel geactiveerd (video/conversie workflows)
-  // als niet-geactiveerd (W2/W3/W4 activatie-reminders).
-  // Elke workflow checkt zelf in stap (c) of de gebruiker in de juiste staat zit.
-  const { data: usersData } = await supabase
-    .from('demo_invest_users')
-    .select('id')
-
-  const users = (usersData ?? []) as Array<{ id: string }>
-  if (users.length === 0) return { usersProcessed: 0, triggered: 0, suppressed: 0 }
-
-  // De klok-workflows die de evaluator beoordeelt (instant = enkel via API routes)
-  const clockWorkflows = WORKFLOWS.filter(w => w.type === 'klok')
-
-  let triggered = 0
-  let suppressed = 0
-
-  // Per gebruiker: probeer elke klok-workflow via attemptFire.
-  // attemptFire doet verse herlezing + databasegrendel per poging.
-  for (const { id: userId } of users) {
-    for (const workflow of clockWorkflows) {
-      const result = await attemptFire(supabase, userId, workflow, configMap, thresholds, coreVideoIds)
-      if (result === 'triggered') triggered++
-      else if (result === 'suppressed') suppressed++
-      // 'already_sent' telt niet mee
+    if (leaseError) throw new Error(`Evaluatorlease mislukt: ${leaseError.message}`)
+    if (!leaseAcquired) {
+      return {
+        leaseAcquired: false,
+        dryRun,
+        usersProcessed: 0,
+        candidates: 0,
+        triggered: 0,
+        suppressed: 0,
+        failed: 0,
+        durationMs: Date.now() - startedAt,
+        candidatesByWorkflow,
+      }
     }
   }
 
-  return { usersProcessed: users.length, triggered, suppressed }
+  let runId: string | null = null
+  let candidates = 0
+  let triggered = 0
+  let suppressed = 0
+  let failed = 0
+  const processedUserIds = new Set<string>()
+
+  try {
+    if (!dryRun) {
+      const { data: run, error: runError } = await supabase
+        .from('demo_invest_evaluator_run')
+        .insert({ owner_id: ownerId, status: 'bezig' })
+        .select('id')
+        .single()
+
+      if (runError) throw new Error(`Evaluatorrun kon niet starten: ${runError.message}`)
+      runId = run.id
+    }
+
+    const [{ data: configRows }, { data: cfgValues }, { data: videosData }] = await Promise.all([
+      supabase.from('demo_invest_webhook_config').select('*'),
+      supabase.from('demo_invest_config').select('*'),
+      supabase.from('demo_invest_videos').select('id, order_no').eq('section', 'core').order('order_no'),
+    ])
+
+    const configMap = new Map<string, DemoWebhookConfig>(
+      (configRows ?? []).map((row: DemoWebhookConfig) => [row.trigger_naam, row])
+    )
+    const thresholds = new Map<string, number>(
+      (cfgValues ?? []).map((row: DemoConfig) => [row.sleutel, Number(row.waarde)])
+    )
+    const coreVideoIds = (videosData ?? []).map((video: { id: string }) => video.id)
+    const clockWorkflows = WORKFLOWS.filter(workflow => workflow.type === 'klok')
+
+    for (const workflow of clockWorkflows) {
+      const { data: candidateRows, error: candidateError } = await supabase.rpc('demo_invest_workflow_candidates', {
+        p_workflow_naam: workflow.naam,
+        p_now: now.toISOString(),
+        p_lookback_minutes: lookbackMinutes,
+        p_limit: candidateLimit,
+      })
+
+      if (candidateError) {
+        throw new Error(`Kandidaatselectie ${workflow.naam} mislukt: ${candidateError.message}`)
+      }
+
+      const workflowCandidates = (candidateRows ?? []) as Array<{ user_id: string }>
+      candidatesByWorkflow[workflow.naam] = workflowCandidates.length
+      candidates += workflowCandidates.length
+
+      if (dryRun) continue
+
+      for (const { user_id: userId } of workflowCandidates) {
+        processedUserIds.add(userId)
+        const result = await attemptFire(supabase, userId, workflow, configMap, thresholds, coreVideoIds)
+        if (result === 'triggered') triggered++
+        else if (result === 'suppressed') suppressed++
+        else if (result === 'failed') failed++
+      }
+    }
+
+    const durationMs = Date.now() - startedAt
+
+    if (runId) {
+      await supabase
+        .from('demo_invest_evaluator_run')
+        .update({
+          finished_at: new Date().toISOString(),
+          status: 'voltooid',
+          candidates,
+          triggered,
+          suppressed,
+          failed,
+          duration_ms: durationMs,
+          details: { candidates_by_workflow: candidatesByWorkflow },
+        })
+        .eq('id', runId)
+    }
+
+    return {
+      leaseAcquired: true,
+      dryRun,
+      usersProcessed: dryRun ? candidates : processedUserIds.size,
+      candidates,
+      triggered,
+      suppressed,
+      failed,
+      durationMs,
+      candidatesByWorkflow,
+    }
+  } catch (error) {
+    if (runId) {
+      await supabase
+        .from('demo_invest_evaluator_run')
+        .update({
+          finished_at: new Date().toISOString(),
+          status: 'gefaald',
+          candidates,
+          triggered,
+          suppressed,
+          failed: failed + 1,
+          duration_ms: Date.now() - startedAt,
+          details: {
+            candidates_by_workflow: candidatesByWorkflow,
+            error: error instanceof Error ? error.message : 'onbekende fout',
+          },
+        })
+        .eq('id', runId)
+    }
+    throw error
+  } finally {
+    if (!dryRun) {
+      await supabase.rpc('demo_invest_release_evaluator_lease', { p_owner: ownerId })
+    }
+  }
 }
