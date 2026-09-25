@@ -30,24 +30,24 @@ export default function PlatformIntroModal() {
       aria-modal="true"
       aria-labelledby="platform-intro-title"
     >
-      <div className="relative w-full max-w-4xl overflow-hidden rounded-lg bg-foreground shadow-2xl">
+      <div className="relative w-full max-w-5xl overflow-hidden rounded-2xl bg-transparent shadow-[0_24px_80px_rgba(15,23,42,0.28)]">
         <button
           type="button"
           onClick={close}
           aria-label="Introductievideo sluiten"
-          className="absolute right-3 top-3 z-10 inline-flex size-8 items-center justify-center rounded-full bg-foreground/55 text-primary-foreground/80 backdrop-blur-sm transition-colors hover:bg-foreground/80 hover:text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-foreground"
+          className="absolute right-3 top-3 z-10 inline-flex size-8 items-center justify-center rounded-full bg-background/75 text-foreground/70 shadow-sm backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <X size={17} aria-hidden="true" />
         </button>
 
-        <div className="relative aspect-video overflow-hidden bg-black">
+        <div className="relative aspect-video overflow-hidden rounded-2xl bg-transparent">
           <video
             autoPlay
             muted
             controls
             playsInline
             preload="metadata"
-            className="absolute inset-0 size-full object-contain"
+            className="absolute inset-0 size-full object-cover"
             aria-label="Introductievideo Archer Invest"
           >
             <source src="/hero-intro.mp4" type="video/mp4" />
