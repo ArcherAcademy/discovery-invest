@@ -7,23 +7,24 @@ const INTRO_COOKIE_PREFIX = 'archer_platform_intro_seen'
 
 interface PlatformIntroModalProps {
   accountKey: string | null
+  isNewAccount: boolean
 }
 
-export default function PlatformIntroModal({ accountKey }: PlatformIntroModalProps) {
+export default function PlatformIntroModal({ accountKey, isNewAccount }: PlatformIntroModalProps) {
   const [open, setOpen] = useState(false)
   const cookieName = accountKey
     ? `${INTRO_COOKIE_PREFIX}_${accountKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`
     : null
 
   useEffect(() => {
-    if (!cookieName) return
+    if (!cookieName || !isNewAccount) return
 
     const hasSeenIntro = document.cookie
       .split('; ')
       .some(cookie => cookie.startsWith(`${cookieName}=`))
 
     if (!hasSeenIntro) setOpen(true)
-  }, [cookieName])
+  }, [cookieName, isNewAccount])
 
   function close() {
     if (cookieName) {

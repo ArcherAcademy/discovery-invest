@@ -26,6 +26,8 @@ export default function HomePage() {
   const isLoading = videos.length === 0
   const firstName = user?.name?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'Investeerder'
   const videoProgressMap = new Map(progress.map(item => [item.video_id, item]))
+  const accountAgeMs = user?.created_at ? Date.now() - new Date(user.created_at).getTime() : Infinity
+  const isNewAccount = accountAgeMs >= 0 && accountAgeMs <= 7 * 24 * 60 * 60 * 1000
 
   function getStatus(videoId: string): 'not_started' | 'in_progress' | 'completed' {
     const status = videoProgressMap.get(videoId)?.status
@@ -82,7 +84,10 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
-      <PlatformIntroModal accountKey={user?.id ?? user?.email ?? null} />
+      <PlatformIntroModal
+        accountKey={user?.id ?? user?.email ?? null}
+        isNewAccount={isNewAccount}
+      />
 
       <p className="text-sm font-semibold text-muted-foreground">
         Welkom terug, <span className="text-primary">{firstName}</span>
