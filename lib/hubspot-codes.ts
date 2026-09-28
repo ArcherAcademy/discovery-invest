@@ -20,12 +20,12 @@
  *   mail_7  video_4_herinnering  → klok: inactief 24u, video 4 is eerstvolgende
  *   mail_8  video_5_herinnering  → klok: inactief 24u, video 5 is eerstvolgende
  *   mail_9  video_6_herinnering  → klok: inactief 24u, video 6 is eerstvolgende
- *   mail_11 alles_gezien_c1      → instant: alle 6 kernvideo's voltooid
+ *   mail_6op6_1_proficiat       → instant: alle 6 kernvideo's voltooid
  *   mail_opvolg_24u              → klok: 24u na aanmaak, nog niet geactiveerd
  *   mail_opvolg_3d               → klok: 3d na aanmaak, nog niet geactiveerd
  *   mail_opvolg_5d               → klok: 5d na aanmaak, nog niet geactiveerd
- *   mail_plaats_ligt_klaar       → klok: 48u na 6/6, niet geboekt
- *   mail_laatste_dag             → klok: dag 7 om 16:00 Europe/Brussels, niet geboekt
+ *   mail_6op6_2_plaats_klaar     → klok: 48u na 6/6, niet geboekt
+ *   mail_6op6_3_laatste_dag      → klok: dag 7 om 16:00 Europe/Brussels, niet geboekt
  *   mail_waitlist_direct         → instant: direct na waitlist-/editieformulier
  *   mail_15 trial_verlopen       → klok: na trial_expires_at, niet geboekt
  *   mail_16 verloopt_5d          → klok: ≤5d voor trial_expires_at
@@ -47,12 +47,12 @@ export const HUBSPOT_CODE: Record<string, string> = {
   video_4_herinnering:  'mail_7_video4',
   video_5_herinnering:  'mail_8_video5',
   video_6_herinnering:  'mail_9_video6',
-  alles_gezien_c1:      'mail_11_alles_gezien',
+  alles_gezien_c1:      'mail_6op6_1_proficiat',
   opvolg_24u:           'mail_opvolg_24u',
   opvolg_3d:            'mail_opvolg_3d',
   opvolg_5d:            'mail_opvolg_5d',
-  plaats_ligt_klaar:    'mail_plaats_ligt_klaar',
-  laatste_dag:          'mail_laatste_dag',
+  plaats_ligt_klaar:    'mail_6op6_2_plaats_klaar',
+  laatste_dag:          'mail_6op6_3_laatste_dag',
   waitlist_direct:      'mail_waitlist_direct',
   trial_verlopen:       'mail_15_trial_verlopen',
   verloopt_5d:          'mail_16_verloopt_5d',
@@ -74,7 +74,9 @@ export const HUBSPOT_CODES_ORDERED: { code: string; label: string; intern: strin
   { code: 'mail_7_video4',              intern: 'video_4_herinnering',  label: 'Mail 7 · Herinnering video 4' },
   { code: 'mail_8_video5',              intern: 'video_5_herinnering',  label: 'Mail 8 · Herinnering video 5' },
   { code: 'mail_9_video6',              intern: 'video_6_herinnering',  label: 'Mail 9 · Herinnering video 6' },
-  { code: 'mail_11_alles_gezien',       intern: 'alles_gezien_c1',      label: 'Mail 11 · Alle 6 video\'s gezien' },
+  { code: 'mail_6op6_1_proficiat',       intern: 'alles_gezien_c1',      label: '6/6-1 · Proficiat na alle 6 video\'s' },
+  { code: 'mail_6op6_2_plaats_klaar',     intern: 'plaats_ligt_klaar',    label: '6/6-2 · Plaats ligt klaar na 48u' },
+  { code: 'mail_6op6_3_laatste_dag',      intern: 'laatste_dag',          label: '6/6-3 · Laatste dag om 16:00' },
   { code: 'mail_15_trial_verlopen',     intern: 'trial_verlopen',       label: 'Mail 15 · Trial verlopen' },
   { code: 'mail_16_verloopt_5d',        intern: 'verloopt_5d',          label: 'Mail 16 · Trial verloopt over 5 dagen' },
   { code: 'mail_17_verloopt_3d',        intern: 'verloopt_3d',          label: 'Mail 17 · Trial verloopt over 3 dagen' },

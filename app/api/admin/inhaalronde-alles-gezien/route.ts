@@ -13,7 +13,7 @@ const supabase = createClient(
  *
  * Achtergrond: door een foute mapping vertrok deze trigger wekenlang met de
  * code mail_10_alles_gezien en belandde daardoor in de None-tak van HubSpot.
- * De mapping is gecorrigeerd naar mail_11_alles_gezien, maar de send-once
+ * De mapping is gecorrigeerd naar de actuele 6/6-code, maar de send-once
  * grendel staat voor die mensen al op verstuurd, dus de gewone engine vuurt
  * nooit meer. Deze route haalt dat eenmalig in.
  *
@@ -30,7 +30,7 @@ const supabase = createClient(
 
 const WORKFLOW_NAAM = 'alles_gezien_c1'
 const WORKFLOW_NUMMER = 10 // interne nummering; komt overeen met bestaande logrijen
-const CODE = HUBSPOT_CODE[WORKFLOW_NAAM] // 'mail_11_alles_gezien'
+const CODE = HUBSPOT_CODE[WORKFLOW_NAAM] // actuele mail_6op6_1_proficiat-code
 const INTERNE_DOMEINEN = /@(archer\.finance|archer\.academy)$/i
 
 interface Kandidaat {

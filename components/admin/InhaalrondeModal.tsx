@@ -131,7 +131,7 @@ export function InhaalrondeModal({ onClose }: { onClose: () => void }) {
               <h2 className="text-base font-bold" style={{ color: TEXT }}>Inhaalronde: alles gezien</h2>
               <p className="text-xs mt-0.5 leading-relaxed" style={{ color: TEXT_DIM }}>
                 Eenmalige actie voor wie 6/6 haalde vóór de codefix en de mail nooit kreeg.
-                Verstuurt <span className="font-mono">mail_11_alles_gezien</span>.
+                Verstuurt de actuele 6/6-proficiatcode.
               </p>
             </div>
           </div>
