@@ -3,7 +3,7 @@ import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitEvent } from '@/lib/emit-event'
 import { fireInstant } from '@/lib/workflow-engine'
-import { cancelVideoMessages, scheduleLeadTimeline } from '@/lib/scheduled-messages'
+import { cancelVideoMessages, scheduleLeadTimeline, scheduleSixOfSixFallback } from '@/lib/scheduled-messages'
 import { advanceHubSpotLeadStage } from '@/lib/hubspot-lead-stage'
 import type { DemoUser, DemoUserFunnel, DemoVideo } from '@/lib/types'
 
@@ -66,12 +66,19 @@ export async function POST(req: NextRequest) {
 
   const isNewCompletion = existingProgress?.status !== 'completed'
 
-  if (isNewCompletion && video?.section === 'core' && (completedCoreCount === 2 || completedCoreCount === 6)) {
-    const trigger = completedCoreCount === 2 ? 'two_core_videos' : 'six_core_videos'
+  if (isNewCompletion && video?.section === 'core' && completedCoreCount === 2) {
     try {
-      await advanceHubSpotLeadStage(user.email, trigger)
+      await advanceHubSpotLeadStage(user.email, 'two_core_videos')
     } catch (error) {
       console.error('[video-complete] HubSpot leadstage update mislukt:', error)
+    }
+  }
+
+  if (isNewCompletion && video?.section === 'core' && completedCoreCount === 6) {
+    try {
+      await scheduleSixOfSixFallback(supabase, authUser.id)
+    } catch (error) {
+      console.error('[video-complete] 6/6 stage fallback plannen mislukt:', error)
     }
   }
 

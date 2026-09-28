@@ -1,10 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { WORKFLOWS, attemptFire } from '@/lib/workflow-engine'
+import { advanceHubSpotLeadStageById } from '@/lib/hubspot-lead-stage'
 import type { DemoUser } from '@/lib/types'
 
 const ACTIVATION_WORKFLOWS = ['activatie_2u', 'activatie_24u', 'activatie_72u']
 const VIDEO_WORKFLOWS = [2, 3, 4, 5, 6].map(index => `video_${index}_herinnering`)
 const EXPIRY_WORKFLOWS = ['dag4_inactief', 'trial_verlopen', 'verloopt_5d', 'verloopt_3d', 'verloopt_1d', 'verloopt_6u']
+const STAGE_WORKFLOWS = ['lead_stage_6of6_fallback', 'lead_stage_waitlist_discovery']
 
 type ScheduledMessage = {
   id: string
@@ -85,6 +87,25 @@ export async function cancelBookingMessages(supabase: SupabaseClient, leadId: st
   await cancelScheduledWorkflows(supabase, leadId, ['dag4_inactief', ...EXPIRY_WORKFLOWS])
 }
 
+export async function scheduleSixOfSixFallback(supabase: SupabaseClient, leadId: string) {
+  const scheduledFor = new Date(Date.now() + 5 * 60_000).toISOString()
+  const { error } = await supabase.rpc('demo_invest_schedule_messages', {
+    p_lead_id: leadId,
+    p_messages: [{ workflow: 'lead_stage_6of6_fallback', scheduled_for: scheduledFor, condition_key: 'six_core_videos_without_edition_form' }],
+  })
+  if (error) throw new Error(`6/6 stage fallback plannen mislukt: ${error.message}`)
+}
+
+export async function scheduleWaitlistDiscoveryStage(supabase: SupabaseClient, leadId: string) {
+  await cancelScheduledWorkflows(supabase, leadId, ['lead_stage_6of6_fallback'])
+  const scheduledFor = new Date(Date.now() + 2 * 60_000).toISOString()
+  const { error } = await supabase.rpc('demo_invest_schedule_messages', {
+    p_lead_id: leadId,
+    p_messages: [{ workflow: 'lead_stage_waitlist_discovery', scheduled_for: scheduledFor, condition_key: 'edition_form_submitted' }],
+  })
+  if (error) throw new Error(`Waitlist stage plannen mislukt: ${error.message}`)
+}
+
 export interface ScheduledEvaluatorResult {
   claimed: number
   sent: number
@@ -106,6 +127,21 @@ export async function runScheduledEvaluator(supabase: SupabaseClient, limit = 20
   const result = { claimed: (rows ?? []).length, sent: 0, skipped: 0, failed: 0 }
 
   for (const row of (rows ?? []) as ScheduledMessage[]) {
+    if (row.workflow === 'lead_stage_6of6_fallback' || row.workflow === 'lead_stage_waitlist_discovery') {
+      const trigger = row.workflow === 'lead_stage_6of6_fallback' ? 'six_core_videos' : 'edition_selected'
+      try {
+        const stageResult = await advanceHubSpotLeadStageById(row.lead_id, trigger)
+        const finalStatus = stageResult.updated || stageResult.reason === 'already_at_or_beyond_target' ? 'sent' : 'skipped'
+        await supabase.from('demo_invest_scheduled_messages').update({ status: finalStatus, sent_at: new Date().toISOString(), claim_token: null, claim_until: null }).eq('id', row.id).eq('claim_token', row.claim_token)
+        stageResult.updated ? result.sent++ : result.skipped++
+      } catch (error) {
+        console.error('[scheduled-evaluator] lead stage update mislukt:', error)
+        await supabase.rpc('demo_invest_release_scheduled_message', { p_id: row.id, p_claim_token: row.claim_token })
+        result.failed++
+      }
+      continue
+    }
+
     const workflow = WORKFLOWS.find(item => item.naam === row.workflow)
     if (!workflow) {
       await supabase.from('demo_invest_scheduled_messages').update({ status: 'skipped', claim_token: null, claim_until: null }).eq('id', row.id).eq('claim_token', row.claim_token)

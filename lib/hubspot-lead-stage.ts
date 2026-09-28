@@ -1,12 +1,12 @@
 const HUBSPOT_API = 'https://api.hubapi.com'
 const LEAD_PIPELINE_ID = '3961435370'
 const LEAD_STAGE_PROPERTY = 'hs_pipeline_stage'
-const EDITION_STAGE_ID = '5709325548'
+const WAITLIST_DISCOVERY_STAGE_ID = '6147230967'
 
 const STAGE_BY_TRIGGER = {
   two_core_videos: '6150881500',
   six_core_videos: '6147230966',
-  edition_selected: EDITION_STAGE_ID,
+  edition_selected: WAITLIST_DISCOVERY_STAGE_ID,
 } as const
 
 type LeadStageTrigger = keyof typeof STAGE_BY_TRIGGER
@@ -34,7 +34,6 @@ const stageDefinitions: StageDefinition[] = [
   { id: '6147228876', label: 'Contacted (Lead)', displayOrder: 4 },
   { id: '6150881500', label: 'Qualified (2/6)', displayOrder: 5 },
   { id: '6147230966', label: 'Qualified 6/6', displayOrder: 6 },
-  { id: '6147230967', label: 'Waitlist Discovery', displayOrder: 7 },
   { id: '5938491641', label: 'Waitlist Website', displayOrder: 8 },
   { id: '5706792163', label: 'Attempted To Contact', displayOrder: 9 },
   { id: '5709325551', label: 'Contacted', displayOrder: 10 },
@@ -42,7 +41,8 @@ const stageDefinitions: StageDefinition[] = [
   { id: '5709325552', label: 'Sales Qualified', displayOrder: 12 },
   { id: '5709325549', label: 'Marketing Qualified', displayOrder: 13 },
   { id: '5706792164', label: 'Qualified', displayOrder: 14 },
-  { id: EDITION_STAGE_ID, label: 'Workshop / Event', displayOrder: 15 },
+  { id: '6147230967', label: 'Waitlist Discovery', displayOrder: 7 },
+  { id: '5709325548', label: 'Workshop / Event', displayOrder: 15 },
   { id: '5709325554', label: 'Not Qualified', displayOrder: 16 },
   { id: '5709325555', label: 'Newsletter Anthony', displayOrder: 17 },
   { id: '5709325553', label: 'Fund Qualified', displayOrder: 18 },
@@ -120,6 +120,31 @@ async function findLeadForEmail(email: string): Promise<HubSpotLead | null> {
     .sort((first, second) => (second.updatedAt ?? '').localeCompare(first.updatedAt ?? ''))[0] ?? null
 }
 
+export async function advanceHubSpotLeadStageById(leadId: string, trigger: LeadStageTrigger): Promise<{
+  updated: boolean
+  leadId: string
+  fromStage: string | null
+  toStage: string
+  reason?: string
+}> {
+  const targetStage = STAGE_BY_TRIGGER[trigger]
+  const lead = await hubSpotRequest<HubSpotLead>(`/crm/v3/objects/leads/${encodeURIComponent(leadId)}?properties=${LEAD_STAGE_PROPERTY},hs_pipeline`)
+  if (lead.properties?.hs_pipeline !== LEAD_PIPELINE_ID) {
+    return { updated: false, leadId, fromStage: lead.properties?.[LEAD_STAGE_PROPERTY] ?? null, toStage: targetStage, reason: 'lead_not_in_archer_pipeline' }
+  }
+  const currentStage = lead.properties?.[LEAD_STAGE_PROPERTY] ?? null
+  const currentOrder = currentStage ? stageOrder.get(currentStage) : undefined
+  const targetOrder = stageOrder.get(targetStage)
+  if (targetOrder === undefined || (currentOrder !== undefined && currentOrder >= targetOrder)) {
+    return { updated: false, leadId, fromStage: currentStage, toStage: targetStage, reason: 'already_at_or_beyond_target' }
+  }
+  await hubSpotRequest(`/crm/v3/objects/leads/${encodeURIComponent(leadId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ properties: { [LEAD_STAGE_PROPERTY]: targetStage } }),
+  })
+  return { updated: true, leadId, fromStage: currentStage, toStage: targetStage }
+}
+
 export async function advanceHubSpotLeadStage(email: string, trigger: LeadStageTrigger): Promise<{
   updated: boolean
   leadId: string | null
@@ -154,4 +179,5 @@ export const HUBSPOT_LEAD_STAGE_CONFIG = {
   pipelineId: LEAD_PIPELINE_ID,
   stageProperty: LEAD_STAGE_PROPERTY,
   stages: STAGE_BY_TRIGGER,
+  waitlistDiscoveryStageId: WAITLIST_DISCOVERY_STAGE_ID,
 } as const
