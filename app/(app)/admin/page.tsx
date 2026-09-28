@@ -12,7 +12,6 @@ import { InhaalrondeModal } from '@/components/admin/InhaalrondeModal'
 import { UserFollowUpControl } from '@/components/admin/UserFollowUpControl'
 import { BookingLinksTab } from '@/components/admin/BookingLinksTab'
 import { CallBookingsOverview } from '@/components/admin/CallBookingsOverview'
-import { MailFlowBlueprint } from '@/components/admin/MailFlowBlueprint'
 import type { DemoUser, DemoUserFunnel, DemoWebhookLog, DemoTriggerLog, DemoWebhookConfig, AccountWebhookLog, DemoQuizSubmission } from '@/lib/types'
 import { QUIZ_QUESTIONS } from '@/lib/quiz-data'
 import { hasPermanentAccess, isTrialExpired, trialDaysRemaining } from '@/lib/access'
@@ -1526,7 +1525,12 @@ export default function AdminPage() {
       {tab === 'workflows' && (
         <div className="space-y-6">
 
-          <MailFlowBlueprint />
+          <div className="rounded-2xl border px-4 py-3" style={{ background: '#f8fafc', borderColor: '#e8ecf4' }}>
+            <p className="text-xs font-bold" style={{ color: '#0d0f14' }}>Actieve officiële mailflow</p>
+            <p className="mt-1 text-xs leading-relaxed" style={{ color: 'rgba(13,15,20,0.48)' }}>
+              Deze lijst is de enige bron voor automatische mails. Workshop/event-mails zijn uitgefaseerd; verzonden historie blijft alleen zichtbaar in Trigger history.
+            </p>
+          </div>
 
           {/* Test trigger strip */}
           <div className="flex items-center justify-between px-4 py-3 rounded-2xl" style={{ background: 'rgba(37,0,245,0.05)', border: '1px solid rgba(37,0,245,0.12)' }}>

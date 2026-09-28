@@ -55,15 +55,13 @@ export const WORKFLOWS: WorkflowDef[] = [
   // Fase 3 — Conversie
   { nummer: 10, naam: 'alles_gezien_c1',      label: "Alle 6 kernvideo's bekeken",        type: 'instant', fase: 'Conversie',  voorwaarde: 'all_completed_at net gezet',                   timing: 'Direct na voltooiing video 6',   suppressie: 'Send-once' },
   { nummer: 11, naam: 'dag4_inactief',        label: 'Dag 4 inactief na voltooiing',      type: 'klok',    fase: 'Conversie',  voorwaarde: 'all_completed_at gezet, event_booked = false', timing: '4 dagen na all_completed_at',    suppressie: 'Send-once, stop als event geboekt' },
-  { nummer: 12, naam: 'workshop_1w_voor',     label: '1 week voor workshop',              type: 'klok',    fase: 'Conversie',  voorwaarde: 'event_booked = true, event 7 dagen weg',       timing: '7 dagen voor event starts_at',   suppressie: 'Send-once per boeking' },
   // Fase 4 — Retentie
-  { nummer: 13, naam: 'workshop_bevestiging', label: 'Workshop boeking bevestigd',        type: 'instant', fase: 'Retentie',   voorwaarde: 'event_booked net op true gezet',               timing: 'Direct na boeking',              suppressie: 'Send-once per boeking' },
-  { nummer: 14, naam: 'trial_verlopen',       label: 'Trial verlopen zonder boeking',     type: 'klok',    fase: 'Retentie',   voorwaarde: 'trial_expires_at verstreken, event_booked = false', timing: 'Bij/na trial_expires_at', suppressie: 'Send-once' },
+  { nummer: 12, naam: 'trial_verlopen',       label: 'Trial verlopen zonder boeking',     type: 'klok',    fase: 'Retentie',   voorwaarde: 'trial_expires_at verstreken, event_booked = false', timing: 'Bij/na trial_expires_at', suppressie: 'Send-once' },
   // Fase 5 — Trial verloopreminders (gaan alleen af als het venster nog niet gepasseerd was bij activatie)
-  { nummer: 15, naam: 'verloopt_5d',          label: 'Trial verloopt over 5 dagen',       type: 'klok',    fase: 'Retentie',   voorwaarde: 'trial_expires_at over ≤5d, event_booked = false, geactiveerd', timing: 'Wanneer minutesUntil(trial_expires_at) ≤ verloopt_5d_minuten', suppressie: 'Send-once, stop als event geboekt of venster al gepasseerd bij activatie' },
-  { nummer: 16, naam: 'verloopt_3d',          label: 'Trial verloopt over 3 dagen',       type: 'klok',    fase: 'Retentie',   voorwaarde: 'trial_expires_at over ≤3d, event_booked = false, geactiveerd', timing: 'Wanneer minutesUntil(trial_expires_at) ≤ verloopt_3d_minuten', suppressie: 'Send-once, stop als event geboekt of venster al gepasseerd bij activatie' },
-  { nummer: 17, naam: 'verloopt_1d',          label: 'Trial verloopt over 1 dag',         type: 'klok',    fase: 'Retentie',   voorwaarde: 'trial_expires_at over ≤1d, event_booked = false, geactiveerd', timing: 'Wanneer minutesUntil(trial_expires_at) ≤ verloopt_1d_minuten', suppressie: 'Send-once, stop als event geboekt of venster al gepasseerd bij activatie' },
-  { nummer: 18, naam: 'verloopt_6u',          label: 'Trial verloopt over 6 uur',         type: 'klok',    fase: 'Retentie',   voorwaarde: 'trial_expires_at over ≤6u, event_booked = false, geactiveerd', timing: 'Wanneer minutesUntil(trial_expires_at) ≤ verloopt_6u_minuten', suppressie: 'Send-once, stop als event geboekt of venster al gepasseerd bij activatie' },
+  { nummer: 13, naam: 'verloopt_5d',          label: 'Trial verloopt over 5 dagen',       type: 'klok',    fase: 'Retentie',   voorwaarde: 'trial_expires_at over ≤5d, event_booked = false, geactiveerd', timing: 'Wanneer minutesUntil(trial_expires_at) ≤ verloopt_5d_minuten', suppressie: 'Send-once, stop als event geboekt of venster al gepasseerd bij activatie' },
+  { nummer: 14, naam: 'verloopt_3d',          label: 'Trial verloopt over 3 dagen',       type: 'klok',    fase: 'Retentie',   voorwaarde: 'trial_expires_at over ≤3d, event_booked = false, geactiveerd', timing: 'Wanneer minutesUntil(trial_expires_at) ≤ verloopt_3d_minuten', suppressie: 'Send-once, stop als event geboekt of venster al gepasseerd bij activatie' },
+  { nummer: 15, naam: 'verloopt_1d',          label: 'Trial verloopt over 1 dag',         type: 'klok',    fase: 'Retentie',   voorwaarde: 'trial_expires_at over ≤1d, event_booked = false, geactiveerd', timing: 'Wanneer minutesUntil(trial_expires_at) ≤ verloopt_1d_minuten', suppressie: 'Send-once, stop als event geboekt of venster al gepasseerd bij activatie' },
+  { nummer: 16, naam: 'verloopt_6u',          label: 'Trial verloopt over 6 uur',         type: 'klok',    fase: 'Retentie',   voorwaarde: 'trial_expires_at over ≤6u, event_booked = false, geactiveerd', timing: 'Wanneer minutesUntil(trial_expires_at) ≤ verloopt_6u_minuten', suppressie: 'Send-once, stop als event geboekt of venster al gepasseerd bij activatie' },
 ]
 
 // ── Time helpers ─────────────────────────────────────────────
@@ -97,15 +95,11 @@ export async function attemptFire(
     { data: freshUser },
     { data: freshFunnelRows },
     { data: freshProgressRows },
-    { data: freshBookingRows },
-    { data: freshEventsRows },
     { data: followUpDisabled },
   ] = await Promise.all([
     supabase.from('demo_invest_users').select('*').eq('id', userId).single(),
     supabase.from('demo_invest_user_funnel').select('*').eq('user_id', userId).limit(1),
     supabase.from('demo_invest_video_progress').select('*').eq('user_id', userId),
-    supabase.from('demo_invest_event_bookings').select('*').eq('user_id', userId).eq('status', 'booked'),
-    supabase.from('demo_invest_events').select('*'),
     supabase.from('demo_invest_trigger_sent').select('id').eq('user_id', userId).eq('workflow_naam', '__automatische_opvolging_uit__').maybeSingle(),
   ])
 
@@ -124,15 +118,11 @@ export async function attemptFire(
   const progress = (freshProgressRows ?? []) as DemoVideoProgress[]
   const progressByVideoId = new Map(progress.map(p => [p.video_id, p]))
   const hasStartedAny = progress.some(p => p.status !== 'not_started')
-  const bookedEventIds = (freshBookingRows ?? []).map((b: { event_id: string }) => b.event_id)
-  const events = (freshEventsRows ?? []) as Array<{ id: string; starts_at: string }>
-
   // ── Stap (c): Volledige voorwaardecheck op verse data ────
   const t2u    = thresholds.get('activatie_2u_minuten')      ?? 120
   const t24u   = thresholds.get('activatie_24u_minuten')     ?? 1440
   const t72u   = thresholds.get('activatie_72u_minuten')     ?? 4320
   const t4d    = thresholds.get('dag4_minuten')              ?? 5760
-  const t1w    = thresholds.get('workshop_nudge_w1_minuten') ?? 10080
   // Trial-verloop reminders — instelbaar via demo_invest_config voor testdoeleinden
   const t5d    = thresholds.get('verloopt_5d_minuten')       ?? 7200   // 5 dagen
   const t3d    = thresholds.get('verloopt_3d_minuten')       ?? 4320   // 3 dagen
@@ -278,22 +268,6 @@ export async function attemptFire(
       suppressReden = funnel?.event_booked ? 'event al geboekt'
         : !funnel?.all_completed_at ? 'nog niet alle video\'s voltooid'
         : 'dag 4 drempel nog niet bereikt'
-      break
-
-    case 'workshop_1w_voor': {
-      const bookedEvent = events.find(e => bookedEventIds.includes(e.id) && minutesUntil(e.starts_at) >= 0 && minutesUntil(e.starts_at) <= t1w)
-      conditionMet = !!bookedEvent
-      suppressReden = !funnel?.event_booked ? 'geen actieve boeking'
-        : !bookedEvent ? 'event niet binnen 1 week of al geweest'
-        : 'drempel niet bereikt'
-      if (bookedEvent) extraPayload = { event_id: bookedEvent.id, event_starts_at: bookedEvent.starts_at }
-      break
-    }
-
-    case 'workshop_bevestiging':
-      conditionMet = !!funnel?.event_booked && !!funnel.event_booked_at
-      suppressReden = 'geen actieve boeking gevonden'
-      if (funnel?.event_booked_at) extraPayload = { event_booked_at: funnel.event_booked_at }
       break
 
     case 'trial_verlopen':

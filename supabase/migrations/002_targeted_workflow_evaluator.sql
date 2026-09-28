@@ -209,7 +209,7 @@ begin
     'activatie_2u', 'activatie_24u', 'activatie_72u',
     'video_2_herinnering', 'video_3_herinnering', 'video_4_herinnering',
     'video_5_herinnering', 'video_6_herinnering', 'dag4_inactief',
-    'workshop_1w_voor', 'trial_verlopen', 'verloopt_5d', 'verloopt_3d',
+    'trial_verlopen', 'verloopt_5d', 'verloopt_3d',
     'verloopt_1d', 'verloopt_6u'
   ) then
     return;
@@ -225,7 +225,6 @@ begin
     when 'video_5_herinnering' then coalesce((select waarde::integer from public.demo_invest_config where sleutel = 'inactiviteit_minuten'), 1440)
     when 'video_6_herinnering' then coalesce((select waarde::integer from public.demo_invest_config where sleutel = 'inactiviteit_minuten'), 1440)
     when 'dag4_inactief' then coalesce((select waarde::integer from public.demo_invest_config where sleutel = 'dag4_minuten'), 5760)
-    when 'workshop_1w_voor' then coalesce((select waarde::integer from public.demo_invest_config where sleutel = 'workshop_nudge_w1_minuten'), 10080)
     when 'verloopt_5d' then coalesce((select waarde::integer from public.demo_invest_config where sleutel = 'verloopt_5d_minuten'), 7200)
     when 'verloopt_3d' then coalesce((select waarde::integer from public.demo_invest_config where sleutel = 'verloopt_3d_minuten'), 4320)
     when 'verloopt_1d' then coalesce((select waarde::integer from public.demo_invest_config where sleutel = 'verloopt_1d_minuten'), 1440)
@@ -302,17 +301,6 @@ begin
         and not coalesce(f.event_booked, false)
         and f.all_completed_at + make_interval(mins => threshold_minutes) > window_start
         and f.all_completed_at + make_interval(mins => threshold_minutes) <= p_now
-
-      when p_workflow_naam = 'workshop_1w_voor' then
-        exists (
-          select 1
-          from public.demo_invest_event_bookings b
-          join public.demo_invest_events e on e.id = b.event_id
-          where b.user_id = u.id
-            and b.status = 'booked'
-            and e.starts_at - make_interval(mins => threshold_minutes) > window_start
-            and e.starts_at - make_interval(mins => threshold_minutes) <= p_now
-        )
 
       when p_workflow_naam = 'trial_verlopen' then
         not coalesce(f.event_booked, false)

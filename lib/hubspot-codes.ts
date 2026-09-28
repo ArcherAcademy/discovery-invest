@@ -22,12 +22,6 @@
  *   mail_9  video_6_herinnering  → klok: inactief 24u, video 6 is eerstvolgende
  *   mail_10 dag4_inactief        → klok: 4d na all_completed_at, niet geboekt
  *   mail_11 alles_gezien_c1      → instant: alle 6 kernvideo's voltooid
- *   mail_12 workshop_48u         → klok: 7d voor event starts_at, geboekt
- *                                  LET OP: de HubSpot-branch heet 48u, de app
- *                                  vuurt op 7 dagen. Naam en timing lopen uiteen;
- *                                  dit is bewust zo gelaten, niet stilzwijgend.
- *   mail_13 (geen interne trigger — workshop_laatste_dag, alleen in HubSpot)
- *   mail_14 workshop_bevestiging → instant: event_booked net true gezet
  *   mail_15 trial_verlopen       → klok: na trial_expires_at, niet geboekt
  *   mail_16 verloopt_5d          → klok: ≤5d voor trial_expires_at
  *   mail_17 verloopt_3d          → klok: ≤3d voor trial_expires_at
@@ -50,8 +44,6 @@ export const HUBSPOT_CODE: Record<string, string> = {
   video_6_herinnering:  'mail_9_video6',
   alles_gezien_c1:      'mail_11_alles_gezien',
   dag4_inactief:        'mail_10_dag4',
-  workshop_1w_voor:     'mail_12_workshop_48u',
-  workshop_bevestiging: 'mail_14_workshop_bevestiging',
   trial_verlopen:       'mail_15_trial_verlopen',
   verloopt_5d:          'mail_16_verloopt_5d',
   verloopt_3d:          'mail_17_verloopt_3d',
@@ -60,9 +52,7 @@ export const HUBSPOT_CODE: Record<string, string> = {
 }
 
 /**
- * De 18 door de app aanroepbare HubSpot mail-codes, op codevolgorde.
- * mail_13_workshop_laatste_dag ontbreekt bewust: die branch bestaat in HubSpot
- * maar heeft geen interne trigger en kan dus niet vanuit de app gevuurd worden.
+ * De door de app aanroepbare HubSpot mail-codes, op codevolgorde.
  */
 export const HUBSPOT_CODES_ORDERED: { code: string; label: string; intern: string }[] = [
   { code: 'mail_1_welkom',              intern: 'welkom',               label: 'Mail 1 · Welkom na activatie' },
@@ -76,8 +66,6 @@ export const HUBSPOT_CODES_ORDERED: { code: string; label: string; intern: strin
   { code: 'mail_9_video6',              intern: 'video_6_herinnering',  label: 'Mail 9 · Herinnering video 6' },
   { code: 'mail_10_dag4',               intern: 'dag4_inactief',        label: 'Mail 10 · Dag 4 inactief na voltooiing' },
   { code: 'mail_11_alles_gezien',       intern: 'alles_gezien_c1',      label: 'Mail 11 · Alle 6 video\'s gezien' },
-  { code: 'mail_12_workshop_48u',       intern: 'workshop_1w_voor',     label: 'Mail 12 · Voor workshop (app vuurt op 7d)' },
-  { code: 'mail_14_workshop_bevestiging', intern: 'workshop_bevestiging', label: 'Mail 14 · Workshop boeking bevestigd' },
   { code: 'mail_15_trial_verlopen',     intern: 'trial_verlopen',       label: 'Mail 15 · Trial verlopen' },
   { code: 'mail_16_verloopt_5d',        intern: 'verloopt_5d',          label: 'Mail 16 · Trial verloopt over 5 dagen' },
   { code: 'mail_17_verloopt_3d',        intern: 'verloopt_3d',          label: 'Mail 17 · Trial verloopt over 3 dagen' },
