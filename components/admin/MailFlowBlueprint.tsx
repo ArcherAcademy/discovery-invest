@@ -1,145 +1,135 @@
 'use client'
 
-import { Check, Clock3, MessageCircle, Mail, Send, TriangleAlert } from 'lucide-react'
-import { WORKFLOWS } from '@/lib/workflow-engine'
+import { Check, Clock3, Mail, Send, TriangleAlert } from 'lucide-react'
 import { HUBSPOT_CODE } from '@/lib/hubspot-codes'
 
-type FlowStatus = 'live' | 'planned' | 'retiring' | 'signal'
-type FlowChannel = 'Mail' | 'WhatsApp' | 'Mail + WhatsApp' | 'Telegram'
+type FlowStatus = 'instant' | 'cron' | 'funnel' | 'retiring' | 'review'
+type FlowChannel = 'Mail' | 'Form-submit' | 'Funnel-event' | 'Oude route'
 
 interface FlowItem {
   number: number
   title: string
   trigger: string
+  destination: string
   channel: FlowChannel
   status: FlowStatus
-  requirement?: string
   workflow?: string
+  note?: string
 }
 
+const CRON_NOTE = 'Vertrekt, maar de evaluator loopt elke run in een 504-timeout na 300s en voltooit zijn run niet betrouwbaar. Gemiste vensters worden niet ingehaald. Een HubSpot-202 betekent aangenomen, niet afgeleverd.'
+const FUNNEL_NOTE = 'Wordt intern gelogd, maar vertrekt niet: WEBHOOK_ENDPOINT ontbreekt.'
+
 const FLOW: FlowItem[] = [
-  { number: 1, title: 'Mail vermogenstest (activatie)', trigger: 'Bij invullen van de test', channel: 'Mail', status: 'planned', requirement: 'HubSpot-code + test-event' },
-  { number: 2, title: 'WhatsApp vermogenstest', trigger: 'Direct, samen met mail 1', channel: 'WhatsApp', status: 'planned', requirement: 'WhatsApp-provider + opt-in' },
-  { number: 3, title: 'Mail Discovery (activatie)', trigger: 'Bij aanmaken van een Discovery-account', channel: 'Mail', status: 'planned', requirement: 'HubSpot-code + account-event' },
-  { number: 4, title: 'WhatsApp Discovery', trigger: 'Direct, samen met mail 3', channel: 'WhatsApp', status: 'planned', requirement: 'WhatsApp-provider + opt-in' },
-  { number: 5, title: 'Mail dag 1', trigger: '24u na aanmaak, nog niet geactiveerd', channel: 'Mail', status: 'planned', requirement: 'HubSpot-code + activatiestatus' },
-  { number: 6, title: 'Mail dag 3', trigger: '3 dagen na aanmaak, nog niet geactiveerd', channel: 'Mail', status: 'planned', requirement: 'HubSpot-code + activatiestatus' },
-  { number: 7, title: 'Mail dag 5', trigger: '5 dagen na aanmaak, nog niet geactiveerd', channel: 'Mail', status: 'planned', requirement: 'HubSpot-code + activatiestatus' },
-  { number: 8, title: 'Signaal 2/6 naar accountmanager', trigger: '2 video\'s voltooid', channel: 'Telegram', status: 'signal', requirement: 'Telegram-provider + owner-routing' },
-  { number: 9, title: 'Mail video 2', trigger: '24u inactief, video 2 is de volgende ongeziene video', channel: 'Mail', status: 'live', workflow: 'video_2_herinnering' },
-  { number: 10, title: 'Mail video 3', trigger: '24u inactief, video 3 is de volgende ongeziene video', channel: 'Mail', status: 'live', workflow: 'video_3_herinnering' },
-  { number: 11, title: 'Mail video 4', trigger: '24u inactief, video 4 is de volgende ongeziene video', channel: 'Mail', status: 'live', workflow: 'video_4_herinnering' },
-  { number: 12, title: 'Mail video 5', trigger: '24u inactief, video 5 is de volgende ongeziene video', channel: 'Mail', status: 'live', workflow: 'video_5_herinnering' },
-  { number: 13, title: 'Mail video 6', trigger: '24u inactief, video 6 is de volgende ongeziene video', channel: 'Mail', status: 'live', workflow: 'video_6_herinnering' },
-  { number: 14, title: 'Mail alle video\'s gezien', trigger: 'Zesde video voltooid', channel: 'Mail', status: 'live', workflow: 'alles_gezien_c1' },
-  { number: 15, title: 'WhatsApp 6/6', trigger: 'Direct, samen met mail 14', channel: 'WhatsApp', status: 'planned', requirement: 'WhatsApp-provider + video-6-event' },
-  { number: 16, title: 'Melding editie geboekt', trigger: 'Bij het kiezen van een editie', channel: 'Telegram', status: 'signal', requirement: 'Telegram-provider + editie-event' },
-  { number: 17, title: 'Melding strategiegesprek aangevraagd', trigger: 'Bij het aanvragen van een gesprek', channel: 'Telegram', status: 'signal', requirement: 'Telegram-provider + strategie-event' },
-  { number: 18, title: 'Mail deactivatie dag 2', trigger: 'Geactiveerd, niet geboekt', channel: 'Mail', status: 'planned', requirement: 'HubSpot-code + deactivatie-evaluator' },
-  { number: 19, title: 'Mail deactivatie dag 4', trigger: 'Geactiveerd, niet geboekt', channel: 'Mail', status: 'planned', requirement: 'HubSpot-code + deactivatie-evaluator' },
-  { number: 20, title: 'Mail deactivatie dag 6', trigger: 'Geactiveerd, niet geboekt', channel: 'Mail', status: 'planned', requirement: 'HubSpot-code + deactivatie-evaluator' },
-  { number: 21, title: 'Mail dag 7 (verlopen)', trigger: 'Trial verlopen zonder boeking', channel: 'Mail', status: 'planned', requirement: 'HubSpot-code + trial-status' },
+  { number: 1, title: 'mail_1_welkom', trigger: 'Bij de eerste geldige activatie van het account', destination: 'HubSpot mail-webhook', channel: 'Mail', status: 'instant', workflow: 'welkom' },
+  { number: 2, title: 'trial.account_created', trigger: 'Direct nadat een nieuw Discovery-account is aangemaakt', destination: 'Funnel-event', channel: 'Funnel-event', status: 'funnel', note: FUNNEL_NOTE },
+  { number: 3, title: 'trial.account_activated', trigger: 'Bij de eerste geldige activatie van het account', destination: 'Funnel-event', channel: 'Funnel-event', status: 'funnel', note: FUNNEL_NOTE },
+  { number: 4, title: 'activatiemails 2u / 24u / 72u', trigger: 'Na respectievelijk 2, 24 of 72 uur, wanneer het account nog niet geactiveerd is', destination: 'HubSpot mail-webhook', channel: 'Mail', status: 'cron', workflow: 'activatie_2u', note: CRON_NOTE },
+  { number: 5, title: 'video.started', trigger: 'Wanneer een kern- of bonusvideo wordt gestart', destination: 'Funnel-event', channel: 'Funnel-event', status: 'funnel', note: FUNNEL_NOTE },
+  { number: 6, title: 'video.progress', trigger: 'Bij het opslaan van videovoortgang', destination: 'Funnel-event', channel: 'Funnel-event', status: 'funnel', note: FUNNEL_NOTE },
+  { number: 7, title: 'video.completed', trigger: 'Bij de eerste succesvolle voltooiing van een video', destination: 'Funnel-event', channel: 'Funnel-event', status: 'funnel', note: FUNNEL_NOTE },
+  { number: 8, title: 'lead.qualified', trigger: 'Exact bij voltooiing van de tweede kernvideo', destination: 'Funnel-event', channel: 'Funnel-event', status: 'funnel', note: FUNNEL_NOTE },
+  { number: 9, title: 'video-nudges video 2 t/m 6', trigger: 'Wanneer de betreffende video de eerstvolgende ongeziene video is en de lead 24 uur inactief is', destination: 'HubSpot mail-webhook', channel: 'Mail', status: 'cron', workflow: 'video_2_herinnering', note: CRON_NOTE },
+  { number: 10, title: 'mail_10_dag4_dag4_inactief', trigger: 'Vier dagen na 6/6 wanneer geen event geboekt is', destination: 'HubSpot mail-webhook', channel: 'Mail', status: 'review', workflow: 'dag4_inactief', note: "Herbekijken: de conditie moet van 'geen event geboekt' naar 'geen editie gekozen'." },
+  { number: 11, title: 'videos.all_completed', trigger: 'De eerste keer dat alle zes kernvideo’s voltooid zijn', destination: 'Funnel-event', channel: 'Funnel-event', status: 'funnel', note: FUNNEL_NOTE },
+  { number: 12, title: 'mail_11_alles_gezien', trigger: 'Direct nadat video 6 de zesde voltooide kernvideo maakt', destination: 'HubSpot mail-webhook', channel: 'Mail', status: 'instant', workflow: 'alles_gezien_c1' },
+  { number: 13, title: 'bonus.unlocked', trigger: 'Wanneer alle zes kernvideo’s voltooid zijn', destination: 'Funnel-event', channel: 'Funnel-event', status: 'funnel', note: FUNNEL_NOTE },
+  { number: 14, title: 'Masterclass-editie kiezen', trigger: 'Wanneer de lead na 6/6 een datum kiest en op “Kies je datum” klikt', destination: 'HubSpot form-submit — formulier 8492815c', channel: 'Form-submit', status: 'instant' },
+  { number: 15, title: 'Editie geboekt / strategiegesprek', trigger: 'De huidige editie-popup en /api/call-booking schrijven hun boeking weg', destination: 'Database, geen workflow of funnel-event', channel: 'Funnel-event', status: 'funnel', note: 'De popup doet een form-submit. /api/call-booking schrijft alleen in de database en vuurt zelf niets externs af.' },
+  { number: 16, title: 'verloopreeks 5d / 3d / 1d / 6u / verlopen', trigger: 'Binnen het resterende trialvenster, of zodra trial_expires_at verstreken is, zolang er niet geboekt is', destination: 'HubSpot mail-webhook', channel: 'Mail', status: 'cron', workflow: 'verloopt_5d', note: CRON_NOTE },
+]
+
+const RETIRING: FlowItem[] = [
+  { number: 17, title: 'mail_12_workshop_48u', trigger: 'Oude eventboeking binnen het ingestelde venster', destination: 'HubSpot mail-webhook', channel: 'Oude route', status: 'retiring', workflow: 'workshop_1w_voor' },
+  { number: 18, title: 'mail_13_workshop_laatste_dag', trigger: 'Geen trigger aanwezig', destination: 'HubSpot mail-webhook', channel: 'Oude route', status: 'retiring', workflow: 'mail_13_workshop_laatste_dag' },
+  { number: 19, title: 'mail_14_workshop_bevestiging', trigger: 'Alleen via de oude directe boekingsroute', destination: 'HubSpot mail-webhook', channel: 'Oude route', status: 'retiring', workflow: 'workshop_bevestiging' },
+  { number: 20, title: 'event.booked', trigger: 'Alleen via oude boekingsroutes; geen frontend-caller meer', destination: 'Funnel-event', channel: 'Oude route', status: 'retiring', note: FUNNEL_NOTE },
+  { number: 21, title: 'event.booking_cancelled', trigger: 'Alleen via oude boekingsroutes; geen frontend-caller meer', destination: 'Funnel-event', channel: 'Oude route', status: 'retiring', note: FUNNEL_NOTE },
+  { number: 22, title: 'event.ticket_unlocked', trigger: 'Alle zes kernvideo’s voltooid', destination: 'Funnel-event', channel: 'Oude route', status: 'retiring', note: FUNNEL_NOTE },
+  { number: 23, title: '/api/book-event', trigger: 'Oude boekingsroute; geen frontend-caller meer', destination: 'Geen huidige frontendbestemming', channel: 'Oude route', status: 'retiring' },
 ]
 
 const statusMeta: Record<FlowStatus, { label: string; className: string; icon: typeof Check }> = {
-  live: { label: 'werkt nu', className: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: Check },
-  planned: { label: 'nog te koppelen', className: 'bg-blue-50 text-blue-700 border-blue-200', icon: Clock3 },
-  retiring: { label: 'uit te faseren', className: 'bg-slate-100 text-slate-500 border-slate-200 line-through', icon: TriangleAlert },
-  signal: { label: 'signaal, geen mail', className: 'bg-violet-50 text-violet-700 border-violet-200', icon: Send },
+  instant: { label: 'INSTANT — betrouwbaar', className: 'border-emerald-200 bg-emerald-50 text-emerald-700', icon: Check },
+  cron: { label: 'CRON-GESTUURD — onbetrouwbaar', className: 'border-amber-200 bg-amber-50 text-amber-800', icon: Clock3 },
+  funnel: { label: 'FUNNEL-EVENT — vertrekt niet', className: 'border-orange-200 bg-orange-50 text-orange-800', icon: Send },
+  review: { label: 'HERBEKIJKEN', className: 'border-yellow-200 bg-yellow-50 text-yellow-800', icon: TriangleAlert },
+  retiring: { label: 'GAAT WEG', className: 'border-slate-200 bg-slate-100 text-slate-500 line-through', icon: TriangleAlert },
 }
 
-const channelIcon = { Mail, WhatsApp: MessageCircle, 'Mail + WhatsApp': Send, Telegram: Send }
+const channelIcon = { Mail, 'Form-submit': Send, 'Funnel-event': Send, 'Oude route': TriangleAlert }
 
-export function MailFlowBlueprint() {
-  const liveNames = new Set(WORKFLOWS.map(workflow => workflow.naam))
-  const liveCount = FLOW.filter(item => item.workflow && liveNames.has(item.workflow)).length
-  const plannedCount = FLOW.filter(item => item.status === 'planned').length
-  const signalCount = FLOW.filter(item => item.status === 'signal').length
+function FlowRow({ item }: { item: FlowItem }) {
+  const meta = statusMeta[item.status]
+  const StatusIcon = meta.icon
+  const ChannelIcon = channelIcon[item.channel]
+  const isRetiring = item.status === 'retiring'
 
   return (
-    <section aria-labelledby="official-flow-title" className="rounded-3xl border p-4 sm:p-6" style={{ background: '#ffffff', borderColor: '#e8ecf4' }}>
+    <div className={`flex items-start gap-3 px-4 py-3 ${isRetiring ? 'opacity-60' : ''}`}>
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[10px] font-bold text-slate-500">{item.number}</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <p className={`text-xs font-semibold ${isRetiring ? 'text-slate-500 line-through' : 'text-slate-900'}`}>{item.title}</p>
+          <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${meta.className}`}><StatusIcon className="size-2.5" />{meta.label}</span>
+        </div>
+        <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{item.trigger}</p>
+        <p className="mt-1 text-[10px] text-slate-600">Bestemming: <span className="font-medium">{item.destination}</span></p>
+        {item.note && <p className="mt-1 text-[10px] leading-relaxed text-slate-400">{item.note}</p>}
+        {item.channel === 'Mail' && item.workflow && (
+          <details className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2">
+            <summary className="cursor-pointer text-[10px] font-semibold text-slate-600">Wat gaat naar HubSpot?</summary>
+            <p className="mt-2 font-mono text-[9px] leading-relaxed text-slate-500"><span className="text-[#2500F5]">workflow</span>: {HUBSPOT_CODE[item.workflow] ?? item.workflow}</p>
+            <p className="mt-2 text-[9px] leading-relaxed text-slate-400">De centrale webhook ontvangt dit als één JSON-POST. Een 202 betekent aangenomen, niet afgeleverd.</p>
+          </details>
+        )}
+      </div>
+      <span className="flex shrink-0 items-center gap-1 text-[10px] text-slate-400"><ChannelIcon className="size-3" />{item.channel}</span>
+    </div>
+  )
+}
+
+export function MailFlowBlueprint() {
+  const instantCount = FLOW.filter(item => item.status === 'instant').length
+  const cronCount = FLOW.filter(item => item.status === 'cron').length
+  const funnelCount = FLOW.filter(item => item.status === 'funnel').length
+
+  return (
+    <section aria-labelledby="official-flow-title" className="rounded-3xl border border-slate-200 bg-white p-4 sm:p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: '#2500F5' }}>Officiële flow</p>
-          <h2 id="official-flow-title" className="mt-1 text-xl font-semibold" style={{ color: '#0d0f14' }}>Officiële flow — 21 contactmomenten</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: '#64748b' }}>Dezelfde regels als de evaluator: events, actuele status, resetbare timers en send-once. Normale “niet aan de beurt”-evaluaties verschijnen niet in de history.</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#2500F5]">Integratie- en mailflow</p>
+          <h2 id="official-flow-title" className="mt-1 text-xl font-semibold text-slate-900">Discovery workflows</h2>
+          <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-500">De actuele status van mails, formulierverzendingen en funnel-events — zonder tokens of ruwe data.</p>
         </div>
-        <div className="flex flex-wrap gap-2 text-[11px]">
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">{liveCount} werkt nu</span>
-          <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 font-medium text-blue-700">{plannedCount} te koppelen</span>
-          <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 font-medium text-violet-700">{signalCount} signalen</span>
+        <div className="flex flex-wrap gap-2 text-[10px] font-medium">
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-700">{instantCount} instant</span>
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-800">{cronCount} cron-onbetrouwbaar</span>
+          <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-orange-800">{funnelCount} funnel-events</span>
+          <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-slate-500">{RETIRING.length} gaat weg</span>
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {[
-          ['1', 'Instroom & activatie', 'Vermogenstest en Discovery'],
-          ['2', 'Niet geactiveerd', 'Dag 1, dag 3 en dag 5'],
-          ['3', 'Kwalificatie', '2/6-signaal, video-nudges en 6/6'],
-          ['4', 'Boeking & deactivatie', 'Editie, strategiegesprek en trial'],
-        ].map(([number, title, description]) => (
-          <div key={number} className="rounded-2xl border p-3" style={{ background: '#f8fafc', borderColor: '#e2e8f0' }}>
-            <span className="text-[10px] font-bold" style={{ color: '#2500F5' }}>FASE {number}</span>
-            <p className="mt-1 text-xs font-semibold" style={{ color: '#0f172a' }}>{title}</p>
-            <p className="mt-1 text-[11px] leading-relaxed" style={{ color: '#64748b' }}>{description}</p>
-          </div>
-        ))}
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <Clock3 className="mt-0.5 size-4 shrink-0 text-amber-700" />
+          <p className="text-[11px] leading-relaxed text-amber-900"><strong>Belangrijk: evaluator-timeout.</strong> Elke cronrun eindigt na 300 seconden in een 504. De mails vertrekken wel, maar de run voltooit niet betrouwbaar; gemiste vensters worden niet ingehaald en een HubSpot-202 betekent aangenomen, niet afgeleverd.</p>
+        </div>
+        <div className="flex items-start gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-orange-700" />
+          <p className="text-[11px] leading-relaxed text-orange-900"><strong>WEBHOOK_ENDPOINT ontbreekt.</strong> Funnel-events worden intern gelogd, maar vertrekken momenteel niet naar een externe bestemming.</p>
+        </div>
       </div>
 
       <div className="mt-5 grid gap-4 xl:grid-cols-2">
-        {(['Instroom & activatie', 'Niet geactiveerd', 'Kwalificatie', 'Boeking & deactivatie'] as const).map((phase, phaseIndex) => {
-          const ranges = [[1, 4], [5, 7], [8, 15], [16, 21]][phaseIndex]
-          const items = FLOW.filter(item => item.number >= ranges[0] && item.number <= ranges[1])
-          return (
-            <div key={phase} className="overflow-hidden rounded-2xl border" style={{ borderColor: '#e8ecf4' }}>
-              <div className="flex items-center justify-between border-b px-4 py-3" style={{ background: '#f8fafc', borderColor: '#e8ecf4' }}>
-                <h3 className="text-xs font-bold uppercase tracking-[0.12em]" style={{ color: '#334155' }}>{phase}</h3>
-                <span className="text-[10px]" style={{ color: '#94a3b8' }}>{items.length} momenten</span>
-              </div>
-              <div className="divide-y" style={{ borderColor: '#f1f5f9' }}>
-                {items.map(item => {
-                  const meta = statusMeta[item.status]
-                  const StatusIcon = meta.icon
-                  const ChannelIcon = channelIcon[item.channel]
-                  return (
-                    <div key={item.number} className="flex items-start gap-3 px-4 py-3">
-                      <span className="flex size-6 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold" style={{ background: item.status === 'live' ? '#ecfdf5' : '#f1f5f9', color: item.status === 'live' ? '#15803d' : '#64748b' }}>{item.number}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <p className="text-xs font-semibold" style={{ color: '#0f172a' }}>{item.title}</p>
-                          <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${meta.className}`}><StatusIcon className="size-2.5" />{meta.label}</span>
-                        </div>
-                        <p className="mt-1 text-[11px] leading-relaxed" style={{ color: '#64748b' }}>{item.trigger}</p>
-                        {item.requirement && <p className="mt-1 text-[10px]" style={{ color: '#2563eb' }}>Nodig: {item.requirement}</p>}
-                        {item.channel === 'Mail' && (
-                          <details className="mt-2 rounded-xl border px-2.5 py-2" style={{ background: '#f8fafc', borderColor: '#e2e8f0' }}>
-                            <summary className="cursor-pointer text-[10px] font-semibold" style={{ color: '#334155' }}>Wat gaat naar HubSpot?</summary>
-                            <div className="mt-2 space-y-1 font-mono text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
-                              <p><span style={{ color: '#2500F5' }}>workflow</span>: {item.workflow ? (HUBSPOT_CODE[item.workflow] ?? item.workflow) : 'nog geen code gekoppeld'}</p>
-                              <p><span style={{ color: '#2500F5' }}>email</span>: user.email</p>
-                              <p><span style={{ color: '#2500F5' }}>naam</span>: user.name ?? &apos;&apos;</p>
-                              <p><span style={{ color: '#2500F5' }}>contact_owner_email</span>: actuele eigenaar of null</p>
-                              <p><span style={{ color: '#2500F5' }}>appointment_url</span>: booking link of null</p>
-                              <p><span style={{ color: '#2500F5' }}>appointment_owner_name</span>: eigenaar van booking link of null</p>
-                              <p><span style={{ color: '#2500F5' }}>appointment_link_is_fallback</span>: true/false/null</p>
-                            </div>
-                            <p className="mt-2 text-[9px] leading-relaxed" style={{ color: '#94a3b8' }}>De waarden met <code>user.</code> en “actuele” worden pas ingevuld bij het versturen. De centrale webhook ontvangt dit als één JSON-POST.</p>
-                          </details>
-                        )}
-                      </div>
-                      <span className="flex shrink-0 items-center gap-1 text-[10px]" style={{ color: '#94a3b8' }}><ChannelIcon className="size-3" />{item.channel}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="mt-4 flex items-start gap-2 rounded-2xl border px-3 py-3" style={{ background: '#fffbeb', borderColor: '#fde68a' }}>
-        <TriangleAlert className="mt-0.5 size-4 shrink-0" style={{ color: '#b45309' }} />
-        <p className="text-[11px] leading-relaxed" style={{ color: '#92400e' }}><strong>Belangrijk:</strong> de groene kaarten gebruiken de bestaande evaluator en HubSpot-codes. Blauwe kaarten zijn visueel opgenomen in de officiële flow, maar worden pas actief nadat de ontbrekende eventbron, HubSpot-code of WhatsApp-provider is gekoppeld. De bestaande triggers worden niet automatisch omgezet.</p>
+        <div className="overflow-hidden rounded-2xl border border-slate-200">
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3"><h3 className="text-xs font-bold uppercase tracking-[0.12em] text-slate-700">Leadflow — instant, cron en funnel</h3></div>
+          <div className="divide-y divide-slate-100">{FLOW.map(item => <FlowRow key={item.number} item={item} />)}</div>
+        </div>
+        <div className="h-fit overflow-hidden rounded-2xl border border-slate-200">
+          <div className="border-b border-slate-200 bg-slate-100 px-4 py-3"><h3 className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Gaat weg — workshop/event</h3><p className="mt-1 text-[10px] text-slate-400">Uitgefaseerd en daarom grijs weergegeven.</p></div>
+          <div className="divide-y divide-slate-100">{RETIRING.map(item => <FlowRow key={item.number} item={item} />)}</div>
+        </div>
       </div>
     </section>
   )
