@@ -133,7 +133,6 @@ export default function HomePage() {
                   nextContentType={featuredNextVideo?.contentType ?? null}
                   isLastVideo={featuredVideo.index === displayVideos.length - 1}
                   onCompleted={() => refresh()}
-                  onUnlockNext={() => refresh()}
                   onAutoNext={() => setInvestAvondModalOpen(true)}
                 />
               </div>

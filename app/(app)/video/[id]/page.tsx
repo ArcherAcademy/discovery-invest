@@ -57,7 +57,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
   const [accessChecked, setAccessChecked] = useState(false)
   useEffect(() => {
     if (!id) return
-    fetch(`/api/video-access?videoId=${id}`)
+    fetch(`/api/video-access?videoId=${id}`, { cache: 'no-store', credentials: 'include' })
       .then(r => r.json())
       .then((data) => {
         if (!data.allowed) {
@@ -172,7 +172,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                   nextContentType={nextVideo?.content_type ?? null}
                   isLastVideo={isLastCoreVideo}
                   onCompleted={handleCompleted}
-                  onUnlockNext={() => refresh()}
                   onAutoNext={() => {
                 if (isLastCoreVideo) {
                   setInvestAvondModalOpen(true)

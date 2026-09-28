@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import useSWR from 'swr'
 import type { DemoUser, DemoUserFunnel, DemoVideoProgress, DemoVideo } from '@/lib/types'
 import type { Locale } from '@/lib/i18n'
 import { hasPermanentAccess, isTrialExpired } from '@/lib/access'
@@ -37,45 +38,50 @@ interface AppProviderProps {
   initialUser: DemoUser
 }
 
+interface AppData {
+  user: DemoUser
+  funnel: DemoUserFunnel | null
+  progress: DemoVideoProgress[]
+  videos: DemoVideo[]
+}
+
+async function fetchAppData(url: string): Promise<AppData> {
+  const response = await fetch(url, { cache: 'no-store', credentials: 'include' })
+
+  if (response.status === 401) {
+    window.location.href = '/login'
+    throw new Error('Sessie verlopen')
+  }
+  if (!response.ok) throw new Error(`Appgegevens laden mislukt (${response.status})`)
+
+  return response.json() as Promise<AppData>
+}
+
 export function AppProvider({ children, initialUser }: AppProviderProps) {
-  const [user, setUser] = useState<DemoUser | null>(initialUser)
-  const [funnel, setFunnel] = useState<DemoUserFunnel | null>(null)
-  const [progress, setProgress] = useState<DemoVideoProgress[]>([])
-  const [videos, setVideos] = useState<DemoVideo[]>([])
-  const [loading, setLoading] = useState(true)
   const [locale, setLocale] = useState<Locale>((initialUser.locale as Locale) ?? 'nl')
+  const { data, isLoading, mutate } = useSWR<AppData>('/api/me', fetchAppData, {
+    revalidateOnFocus: true,
+    revalidateOnReconnect: true,
+    dedupingInterval: 1_000,
+  })
 
-  /**
-   * Fetch all user data from the server.
-   * Identity comes from the httpOnly session cookie — no client-side user_id needed.
-   */
-  const refresh = useCallback(async () => {
-    try {
-      const res = await fetch('/api/me')
-      if (res.status === 401) {
-        // Session expired — redirect to login
-        window.location.href = '/login'
-        return
-      }
-      if (!res.ok) return
-
-      const data = await res.json()
-
-      if (data.user) {
-        setUser(data.user as DemoUser)
-        setLocale((data.user.locale as Locale) ?? 'nl')
-      }
-      if (data.funnel !== undefined) setFunnel(data.funnel as DemoUserFunnel | null)
-      if (data.progress) setProgress(data.progress as DemoVideoProgress[])
-      if (data.videos) setVideos(data.videos as DemoVideo[])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const user = data?.user ?? initialUser
+  const funnel = data?.funnel ?? null
+  const progress = data?.progress ?? []
+  const videos = data?.videos ?? []
+  const loading = isLoading && !data
 
   useEffect(() => {
-    refresh()
-  }, [refresh])
+    if (data?.user) setLocale((data.user.locale as Locale) ?? 'nl')
+  }, [data?.user])
+
+  /**
+   * SWR houdt gelijktijdige herlaadacties in de juiste volgorde, zodat een oudere
+   * response een net opgeslagen videovoltooiing niet meer kan overschrijven.
+   */
+  const refresh = useCallback(async () => {
+    await mutate()
+  }, [mutate])
 
   // Toegang is rolgebaseerd en live: admin en mentor verlopen nooit, ongeacht
   // trial_expires_at. Zie lib/access.ts — één bron van waarheid.
