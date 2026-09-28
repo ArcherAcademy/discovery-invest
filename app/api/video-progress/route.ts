@@ -3,7 +3,7 @@ import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitEvent } from '@/lib/emit-event'
 import { fireInstant } from '@/lib/workflow-engine'
-import { cancelVideoMessages, scheduleLeadTimeline } from '@/lib/scheduled-messages'
+import { cancelVideoMessages, scheduleLeadTimeline, scheduleSixOfSixFollowUps } from '@/lib/scheduled-messages'
 import type { DemoUser, DemoUserFunnel, DemoVideo, DemoVideoProgress } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
@@ -201,9 +201,15 @@ export async function POST(req: NextRequest) {
         console.error('[v0] funnel upsert failed:', funnelError.message, funnelError.details)
       }
 
-      if (isAllCompleted && !funnel?.all_completed_at) {
-        const updatedFunnel = { ...funnel, videos_completed_count: completedCoreCount, all_completed_at: now.toISOString() }
-        await emitEvent({ type: 'videos.all_completed', user, funnel: updatedFunnel, nextVideo: null, data: {} })
+  if (isAllCompleted && !funnel?.all_completed_at) {
+  const completedAt = now.toISOString()
+  const updatedFunnel = { ...funnel, videos_completed_count: completedCoreCount, all_completed_at: completedAt }
+  try {
+  await scheduleSixOfSixFollowUps(supabase, authUser.id, completedAt)
+  } catch (error) {
+  console.error('[v0] 6/6 mailopvolging plannen mislukt:', error)
+  }
+  await emitEvent({ type: 'videos.all_completed', user, funnel: updatedFunnel, nextVideo: null, data: {} })
         await emitEvent({ type: 'bonus.unlocked', user, funnel: updatedFunnel, nextVideo: null, data: {} })
         await emitEvent({ type: 'event.ticket_unlocked', user, funnel: updatedFunnel, nextVideo: null, data: {} })
         // W11 — instant: alle 6 kernvideo's bekeken

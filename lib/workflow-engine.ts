@@ -54,7 +54,12 @@ export const WORKFLOWS: WorkflowDef[] = [
   { nummer: 9,  naam: 'video_6_herinnering',  label: 'Herinnering video 6',              type: 'klok',    fase: 'Videos',     voorwaarde: 'Geactiveerd, inactief 24u, video 6 eerstvolgende',       timing: '24u inactiviteit na last_activity_at', suppressie: 'Send-once, freq-cap 1/24u + max 5 totaal' },
   // Fase 3 — Conversie
   { nummer: 10, naam: 'alles_gezien_c1',      label: "Alle 6 kernvideo's bekeken",        type: 'instant', fase: 'Conversie',  voorwaarde: 'all_completed_at net gezet',                   timing: 'Direct na voltooiing video 6',   suppressie: 'Send-once' },
-  { nummer: 11, naam: 'dag4_inactief',        label: 'Dag 4 inactief na voltooiing',      type: 'klok',    fase: 'Conversie',  voorwaarde: 'all_completed_at gezet, event_booked = false', timing: '4 dagen na all_completed_at',    suppressie: 'Send-once, stop als event geboekt' },
+  { nummer: 20, naam: 'opvolg_24u',            label: 'Opvolgmail na 24 uur',              type: 'klok',    fase: 'Activatie',  voorwaarde: 'activated_at IS NULL, 24u na created_at', timing: '24 uur na created_at',            suppressie: 'Send-once, stop zodra geactiveerd' },
+  { nummer: 21, naam: 'opvolg_3d',             label: 'Opvolgmail na 3 dagen',             type: 'klok',    fase: 'Activatie',  voorwaarde: 'activated_at IS NULL, 3d na created_at',  timing: '3 dagen na created_at',           suppressie: 'Send-once, stop zodra geactiveerd' },
+  { nummer: 22, naam: 'opvolg_5d',             label: 'Opvolgmail na 5 dagen',             type: 'klok',    fase: 'Activatie',  voorwaarde: 'activated_at IS NULL, 5d na created_at',  timing: '5 dagen na created_at',            suppressie: 'Send-once, stop zodra geactiveerd' },
+  { nummer: 23, naam: 'plaats_ligt_klaar',     label: 'Je plaats ligt klaar',               type: 'klok',    fase: 'Conversie',  voorwaarde: 'all_completed_at gezet, event_booked = false', timing: '48 uur na 6/6',                    suppressie: 'Send-once, stop als event geboekt' },
+  { nummer: 24, naam: 'laatste_dag',           label: 'Vandaag is de laatste dag',         type: 'klok',    fase: 'Conversie',  voorwaarde: 'all_completed_at gezet, event_booked = false', timing: 'Dag 7 om 16:00 Europe/Brussels',   suppressie: 'Send-once, stop als event geboekt' },
+  { nummer: 25, naam: 'waitlist_direct',       label: 'Directe waitlistmail',              type: 'instant', fase: 'Conversie',  voorwaarde: 'edition form succesvol ingestuurd',             timing: 'Direct na formulierinzending',    suppressie: 'Send-once' },
   // Fase 4 — Retentie
   { nummer: 12, naam: 'trial_verlopen',       label: 'Trial verlopen zonder boeking',     type: 'klok',    fase: 'Retentie',   voorwaarde: 'trial_expires_at verstreken, event_booked = false', timing: 'Bij/na trial_expires_at', suppressie: 'Send-once' },
   // Fase 5 — Trial verloopreminders (gaan alleen af als het venster nog niet gepasseerd was bij activatie)
@@ -122,7 +127,9 @@ export async function attemptFire(
   const t2u    = thresholds.get('activatie_2u_minuten')      ?? 120
   const t24u   = thresholds.get('activatie_24u_minuten')     ?? 1440
   const t72u   = thresholds.get('activatie_72u_minuten')     ?? 4320
-  const t4d    = thresholds.get('dag4_minuten')              ?? 5760
+  const tOpvolg24u = thresholds.get('opvolg_24u_minuten')     ?? 1440
+  const tOpvolg3d  = thresholds.get('opvolg_3d_minuten')      ?? 4320
+  const tOpvolg5d  = thresholds.get('opvolg_5d_minuten')      ?? 7200
   // Trial-verloop reminders — instelbaar via demo_invest_config voor testdoeleinden
   const t5d    = thresholds.get('verloopt_5d_minuten')       ?? 7200   // 5 dagen
   const t3d    = thresholds.get('verloopt_3d_minuten')       ?? 4320   // 3 dagen
@@ -168,6 +175,33 @@ export async function attemptFire(
         conditionMet = minutesSince(user.created_at) >= t72u
         suppressReden = 'drempel 72u na aanmaken nog niet bereikt'
       }
+      break
+
+    case 'opvolg_24u':
+    case 'opvolg_3d':
+    case 'opvolg_5d': {
+      const threshold = workflow.naam === 'opvolg_24u' ? tOpvolg24u : workflow.naam === 'opvolg_3d' ? tOpvolg3d : tOpvolg5d
+      conditionMet = !user.activated_at && minutesSince(user.created_at) >= threshold
+      suppressReden = user.activated_at ? 'account inmiddels geactiveerd' : `drempel opvolgmail (${threshold} min) nog niet bereikt`
+      break
+    }
+
+    case 'plaats_ligt_klaar':
+      conditionMet = !!funnel?.all_completed_at && !funnel.event_booked && minutesSince(funnel.all_completed_at) >= 2880
+      suppressReden = funnel?.event_booked ? 'event al geboekt' : !funnel?.all_completed_at ? 'nog niet alle video\'s voltooid' : '48u-drempel na 6/6 nog niet bereikt'
+      break
+
+    case 'laatste_dag':
+      // De planner bepaalt dag 7 om 16:00 Europe/Brussels; hier controleren
+      // we alleen de actuele businessconditie zodat 16:00 niet wordt overgeslagen
+      // wanneer 6/6 later op de dag werd afgerond.
+      conditionMet = !!funnel?.all_completed_at && !funnel.event_booked
+      suppressReden = funnel?.event_booked ? 'event al geboekt' : !funnel?.all_completed_at ? 'nog niet alle video\'s voltooid' : 'dag-7-planning nog niet bereikt'
+      break
+
+    case 'waitlist_direct':
+      conditionMet = !!funnel?.invest_avond_geclaimd
+      suppressReden = 'waitlist-/editieformulier niet succesvol opgeslagen'
       break
 
     case 'video_2_herinnering':
@@ -259,15 +293,6 @@ export async function attemptFire(
       conditionMet = !!funnel?.all_completed_at
       suppressReden = 'nog niet alle kernvideo\'s voltooid'
       if (funnel?.all_completed_at) extraPayload = { all_completed_at: funnel.all_completed_at }
-      break
-
-    case 'dag4_inactief':
-      conditionMet = !!funnel?.all_completed_at
-        && !funnel.event_booked
-        && minutesSince(funnel.all_completed_at) >= t4d
-      suppressReden = funnel?.event_booked ? 'event al geboekt'
-        : !funnel?.all_completed_at ? 'nog niet alle video\'s voltooid'
-        : 'dag 4 drempel nog niet bereikt'
       break
 
     case 'trial_verlopen':

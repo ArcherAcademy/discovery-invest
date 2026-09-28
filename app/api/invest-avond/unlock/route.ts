@@ -3,6 +3,7 @@ import { getSessionUser } from '@/lib/auth'
 import { getHubSpotAccountOwnerSnapshot } from '@/lib/hubspot-owners'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { scheduleWaitlistDiscoveryStage } from '@/lib/scheduled-messages'
+import { fireInstant } from '@/lib/workflow-engine'
 
 const HUBSPOT_PORTAL_ID = '25799192'
 const HUBSPOT_FORM_ID = '8492815c-48c5-4307-97dd-2663db2f1a8a'
@@ -118,6 +119,13 @@ export async function POST(req: NextRequest) {
     await scheduleWaitlistDiscoveryStage(supabase, authUser.id)
   } catch (error) {
     console.error('[invest-avond/unlock] Waitlist stage plannen mislukt:', error)
+  }
+
+  try {
+    const { data: freshUser } = await supabase.from('demo_invest_users').select('*').eq('id', authUser.id).single()
+    if (freshUser) await fireInstant(supabase, 'waitlist_direct', freshUser, new Set(), { edition: preferredEdition })
+  } catch (error) {
+    console.error('[invest-avond/unlock] Directe waitlistmail mislukt:', error)
   }
 
   return NextResponse.json({ ok: true, submitted: true })

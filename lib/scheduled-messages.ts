@@ -5,7 +5,8 @@ import type { DemoUser } from '@/lib/types'
 
 const ACTIVATION_WORKFLOWS = ['activatie_2u', 'activatie_24u', 'activatie_72u']
 const VIDEO_WORKFLOWS = [2, 3, 4, 5, 6].map(index => `video_${index}_herinnering`)
-const EXPIRY_WORKFLOWS = ['dag4_inactief', 'trial_verlopen', 'verloopt_5d', 'verloopt_3d', 'verloopt_1d', 'verloopt_6u']
+const CONVERSION_WORKFLOWS = ['plaats_ligt_klaar', 'laatste_dag']
+const EXPIRY_WORKFLOWS = ['trial_verlopen', 'verloopt_5d', 'verloopt_3d', 'verloopt_1d', 'verloopt_6u']
 const STAGE_WORKFLOWS = ['lead_stage_6of6_fallback', 'lead_stage_waitlist_discovery']
 
 type ScheduledMessage = {
@@ -37,6 +38,15 @@ export async function scheduleLeadTimeline(supabase: SupabaseClient, user: DemoU
     scheduled_for: activation(`activatie_${[2, 24, 72][index]}u_minuten`, [120, 1440, 4320][index]),
     condition_key: 'not_activated',
   }))
+
+  const phaseOneFollowUps = [
+    ['opvolg_24u', 'opvolg_24u_minuten', 1440],
+    ['opvolg_3d', 'opvolg_3d_minuten', 4320],
+    ['opvolg_5d', 'opvolg_5d_minuten', 7200],
+  ] as const
+  for (const [workflow, key, fallback] of phaseOneFollowUps) {
+    messages.push({ workflow, scheduled_for: activation(key, fallback), condition_key: 'not_activated' })
+  }
 
   if (user.activated_at) {
     const expiry = user.trial_expires_at ? new Date(user.trial_expires_at).getTime() : null
@@ -76,7 +86,7 @@ export async function cancelScheduledWorkflows(supabase: SupabaseClient, leadId:
 }
 
 export async function cancelActivationMessages(supabase: SupabaseClient, leadId: string) {
-  await cancelScheduledWorkflows(supabase, leadId, ACTIVATION_WORKFLOWS)
+  await cancelScheduledWorkflows(supabase, leadId, [...ACTIVATION_WORKFLOWS, 'opvolg_24u', 'opvolg_3d', 'opvolg_5d'])
 }
 
 export async function cancelVideoMessages(supabase: SupabaseClient, leadId: string) {
@@ -84,7 +94,33 @@ export async function cancelVideoMessages(supabase: SupabaseClient, leadId: stri
 }
 
 export async function cancelBookingMessages(supabase: SupabaseClient, leadId: string) {
-  await cancelScheduledWorkflows(supabase, leadId, ['dag4_inactief', ...EXPIRY_WORKFLOWS])
+  await cancelScheduledWorkflows(supabase, leadId, [...CONVERSION_WORKFLOWS, ...EXPIRY_WORKFLOWS])
+}
+
+function atBrusselsHour(date: Date, hour: number): Date {
+  const result = new Date(date)
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(result).reduce<Record<string, string>>((acc, part) => {
+    acc[part.type] = part.value
+    return acc
+  }, {})
+  const target = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), hour, 0, 0)
+  const observed = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second))
+  return new Date(result.getTime() + target - observed)
+}
+
+export async function scheduleSixOfSixFollowUps(supabase: SupabaseClient, leadId: string, allCompletedAt: string) {
+  const completed = new Date(allCompletedAt)
+  const inTwoDays = new Date(completed.getTime() + 48 * 60 * 60 * 1000)
+  const daySeven = new Date(completed.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const messages = [
+    { workflow: 'plaats_ligt_klaar', scheduled_for: inTwoDays.toISOString(), condition_key: 'completed_not_booked' },
+    { workflow: 'laatste_dag', scheduled_for: atBrusselsHour(daySeven, 16).toISOString(), condition_key: 'completed_not_booked' },
+  ]
+  const { error } = await supabase.rpc('demo_invest_schedule_messages', { p_lead_id: leadId, p_messages: messages })
+  if (error) throw new Error(`6/6-opvolging plannen mislukt: ${error.message}`)
 }
 
 export async function scheduleSixOfSixFallback(supabase: SupabaseClient, leadId: string) {
