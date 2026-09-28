@@ -3,6 +3,7 @@ import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitEvent } from '@/lib/emit-event'
 import { fireInstant } from '@/lib/workflow-engine'
+import { cancelVideoMessages, scheduleLeadTimeline } from '@/lib/scheduled-messages'
 import type { DemoUser, DemoUserFunnel, DemoVideo, DemoVideoProgress } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
@@ -132,6 +133,8 @@ export async function POST(req: NextRequest) {
   if (activityError) {
     console.error('[v0] last_activity_at update failed:', activityError.message)
   }
+  await cancelVideoMessages(supabase, authUser.id)
+  await scheduleLeadTimeline(supabase, { ...user, last_activity_at: now.toISOString() })
 
   // Re-read all progress fresh from DB (never trust the in-memory set) to get accurate counts
   const { data: allVideos } = await supabase.from('demo_invest_videos').select('*').order('order_no')

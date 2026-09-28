@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { emitEvent } from '@/lib/emit-event'
 import { updateCallUserState } from '@/lib/call-booking-data'
 import type { DemoUser, DemoUserFunnel } from '@/lib/types'
+import { cancelBookingMessages } from '@/lib/scheduled-messages'
 
 export async function POST(req: NextRequest) {
   const authUser = await getSessionUser(req)
@@ -26,6 +27,8 @@ export async function POST(req: NextRequest) {
     call_booked: true,
     call_booked_at: now,
   })
+
+  await cancelBookingMessages(supabase, user.id)
 
   await supabase.from('demo_invest_user_funnel').upsert({
     user_id: user.id,

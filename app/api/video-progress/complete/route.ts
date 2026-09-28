@@ -3,6 +3,7 @@ import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitEvent } from '@/lib/emit-event'
 import { fireInstant } from '@/lib/workflow-engine'
+import { cancelVideoMessages, scheduleLeadTimeline } from '@/lib/scheduled-messages'
 import type { DemoUser, DemoUserFunnel, DemoVideo } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
@@ -47,6 +48,8 @@ export async function POST(req: NextRequest) {
 
   // Update last_activity on user
   await supabase.from('demo_invest_users').update({ last_activity_at: now.toISOString() }).eq('id', authUser.id)
+  await cancelVideoMessages(supabase, authUser.id)
+  await scheduleLeadTimeline(supabase, { ...user, last_activity_at: now.toISOString() })
 
   // Recount from DB — fresh read
   const [{ data: allVideos }, { data: allProgress }] = await Promise.all([

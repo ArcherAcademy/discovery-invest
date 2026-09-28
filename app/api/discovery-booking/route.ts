@@ -3,6 +3,7 @@ import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitEvent } from '@/lib/emit-event'
 import type { DemoEvent, DemoEventBooking, DemoUser, DemoUserFunnel } from '@/lib/types'
+import { cancelBookingMessages } from '@/lib/scheduled-messages'
 
 async function getUserContext(req: NextRequest) {
   const user = await getSessionUser(req)
@@ -91,6 +92,8 @@ export async function POST(req: NextRequest) {
     await context.supabase.from('demo_invest_events').update({ spots_left: event.spots_left }).eq('id', event.id)
     return NextResponse.json({ error: 'booking_failed' }, { status: 500 })
   }
+
+  await cancelBookingMessages(context.supabase, context.user.id)
 
   await context.supabase.from('demo_invest_user_funnel').upsert({
     user_id: context.user.id,

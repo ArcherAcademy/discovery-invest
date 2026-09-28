@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createSession, applySessionCookie } from '@/lib/auth'
 import { emitEvent } from '@/lib/emit-event'
 import { fireInstant } from '@/lib/workflow-engine'
+import { cancelActivationMessages, scheduleLeadTimeline } from '@/lib/scheduled-messages'
 import type { DemoUser, DemoUserFunnel } from '@/lib/types'
 
 async function sha256hex(raw: string): Promise<string> {
@@ -99,6 +100,9 @@ async function activate(req: NextRequest, token: string, browserNavigation: bool
       .from('demo_invest_invites')
       .update({ used_at: nowIso })
       .eq('id', invite.id)
+
+    await cancelActivationMessages(supabase, user.id)
+    await scheduleLeadTimeline(supabase, user)
 
     await emitEvent({
       type: 'trial.account_activated',

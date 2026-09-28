@@ -4,6 +4,7 @@ import { updateCallUserState } from '@/lib/call-booking-data'
 import { emitEvent } from '@/lib/emit-event'
 import type { DemoUser } from '@/lib/types'
 import { extractHubSpotOwnerId, getHubSpotOwner } from '@/lib/hubspot-owners'
+import { scheduleLeadTimeline } from '@/lib/scheduled-messages'
 
 // ── CORS helpers ──────────────────────────────────────────────────────────────
 // Allow any origin so both the Lovable marketing site and HubSpot can call this.
@@ -388,6 +389,9 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
       })
     }
   }
+
+  const { data: timelineUser } = await supabase.from('demo_invest_users').select('*').eq('id', userId).single()
+  if (timelineUser) await scheduleLeadTimeline(supabase, timelineUser as DemoUser)
 
   // ── 6. Activatielink bouwen ───────────────────────────────────────────────
   const appUrl =

@@ -83,7 +83,7 @@ function minutesUntil(date: string | null): number {
 // De kandidaat kwam al uit een gerichte SQL-query. We herlezen de toestand,
 // claimen pas vlak voor de POST en finaliseren trigger_sent pas na HTTP-succes.
 
-async function attemptFire(
+export async function attemptFire(
   supabase: SupabaseClient,
   userId: string,
   workflow: WorkflowDef,

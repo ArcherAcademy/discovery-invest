@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { runEvaluator } from '@/lib/workflow-engine'
+import { runScheduledEvaluator } from '@/lib/scheduled-messages'
 
-export const maxDuration = 300 // 5 min max for Vercel Pro
+export const maxDuration = 60
 
 export async function GET(req: NextRequest) {
   // Verify Vercel cron secret
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const supabase = createAdminClient()
-    const result = await runEvaluator(supabase)
+    const result = await runScheduledEvaluator(supabase, 200)
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown error'
