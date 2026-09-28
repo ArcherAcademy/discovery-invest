@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { emitEvent } from '@/lib/emit-event'
 import { fireInstant } from '@/lib/workflow-engine'
 import { cancelVideoMessages, scheduleLeadTimeline } from '@/lib/scheduled-messages'
+import { advanceHubSpotLeadStage } from '@/lib/hubspot-lead-stage'
 import type { DemoUser, DemoUserFunnel, DemoVideo } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
@@ -64,6 +65,15 @@ export async function POST(req: NextRequest) {
   const isAllCompleted = completedCoreCount >= 6
 
   const isNewCompletion = existingProgress?.status !== 'completed'
+
+  if (isNewCompletion && video?.section === 'core' && (completedCoreCount === 2 || completedCoreCount === 6)) {
+    const trigger = completedCoreCount === 2 ? 'two_core_videos' : 'six_core_videos'
+    try {
+      await advanceHubSpotLeadStage(user.email, trigger)
+    } catch (error) {
+      console.error('[video-complete] HubSpot leadstage update mislukt:', error)
+    }
+  }
 
   if (isNewCompletion) {
     await emitEvent({

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/auth'
 import { getHubSpotAccountOwnerSnapshot } from '@/lib/hubspot-owners'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { advanceHubSpotLeadStage } from '@/lib/hubspot-lead-stage'
 
 const HUBSPOT_PORTAL_ID = '25799192'
 const HUBSPOT_FORM_ID = '8492815c-48c5-4307-97dd-2663db2f1a8a'
@@ -111,6 +112,12 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     console.error('[invest-avond/unlock] funnel update failed after successful HubSpot submission:', error)
+  }
+
+  try {
+    await advanceHubSpotLeadStage(authUser.email, 'edition_selected')
+  } catch (error) {
+    console.error('[invest-avond/unlock] HubSpot leadstage update mislukt:', error)
   }
 
   return NextResponse.json({ ok: true, submitted: true })
