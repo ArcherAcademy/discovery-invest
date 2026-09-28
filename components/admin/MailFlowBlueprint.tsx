@@ -18,7 +18,7 @@ interface FlowItem {
 }
 
 const CRON_NOTE = 'Vertrekt, maar de evaluator loopt elke run in een 504-timeout na 300s en voltooit zijn run niet betrouwbaar. Gemiste vensters worden niet ingehaald. Een HubSpot-202 betekent aangenomen, niet afgeleverd.'
-const FUNNEL_NOTE = 'Wordt intern gelogd, maar vertrekt niet: WEBHOOK_ENDPOINT ontbreekt.'
+const FUNNEL_NOTE = 'Vertrekt niet: WEBHOOK_ENDPOINT ontbreekt. Het event kan intern wel gelogd worden.'
 
 const FLOW: FlowItem[] = [
   { number: 1, title: 'mail_1_welkom', trigger: 'Bij de eerste geldige activatie van het account', destination: 'HubSpot mail-webhook', channel: 'Mail', status: 'instant', workflow: 'welkom' },
@@ -30,13 +30,13 @@ const FLOW: FlowItem[] = [
   { number: 7, title: 'video.completed', trigger: 'Bij de eerste succesvolle voltooiing van een video', destination: 'Funnel-event', channel: 'Funnel-event', status: 'funnel', note: FUNNEL_NOTE },
   { number: 8, title: 'lead.qualified', trigger: 'Exact bij voltooiing van de tweede kernvideo', destination: 'Funnel-event', channel: 'Funnel-event', status: 'funnel', note: FUNNEL_NOTE },
   { number: 9, title: 'video-nudges video 2 t/m 6', trigger: 'Wanneer de betreffende video de eerstvolgende ongeziene video is en de lead 24 uur inactief is', destination: 'HubSpot mail-webhook', channel: 'Mail', status: 'cron', workflow: 'video_2_herinnering', note: CRON_NOTE },
-  { number: 10, title: 'mail_10_dag4_dag4_inactief', trigger: 'Vier dagen na 6/6 wanneer geen event geboekt is', destination: 'HubSpot mail-webhook', channel: 'Mail', status: 'review', workflow: 'dag4_inactief', note: "Herbekijken: de conditie moet van 'geen event geboekt' naar 'geen editie gekozen'." },
+  { number: 10, title: 'mail_10_dag4', trigger: 'Vier dagen na 6/6 wanneer geen event geboekt is', destination: 'HubSpot mail-webhook', channel: 'Mail', status: 'review', workflow: 'dag4_inactief', note: "Herbekijken: de conditie moet van 'geen event geboekt' naar 'geen editie gekozen'." },
   { number: 11, title: 'videos.all_completed', trigger: 'De eerste keer dat alle zes kernvideo’s voltooid zijn', destination: 'Funnel-event', channel: 'Funnel-event', status: 'funnel', note: FUNNEL_NOTE },
   { number: 12, title: 'mail_11_alles_gezien', trigger: 'Direct nadat video 6 de zesde voltooide kernvideo maakt', destination: 'HubSpot mail-webhook', channel: 'Mail', status: 'instant', workflow: 'alles_gezien_c1' },
   { number: 13, title: 'bonus.unlocked', trigger: 'Wanneer alle zes kernvideo’s voltooid zijn', destination: 'Funnel-event', channel: 'Funnel-event', status: 'funnel', note: FUNNEL_NOTE },
   { number: 14, title: 'Masterclass-editie kiezen', trigger: 'Wanneer de lead na 6/6 een datum kiest en op “Kies je datum” klikt', destination: 'HubSpot form-submit — formulier 8492815c', channel: 'Form-submit', status: 'instant' },
-  { number: 15, title: 'Editie geboekt / strategiegesprek', trigger: 'De huidige editie-popup en /api/call-booking schrijven hun boeking weg', destination: 'Database, geen workflow of funnel-event', channel: 'Funnel-event', status: 'funnel', note: 'De popup doet een form-submit. /api/call-booking schrijft alleen in de database en vuurt zelf niets externs af.' },
-  { number: 16, title: 'verloopreeks 5d / 3d / 1d / 6u / verlopen', trigger: 'Binnen het resterende trialvenster, of zodra trial_expires_at verstreken is, zolang er niet geboekt is', destination: 'HubSpot mail-webhook', channel: 'Mail', status: 'cron', workflow: 'verloopt_5d', note: CRON_NOTE },
+  { number: 15, title: 'Editie geboekt / strategiegesprek', trigger: 'De huidige editie-popup doet een form-submit; /api/call-booking registreert een strategiegesprek', destination: 'Form-submit of database; geen workflow of extern funnel-event', channel: 'Funnel-event', status: 'funnel', note: 'De popup verstuurt formulier 8492815c. /api/call-booking schrijft alleen in de database en vuurt zelf geen melding of funnel-event af.' },
+  { number: 16, title: 'mail_15 t/m 19 — verloopreeks 5d / 3d / 1d / 6u / verlopen', trigger: 'Binnen het resterende trialvenster, of zodra trial_expires_at verstreken is, zolang er niet geboekt is', destination: 'HubSpot mail-webhook', channel: 'Mail', status: 'cron', workflow: 'verloopt_5d', note: `${CRON_NOTE} Deze reeks hoort niet bij workshop/event.` },
 ]
 
 const RETIRING: FlowItem[] = [
