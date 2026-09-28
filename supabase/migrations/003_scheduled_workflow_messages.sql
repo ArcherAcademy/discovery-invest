@@ -1,12 +1,12 @@
 -- Per-lead workflowplanning. Instant workflows blijven buiten deze tabel.
 create table if not exists public.demo_invest_scheduled_messages (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default pg_catalog.gen_random_uuid(),
   lead_id uuid not null references public.demo_invest_users(id) on delete cascade,
   workflow text not null,
   scheduled_for timestamptz not null,
   status text not null default 'pending' check (status in ('pending', 'sending', 'sent', 'cancelled', 'skipped')),
   condition_key text not null,
-  created_at timestamptz not null default now(),
+  created_at timestamptz not null default pg_catalog.now(),
   sent_at timestamptz,
   claim_token uuid,
   claim_until timestamptz,
@@ -30,7 +30,7 @@ begin
   insert into public.demo_invest_scheduled_messages
     (lead_id, workflow, scheduled_for, condition_key)
   select p_lead_id, x.workflow, x.scheduled_for, x.condition_key
-  from jsonb_to_recordset(p_messages) as x(workflow text, scheduled_for timestamptz, condition_key text)
+  from pg_catalog.jsonb_to_recordset(p_messages) as x(workflow text, scheduled_for timestamptz, condition_key text)
   on conflict (lead_id, workflow) do update
     set scheduled_for = excluded.scheduled_for,
         condition_key = excluded.condition_key,
@@ -38,14 +38,14 @@ begin
         claim_token = null,
         claim_until = null,
         sent_at = null
-    where demo_invest_scheduled_messages.status = 'cancelled';
+    where public.demo_invest_scheduled_messages.status = 'cancelled';
   get diagnostics inserted_count = row_count;
   return inserted_count;
 end;
 $$;
 
 create or replace function public.demo_invest_claim_scheduled_messages(
-  p_now timestamptz default now(),
+  p_now timestamptz default pg_catalog.now(),
   p_limit integer default 200,
   p_claim_ttl_seconds integer default 900
 ) returns table (
@@ -56,7 +56,7 @@ create or replace function public.demo_invest_claim_scheduled_messages(
   claim_token uuid
 )
 language plpgsql security definer set search_path = '' as $$
-declare token uuid := gen_random_uuid();
+declare token uuid := pg_catalog.gen_random_uuid();
 begin
   return query
   with picked as (
@@ -65,12 +65,12 @@ begin
     where (m.status = 'pending' and m.scheduled_for <= p_now)
        or (m.status = 'sending' and m.claim_until < p_now)
     order by m.scheduled_for, m.created_at
-    limit greatest(1, least(p_limit, 500))
+    limit pg_catalog.greatest(1, pg_catalog.least(p_limit, 500))
     for update skip locked
   ), claimed as (
     update public.demo_invest_scheduled_messages m
-    set status = 'sending', claim_token = gen_random_uuid(),
-        claim_until = p_now + make_interval(secs => p_claim_ttl_seconds)
+    set status = 'sending', claim_token = pg_catalog.gen_random_uuid(),
+        claim_until = p_now + pg_catalog.make_interval(secs => p_claim_ttl_seconds)
     from picked
     where m.id = picked.id
     returning m.id, m.lead_id, m.workflow, m.condition_key, m.claim_token
