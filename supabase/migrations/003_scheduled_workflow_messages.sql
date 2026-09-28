@@ -31,7 +31,14 @@ begin
     (lead_id, workflow, scheduled_for, condition_key)
   select p_lead_id, x.workflow, x.scheduled_for, x.condition_key
   from jsonb_to_recordset(p_messages) as x(workflow text, scheduled_for timestamptz, condition_key text)
-  on conflict (lead_id, workflow) do nothing;
+  on conflict (lead_id, workflow) do update
+    set scheduled_for = excluded.scheduled_for,
+        condition_key = excluded.condition_key,
+        status = 'pending',
+        claim_token = null,
+        claim_until = null,
+        sent_at = null
+    where demo_invest_scheduled_messages.status = 'cancelled';
   get diagnostics inserted_count = row_count;
   return inserted_count;
 end;

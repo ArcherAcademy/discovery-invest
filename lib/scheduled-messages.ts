@@ -26,7 +26,7 @@ async function getScheduleConfig(supabase: SupabaseClient) {
   return new Map((data ?? []).map((row: ConfigRow) => [row.sleutel, minutes(row.waarde, 0)]))
 }
 
-export async function scheduleLeadTimeline(supabase: SupabaseClient, user: DemoUser, now = new Date()) {
+export async function scheduleLeadTimeline(supabase: SupabaseClient, user: DemoUser) {
   const config = await getScheduleConfig(supabase)
   const createdAt = new Date(user.created_at).getTime()
   const activation = (key: string, fallback: number) => new Date(createdAt + minutes(config.get(key), fallback) * 60_000).toISOString()
@@ -37,7 +37,6 @@ export async function scheduleLeadTimeline(supabase: SupabaseClient, user: DemoU
   }))
 
   if (user.activated_at) {
-    const activatedAt = new Date(user.activated_at).getTime()
     const expiry = user.trial_expires_at ? new Date(user.trial_expires_at).getTime() : null
     const addExpiry = (workflow: string, offsetMinutes: number, condition_key: string) => {
       if (expiry) messages.push({ workflow, scheduled_for: new Date(expiry - offsetMinutes * 60_000).toISOString(), condition_key })
