@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fireInstant } from '@/lib/workflow-engine'
+import { hasAppAccess } from '@/lib/access'
 
 export async function POST(req: NextRequest) {
   const authUser = await getSessionUser(req)
   if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!hasAppAccess(authUser)) return NextResponse.json({ error: 'Trial expired' }, { status: 403 })
 
   const { videoId } = await req.json()
   if (!videoId) return NextResponse.json({ error: 'videoId required' }, { status: 400 })
@@ -77,7 +79,7 @@ export async function POST(req: NextRequest) {
   }
 
   const videosCompletedCount = (completedRows ?? []).length
-  const allCompleted = videosCompletedCount >= 6
+  const allCompleted = coreIds.length > 0 && videosCompletedCount >= coreIds.length
 
   // ── 4. Read current funnel to check if all_completed_at is already set ─────
   const { data: existingFunnel } = await supabase

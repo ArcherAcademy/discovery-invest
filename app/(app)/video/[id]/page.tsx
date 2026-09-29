@@ -66,7 +66,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
           setAccessChecked(true)
         }
       })
-      .catch(() => setAccessChecked(true)) // network error: allow client-side check to handle
+      .catch(() => router.replace('/traject'))
   }, [id, progress]) // re-check whenever progress changes (live unlock)
 
   const [completed, setCompleted] = useState(false)
@@ -100,6 +100,15 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
     return (
       <div className="flex items-center justify-center h-64">
         <p style={{ color: 'rgba(13,15,20,0.4)' }}>Video niet gevonden.</p>
+      </div>
+    )
+  }
+
+  if (!accessChecked) {
+    return (
+      <div className="flex min-h-64 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: 'rgba(13,15,20,0.12)', borderTopColor: '#2500F5' }} />
+        <span className="sr-only">Toegang controleren...</span>
       </div>
     )
   }
