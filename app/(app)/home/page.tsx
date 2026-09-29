@@ -169,8 +169,6 @@ export default function HomePage() {
         )}
       </section>
 
-      <VermogensavondCta />
-
       <HomeTrajectOverview
         coreVideos={displayVideos}
         bonusVideos={displayBonusVideos}
@@ -178,6 +176,8 @@ export default function HomePage() {
         allCoreCompleted={allCoreCompleted}
         loading={isLoading}
       />
+
+      <VermogensavondCta />
 
     </div>
   )
