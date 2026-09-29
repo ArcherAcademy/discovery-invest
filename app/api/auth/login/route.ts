@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   const normalizedEmail = (email as string).toLowerCase().trim()
   const { data: users, error: userError } = await supabase
     .from('demo_invest_users')
-    .select('id, email, activated_at, role')
+    .select('id, email, activated_at, trial_started_at, trial_expires_at, role')
     .ilike('email', normalizedEmail)
     .order('activated_at', { ascending: false })
 
@@ -42,9 +42,20 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  const now = new Date()
+  const accountUpdate: { last_activity_at: string; trial_started_at?: string; trial_expires_at?: string } = {
+    last_activity_at: now.toISOString(),
+  }
+
+  if (!hasPermanentAccess(typedUser.role) && typedUser.activated_at) {
+    const trialStartedAt = typedUser.trial_started_at ?? typedUser.activated_at
+    accountUpdate.trial_started_at = trialStartedAt
+    accountUpdate.trial_expires_at = typedUser.trial_expires_at ?? new Date(new Date(trialStartedAt).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+  }
+
   await supabase
     .from('demo_invest_users')
-    .update({ last_activity_at: new Date().toISOString() })
+    .update(accountUpdate)
     .eq('id', typedUser.id)
 
   // Clean up expired + old sessions for this user before creating a new one
