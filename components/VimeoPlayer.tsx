@@ -21,6 +21,14 @@ function wait(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+function getPlayerErrorMessage(error: unknown) {
+  const playerError = error as { name?: string; message?: string } | null
+  if (playerError?.name === 'PrivacyError' || playerError?.message?.toLowerCase().includes('privacy')) {
+    return 'Deze video is door Vimeo niet vrijgegeven voor dit domein. Probeer opnieuw of open de video rechtstreeks in Vimeo.'
+  }
+  return 'Er ging iets mis bij het laden van de video, probeer opnieuw.'
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return Promise.race([
     promise,
@@ -213,16 +221,20 @@ export default function VimeoPlayer({
     containerRef.current.replaceChildren()
     let disposed = false
 
-    const player = new Player(containerRef.current, {
-      url: vimeoUrl,
-      responsive: true,
-      title: false,
-      byline: false,
-      portrait: false,
-      pip: false,
-      dnt: true,
-      color: '2500f5',
-    })
+    // Vimeo gebruikt de verwijzer om domeinprivacy te controleren. De SDK maakt
+    // normaal zelf een iframe aan; dat verliest op sommige browsers de verwijzer.
+    // Maak het iframe expliciet aan zodat embeds op het live domein betrouwbaar werken.
+    const iframe = document.createElement('iframe')
+    iframe.src = vimeoUrl
+    iframe.title = 'Archer Invest video'
+    iframe.allow = 'autoplay; fullscreen; picture-in-picture; encrypted-media; web-share'
+    iframe.allowFullscreen = true
+    iframe.referrerPolicy = 'origin'
+    iframe.loading = 'eager'
+    iframe.className = 'absolute inset-0 size-full border-0'
+    containerRef.current.appendChild(iframe)
+
+    const player = new Player(iframe)
     playerRef.current = player
 
     const registerStarted = () => {
@@ -286,11 +298,12 @@ export default function VimeoPlayer({
       }
     }).catch((error: unknown) => {
       console.error('[v0] Vimeo player ready mislukt; hartslag blijft proberen:', error)
+      setErrorMsg(getPlayerErrorMessage(error))
     })
 
     player.on('error', (error: unknown) => {
       console.error('[v0] Vimeo player SDK error:', error)
-      setErrorMsg('Er ging iets mis bij het laden van de video, probeer opnieuw.')
+      setErrorMsg(getPlayerErrorMessage(error))
     })
 
     const handlePlay = () => registerStarted()
@@ -328,7 +341,7 @@ export default function VimeoPlayer({
     )
   }
 
-  const playerLoadError = errorMsg?.includes('laden van de video') ?? false
+  const playerLoadError = Boolean(errorMsg?.includes('laden van de video') || errorMsg?.includes('niet vrijgegeven voor dit domein'))
   const vimeoPageUrl = `https://vimeo.com/${vimeoId}`
 
   const handlePosterPlay = async () => {
