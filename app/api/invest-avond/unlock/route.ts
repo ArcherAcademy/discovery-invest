@@ -17,6 +17,14 @@ const TEAM_MEMBER_VALUES = new Set([
   'Anthony', 'Armani', 'Bjorn', 'Kevin', 'Lennard', 'Nicolas', 'Jietse', 'Bert',
   'Nigel', 'Xavier', 'Creneau', 'Pieter', 'Wout', 'Stijn', 'Lucas',
 ])
+const N8N_EDITION_WEBHOOK = 'https://n8n.archer-server.com/webhook/discovery-editie-keuze'
+const TELEGRAM_CHAT_ID_BY_OWNER: Record<string, string> = {
+  'Creneau Rotsaert': '1624278284',
+  'Pieter de Smet': '686539726',
+  'Lucas Alloing': '882649351',
+  'Xavier Goethals': '5014331741',
+}
+const TELEGRAM_FALLBACK_CHAT_ID = '8461082947'
 
 export async function POST(req: NextRequest) {
   const authUser = await getSessionUser(req)
@@ -100,6 +108,34 @@ export async function POST(req: NextRequest) {
     const responseBody = await hubSpotResponse.text()
     console.error('[invest-avond/unlock] HubSpot formulierinzending mislukt:', hubSpotResponse.status, responseBody.slice(0, 500))
     return NextResponse.json({ error: 'hubspot_submission_failed' }, { status: 502 })
+  }
+
+  const ownerDisplayName = ownerName?.trim() ?? ''
+  const telegramChatId = TELEGRAM_CHAT_ID_BY_OWNER[ownerDisplayName] ?? TELEGRAM_FALLBACK_CHAT_ID
+  const n8nPayload = {
+    voornaam: firstName,
+    naam: lastName,
+    email: authUser.email,
+    telefoon: phone ?? '',
+    gekozen_editie: `Editie ${preferredEdition}`,
+    lead_owner: {
+      naam: ownerDisplayName,
+      telegram_chat_id: telegramChatId,
+    },
+  }
+
+  try {
+    const n8nResponse = await fetch(N8N_EDITION_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(n8nPayload),
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!n8nResponse.ok) {
+      console.error('[invest-avond/unlock] n8n editie-melding mislukt:', n8nResponse.status)
+    }
+  } catch (error) {
+    console.error('[invest-avond/unlock] n8n editie-melding niet bereikbaar:', error)
   }
 
   const { error } = await supabase
