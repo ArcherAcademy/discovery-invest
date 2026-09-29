@@ -5,10 +5,12 @@ import { emitEvent } from '@/lib/emit-event'
 import { fireInstant } from '@/lib/workflow-engine'
 import { cancelVideoMessages, scheduleLeadTimeline, scheduleSixOfSixFollowUps } from '@/lib/scheduled-messages'
 import type { DemoUser, DemoUserFunnel, DemoVideo, DemoVideoProgress } from '@/lib/types'
+import { hasAppAccess } from '@/lib/access'
 
 export async function POST(req: NextRequest) {
   const authUser = await getSessionUser(req)
   if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!hasAppAccess(authUser)) return NextResponse.json({ error: 'Trial expired' }, { status: 403 })
   const supabase = createAdminClient()
 
   const { videoId, action, progressPct } = await req.json() as {
@@ -38,6 +40,13 @@ export async function POST(req: NextRequest) {
     supabase.from('demo_invest_user_funnel').select('*').eq('user_id', authUser.id).single(),
     supabase.from('demo_invest_videos').select('*').eq('id', videoId).single(),
   ])
+
+  if (!userData) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  }
+  if (!videoData) {
+    return NextResponse.json({ error: 'Video not found' }, { status: 404 })
+  }
 
   const user = userData as DemoUser
   const funnel = funnelData as DemoUserFunnel
@@ -185,7 +194,7 @@ export async function POST(req: NextRequest) {
 
     // Update funnel — upsert so it works even if no funnel row exists yet
     if (video?.section === 'core') {
-      const isAllCompleted = completedCoreCount >= 6
+      const isAllCompleted = coreVideos.length > 0 && completedCoreCount >= coreVideos.length
 
       const { error: funnelError } = await supabase
         .from('demo_invest_user_funnel')

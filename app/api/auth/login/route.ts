@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createSession, applySessionCookie } from '@/lib/auth'
 import type { DemoUser } from '@/lib/types'
+import { hasPermanentAccess } from '@/lib/access'
 
 export async function POST(req: NextRequest) {
   const { email } = await req.json()
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Admins bypass the activated_at check — they are set up directly in the DB
-  if (!typedUser.activated_at && typedUser.role !== 'admin') {
+  if (!typedUser.activated_at && !hasPermanentAccess(typedUser.role)) {
     return NextResponse.json(
       { ok: false, error: 'Dit account is nog niet geactiveerd. Gebruik de activatielink uit je e-mail.' },
       { status: 403 }
