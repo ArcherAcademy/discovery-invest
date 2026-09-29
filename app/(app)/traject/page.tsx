@@ -251,8 +251,6 @@ export default function TrajectPage() {
         </div>
       </div>
 
-      <VermogensavondCta />
-
       {/* Bonus videos — available after all six core videos */}
       <section id="bonusmateriaal" className="scroll-mt-6">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -365,6 +363,8 @@ export default function TrajectPage() {
           })}
         </div>
       </section>
+
+      <VermogensavondCta />
 
     </div>
   )
