@@ -11,7 +11,6 @@ import {
 import { useApp } from '@/components/app-context'
 import { t } from '@/lib/i18n'
 import VimeoPlayer from '@/components/VimeoPlayer'
-import InvestAvondUnlockModal from '@/components/InvestAvondUnlockModal'
 import PdfItem from '@/components/PdfItem'
 
 
@@ -20,8 +19,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
   const { videos, progress, coreCompleted, refresh, locale, loading } = useApp()
   const tr = t(locale)
   const router = useRouter()
-  const [investAvondModalOpen, setInvestAvondModalOpen] = useState(false)
-
   const video = videos.find(v => v.id === id)
   const coreVideos = videos.filter(v => v.section === 'core')
   const bonusVideos = videos.filter(v => v.section === 'bonus')
@@ -83,7 +80,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
   function handleCompleted() {
     setCompleted(true)
     refresh()
-    if (isLastCoreVideo) setInvestAvondModalOpen(true)
   }
 
   if (!video) {
@@ -182,9 +178,9 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                   isLastVideo={isLastCoreVideo}
                   onCompleted={handleCompleted}
                   onAutoNext={() => {
-                if (isLastCoreVideo) {
-                  setInvestAvondModalOpen(true)
-                } else if (nextVideo) {
+                    if (isLastCoreVideo) {
+                      router.push('/traject#bonusmateriaal')
+                    } else if (nextVideo) {
                       router.push(`/video/${nextVideo.id}`)
                     }
                   }}
@@ -586,14 +582,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
           </div>
         </div>
       </div>
-      <InvestAvondUnlockModal
-        open={investAvondModalOpen}
-        onClose={() => setInvestAvondModalOpen(false)}
-        onViewBonus={() => {
-          setInvestAvondModalOpen(false)
-          router.push('/traject#bonusmateriaal')
-        }}
-      />
     </div>
   )
 }
