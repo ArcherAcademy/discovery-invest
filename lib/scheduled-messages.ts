@@ -10,7 +10,6 @@ const EXPIRY_WORKFLOWS = ['trial_verlopen', 'verloopt_5d', 'verloopt_3d', 'verlo
 const STAGE_WORKFLOWS = ['lead_stage_6of6_fallback', 'lead_stage_waitlist_discovery']
 const SCHEDULED_EVALUATOR_CONCURRENCY = 10
 const SCHEDULED_EVALUATOR_LIMIT = 50
-const MAX_SCHEDULED_MESSAGE_ATTEMPTS = 5
 
 type ScheduledMessage = {
   id: string
@@ -169,13 +168,11 @@ export async function runScheduledEvaluator(supabase: SupabaseClient, limit = SC
   async function registerFailure(row: ScheduledMessage, cause: unknown) {
     const message = cause instanceof Error ? cause.message : String(cause)
     console.error('[scheduled-evaluator] gepland bericht mislukt:', { id: row.id, workflow: row.workflow, error: message })
-    const { error: failureError } = await supabase.rpc('demo_invest_fail_scheduled_message', {
+    const { error: releaseError } = await supabase.rpc('demo_invest_release_scheduled_message', {
       p_id: row.id,
       p_claim_token: row.claim_token,
-      p_error: message,
-      p_max_attempts: MAX_SCHEDULED_MESSAGE_ATTEMPTS,
     })
-    if (failureError) console.error('[scheduled-evaluator] retry registreren mislukt:', failureError)
+    if (releaseError) console.error('[scheduled-evaluator] claim vrijgeven mislukt:', releaseError)
     return 'failed' as const
   }
 
