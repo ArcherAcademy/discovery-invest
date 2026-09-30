@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { Play } from 'lucide-react'
 import VimeoPlayer from '@/components/VimeoPlayer'
 import PlatformIntroModal from '@/components/PlatformIntroModal'
+import { HomeKpiCards } from '@/components/HomeKpiCards'
 import { HomeTrajectOverview } from '@/components/HomeTrajectOverview'
 import { VermogensavondCta } from '@/components/VermogensavondCta'
 import { useApp } from '@/components/app-context'
@@ -168,6 +169,8 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      <HomeKpiCards />
 
       <HomeTrajectOverview
         coreVideos={displayVideos}
