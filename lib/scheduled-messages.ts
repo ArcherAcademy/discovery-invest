@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { WORKFLOWS, attemptFire } from '@/lib/workflow-engine'
-import { advanceHubSpotLeadStageById } from '@/lib/hubspot-lead-stage'
+import { advanceHubSpotLeadStage } from '@/lib/hubspot-lead-stage'
 import type { DemoUser } from '@/lib/types'
 
 const ACTIVATION_WORKFLOWS = ['activatie_2u', 'activatie_24u', 'activatie_72u']
@@ -8,6 +8,9 @@ const VIDEO_WORKFLOWS = [2, 3, 4, 5, 6].map(index => `video_${index}_herinnering
 const CONVERSION_WORKFLOWS = ['plaats_ligt_klaar', 'laatste_dag']
 const EXPIRY_WORKFLOWS = ['trial_verlopen', 'verloopt_5d', 'verloopt_3d', 'verloopt_1d', 'verloopt_6u']
 const STAGE_WORKFLOWS = ['lead_stage_6of6_fallback', 'lead_stage_waitlist_discovery']
+const SCHEDULED_EVALUATOR_CONCURRENCY = 10
+const SCHEDULED_EVALUATOR_LIMIT = 50
+const MAX_SCHEDULED_MESSAGE_ATTEMPTS = 5
 
 type ScheduledMessage = {
   id: string
@@ -149,7 +152,7 @@ export interface ScheduledEvaluatorResult {
   failed: number
 }
 
-export async function runScheduledEvaluator(supabase: SupabaseClient, limit = 200): Promise<ScheduledEvaluatorResult> {
+export async function runScheduledEvaluator(supabase: SupabaseClient, limit = SCHEDULED_EVALUATOR_LIMIT): Promise<ScheduledEvaluatorResult> {
   const { data: rows, error } = await supabase.rpc('demo_invest_claim_scheduled_messages', { p_now: new Date().toISOString(), p_limit: limit, p_claim_ttl_seconds: 900 })
   if (error) throw new Error(`Due-berichten claimen mislukt: ${error.message}`)
   const [{ data: configRows }, { data: cfgValues }, { data: videosData }] = await Promise.all([
@@ -160,41 +163,84 @@ export async function runScheduledEvaluator(supabase: SupabaseClient, limit = 20
   const configMap = new Map((configRows ?? []).map((row: any) => [row.trigger_naam, row]))
   const thresholds = new Map((cfgValues ?? []).map((row: ConfigRow) => [row.sleutel, minutes(row.waarde, 0)]))
   const coreVideoIds = (videosData ?? []).map((video: { id: string }) => video.id)
-  const result = { claimed: (rows ?? []).length, sent: 0, skipped: 0, failed: 0 }
+  const claimedRows = (rows ?? []) as ScheduledMessage[]
+  const result = { claimed: claimedRows.length, sent: 0, skipped: 0, failed: 0 }
 
-  for (const row of (rows ?? []) as ScheduledMessage[]) {
-    if (row.workflow === 'lead_stage_6of6_fallback' || row.workflow === 'lead_stage_waitlist_discovery') {
-      const trigger = row.workflow === 'lead_stage_6of6_fallback' ? 'six_core_videos' : 'edition_selected'
-      try {
-        const stageResult = await advanceHubSpotLeadStageById(row.lead_id, trigger)
+  async function registerFailure(row: ScheduledMessage, cause: unknown) {
+    const message = cause instanceof Error ? cause.message : String(cause)
+    console.error('[scheduled-evaluator] gepland bericht mislukt:', { id: row.id, workflow: row.workflow, error: message })
+    const { error: failureError } = await supabase.rpc('demo_invest_fail_scheduled_message', {
+      p_id: row.id,
+      p_claim_token: row.claim_token,
+      p_error: message,
+      p_max_attempts: MAX_SCHEDULED_MESSAGE_ATTEMPTS,
+    })
+    if (failureError) console.error('[scheduled-evaluator] retry registreren mislukt:', failureError)
+    return 'failed' as const
+  }
+
+  async function processMessage(row: ScheduledMessage): Promise<'sent' | 'skipped' | 'failed'> {
+    try {
+      if (STAGE_WORKFLOWS.includes(row.workflow)) {
+        const { data: user, error: userError } = await supabase
+          .from('demo_invest_users')
+          .select('email')
+          .eq('id', row.lead_id)
+          .single()
+        if (userError || !user?.email) throw new Error(userError?.message ?? 'Discovery-gebruiker of e-mailadres niet gevonden')
+
+        const trigger = row.workflow === 'lead_stage_6of6_fallback' ? 'six_core_videos' : 'edition_selected'
+        const stageResult = await advanceHubSpotLeadStage(user.email, trigger)
         const finalStatus = stageResult.updated || stageResult.reason === 'already_at_or_beyond_target' ? 'sent' : 'skipped'
-        await supabase.from('demo_invest_scheduled_messages').update({ status: finalStatus, sent_at: new Date().toISOString(), claim_token: null, claim_until: null }).eq('id', row.id).eq('claim_token', row.claim_token)
-        stageResult.updated ? result.sent++ : result.skipped++
-      } catch (error) {
-        console.error('[scheduled-evaluator] lead stage update mislukt:', error)
-        await supabase.rpc('demo_invest_release_scheduled_message', { p_id: row.id, p_claim_token: row.claim_token })
-        result.failed++
+        const { error: updateError } = await supabase
+          .from('demo_invest_scheduled_messages')
+          .update({ status: finalStatus, sent_at: new Date().toISOString(), claim_token: null, claim_until: null })
+          .eq('id', row.id)
+          .eq('claim_token', row.claim_token)
+        if (updateError) throw updateError
+        return stageResult.updated ? 'sent' : 'skipped'
       }
-      continue
-    }
 
-    const workflow = WORKFLOWS.find(item => item.naam === row.workflow)
-    if (!workflow) {
-      await supabase.from('demo_invest_scheduled_messages').update({ status: 'skipped', claim_token: null, claim_until: null }).eq('id', row.id).eq('claim_token', row.claim_token)
-      result.skipped++
-      continue
-    }
-    const fired = await attemptFire(supabase, row.lead_id, workflow, configMap, thresholds, coreVideoIds)
-    if (fired === 'triggered' || fired === 'already_sent') {
-      await supabase.from('demo_invest_scheduled_messages').update({ status: 'sent', sent_at: new Date().toISOString(), claim_token: null, claim_until: null }).eq('id', row.id).eq('claim_token', row.claim_token)
-      result.sent++
-    } else if (fired === 'suppressed') {
-      await supabase.from('demo_invest_scheduled_messages').update({ status: 'skipped', claim_token: null, claim_until: null }).eq('id', row.id).eq('claim_token', row.claim_token)
-      result.skipped++
-    } else {
-      await supabase.rpc('demo_invest_release_scheduled_message', { p_id: row.id, p_claim_token: row.claim_token })
-      result.failed++
+      const workflow = WORKFLOWS.find(item => item.naam === row.workflow)
+      if (!workflow) {
+        const { error: updateError } = await supabase
+          .from('demo_invest_scheduled_messages')
+          .update({ status: 'skipped', claim_token: null, claim_until: null })
+          .eq('id', row.id)
+          .eq('claim_token', row.claim_token)
+        if (updateError) throw updateError
+        return 'skipped'
+      }
+
+      const fired = await attemptFire(supabase, row.lead_id, workflow, configMap, thresholds, coreVideoIds)
+      if (fired === 'triggered' || fired === 'already_sent') {
+        const { error: updateError } = await supabase
+          .from('demo_invest_scheduled_messages')
+          .update({ status: 'sent', sent_at: new Date().toISOString(), claim_token: null, claim_until: null })
+          .eq('id', row.id)
+          .eq('claim_token', row.claim_token)
+        if (updateError) throw updateError
+        return 'sent'
+      }
+      if (fired === 'suppressed') {
+        const { error: updateError } = await supabase
+          .from('demo_invest_scheduled_messages')
+          .update({ status: 'skipped', claim_token: null, claim_until: null })
+          .eq('id', row.id)
+          .eq('claim_token', row.claim_token)
+        if (updateError) throw updateError
+        return 'skipped'
+      }
+      return registerFailure(row, `Workflow ${row.workflow} kon niet worden verstuurd`)
+    } catch (error) {
+      return registerFailure(row, error)
     }
   }
+
+  for (let start = 0; start < claimedRows.length; start += SCHEDULED_EVALUATOR_CONCURRENCY) {
+    const outcomes = await Promise.all(claimedRows.slice(start, start + SCHEDULED_EVALUATOR_CONCURRENCY).map(processMessage))
+    for (const outcome of outcomes) result[outcome] += 1
+  }
+
   return result
 }
