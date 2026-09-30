@@ -4,7 +4,7 @@ const LEAD_STAGE_PROPERTY = 'hs_pipeline_stage'
 const WAITLIST_DISCOVERY_STAGE_ID = '6147230967'
 
 const STAGE_BY_TRIGGER = {
-  two_core_videos: '6150881500',
+  one_core_video: '6150881500',
   six_core_videos: '6147230966',
   edition_selected: WAITLIST_DISCOVERY_STAGE_ID,
 } as const
@@ -32,20 +32,21 @@ const stageDefinitions: StageDefinition[] = [
   { id: '5779412163', label: 'Discovery Invest', displayOrder: 2 },
   { id: '6147228875', label: 'Attempted To Contact (Lead)', displayOrder: 3 },
   { id: '6147228876', label: 'Contacted (Lead)', displayOrder: 4 },
-  { id: '6150881500', label: 'Qualified (2/6)', displayOrder: 5 },
-  { id: '6147230966', label: 'Qualified 6/6', displayOrder: 6 },
-  { id: '5938491641', label: 'Waitlist Website', displayOrder: 8 },
-  { id: '5706792163', label: 'Attempted To Contact', displayOrder: 9 },
-  { id: '5709325551', label: 'Contacted', displayOrder: 10 },
-  { id: '5706792165', label: '1-1 Meeting', displayOrder: 11 },
-  { id: '5709325552', label: 'Sales Qualified', displayOrder: 12 },
-  { id: '5709325549', label: 'Marketing Qualified', displayOrder: 13 },
-  { id: '5706792164', label: 'Qualified', displayOrder: 14 },
-  { id: '6147230967', label: 'Waitlist Discovery', displayOrder: 7 },
-  { id: '5709325548', label: 'Workshop / Event', displayOrder: 15 },
-  { id: '5709325554', label: 'Not Qualified', displayOrder: 16 },
-  { id: '5709325555', label: 'Newsletter Anthony', displayOrder: 17 },
-  { id: '5709325553', label: 'Fund Qualified', displayOrder: 18 },
+  { id: '6161831098', label: 'Lead: No Contact', displayOrder: 5 },
+  { id: '6150881500', label: 'Qualified (1/6)', displayOrder: 6 },
+  { id: '6147230966', label: 'Qualified 6/6', displayOrder: 7 },
+  { id: '6147230967', label: 'Waitlist Discovery', displayOrder: 8 },
+  { id: '5938491641', label: 'Waitlist Website', displayOrder: 9 },
+  { id: '5706792163', label: 'Attempted To Contact', displayOrder: 10 },
+  { id: '5709325551', label: 'Contacted', displayOrder: 11 },
+  { id: '5706792165', label: '1-1 Meeting', displayOrder: 12 },
+  { id: '5709325552', label: 'Sales Qualified', displayOrder: 13 },
+  { id: '5709325549', label: 'Marketing Qualified', displayOrder: 14 },
+  { id: '5706792164', label: 'Qualified', displayOrder: 15 },
+  { id: '5709325548', label: 'Workshop / Event', displayOrder: 16 },
+  { id: '5709325554', label: 'Not Qualified', displayOrder: 17 },
+  { id: '5709325555', label: 'Newsletter Anthony', displayOrder: 18 },
+  { id: '5709325553', label: 'Fund Qualified', displayOrder: 19 },
 ]
 
 const stageOrder = new Map(stageDefinitions.map(stage => [stage.id, stage.displayOrder]))

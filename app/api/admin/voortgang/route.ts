@@ -138,18 +138,12 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
     const leadStage = funnel?.event_booked
       ? 'Afspraak geboekt'
-      : completedCount >= 2
+      : completedCount >= 1
         ? 'Gekwalificeerde lead'
-        : completedCount === 1
-          ? 'Eerste video voltooid'
-          : u.activated_at
-            ? 'Account geactiveerd'
-            : 'Account aangemaakt'
-    const leadPriority = funnel?.event_booked || completedCount >= 2
-      ? 'hoog'
-      : completedCount === 1
-        ? 'middel'
-        : 'normaal'
+        : u.activated_at
+          ? 'Account geactiveerd'
+          : 'Account aangemaakt'
+    const leadPriority = funnel?.event_booked || completedCount >= 1 ? 'hoog' : 'normaal'
 
     return {
       id: u.id,
@@ -163,7 +157,7 @@ export async function GET(req: NextRequest) {
       trial_expires_at: u.trial_expires_at,
       completed_count: completedCount,
       first_video_completed_at: completedAt[0] ?? null,
-      qualified_at: completedAt[1] ?? null,
+      qualified_at: completedAt[0] ?? null,
       lead_stage: leadStage,
       lead_priority: leadPriority,
       current_video: currentVideo ? { id: currentVideo.id, order: currentVideo.order_no, title: currentVideo.title } : null,

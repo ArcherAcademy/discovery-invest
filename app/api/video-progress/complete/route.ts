@@ -66,9 +66,9 @@ export async function POST(req: NextRequest) {
 
   const isNewCompletion = existingProgress?.status !== 'completed'
 
-  if (isNewCompletion && video?.section === 'core' && completedCoreCount === 2) {
+  if (isNewCompletion && video?.section === 'core' && completedCoreCount === 1) {
     try {
-      await advanceHubSpotLeadStage(user.email, 'two_core_videos')
+      await advanceHubSpotLeadStage(user.email, 'one_core_video')
     } catch (error) {
       console.error('[video-complete] HubSpot leadstage update mislukt:', error)
     }
@@ -91,13 +91,13 @@ export async function POST(req: NextRequest) {
       data: {
         video_id: videoId,
         video_title: video?.title,
-        stage: completedCoreCount >= 2 ? 'qualified_lead' : 'first_video_completed',
+        stage: completedCoreCount >= 1 ? 'qualified_lead' : 'first_video_completed',
       },
     })
 
-    if (video?.section === 'core' && completedCoreCount === 2) {
-      await emitEvent({
-        type: 'lead.qualified',
+  if (video?.section === 'core' && completedCoreCount === 1) {
+    await emitEvent({
+      type: 'lead.qualified',
         user,
         funnel: { ...funnel, videos_completed_count: completedCoreCount },
         nextVideo,

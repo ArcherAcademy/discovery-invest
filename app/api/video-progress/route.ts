@@ -181,9 +181,9 @@ export async function POST(req: NextRequest) {
         },
       })
 
-      if (video?.section === 'core' && completedCoreCount === 2) {
-        await emitEvent({
-          type: 'lead.qualified',
+  if (video?.section === 'core' && completedCoreCount === 1) {
+    await emitEvent({
+      type: 'lead.qualified',
           user,
           funnel: { ...funnel, videos_completed_count: completedCoreCount },
           nextVideo,
