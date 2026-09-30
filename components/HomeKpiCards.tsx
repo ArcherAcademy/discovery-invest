@@ -3,16 +3,19 @@
 import { CalendarDays, Clock } from 'lucide-react'
 import useSWR from 'swr'
 import { useApp } from '@/components/app-context'
-import type { DemoEvent } from '@/lib/types'
-
-type EventsResponse = {
-  events: DemoEvent[]
+type MasterclassEditionResponse = {
+  edition: {
+    title: string
+    startsAt: string
+    filledPercentage: number
+    availablePercentage: number
+  }
 }
 
-async function fetchEvents(url: string): Promise<EventsResponse> {
+async function fetchMasterclassEdition(url: string): Promise<MasterclassEditionResponse> {
   const response = await fetch(url, { cache: 'no-store', credentials: 'include' })
   if (!response.ok) throw new Error(`Editiedata laden mislukt (${response.status})`)
-  return response.json() as Promise<EventsResponse>
+  return response.json() as Promise<MasterclassEditionResponse>
 }
 
 function ProgressRing({ percentage }: { percentage: number }) {
@@ -42,19 +45,9 @@ function ProgressRing({ percentage }: { percentage: number }) {
   )
 }
 
-function formatEdition(startsAt: string) {
-  const monthAndYear = new Intl.DateTimeFormat('nl-BE', {
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'Europe/Brussels',
-  }).format(new Date(startsAt))
-
-  return `Editie ${monthAndYear}`
-}
-
 export function HomeKpiCards() {
   const { coreCompleted, videos, trialDaysLeft } = useApp()
-  const { data } = useSWR<EventsResponse>('/api/events-data', fetchEvents, {
+  const { data } = useSWR<MasterclassEditionResponse>('/api/masterclass-editions', fetchMasterclassEdition, {
     revalidateOnFocus: true,
     revalidateOnReconnect: true,
     dedupingInterval: 30_000,
@@ -62,7 +55,7 @@ export function HomeKpiCards() {
 
   const coreVideoCount = videos.filter(video => video.section === 'core').length || 6
   const progressPercentage = Math.min(100, Math.round((coreCompleted / coreVideoCount) * 100))
-  const nextEdition = data?.events?.[0] ?? null
+  const nextEdition = data?.edition ?? null
   const hasLimitedAccess = Number.isFinite(trialDaysLeft)
   const accessValue = hasLimitedAccess ? `${trialDaysLeft} ${trialDaysLeft === 1 ? 'dag' : 'dagen'}` : 'Onbeperkt'
   const accessDetail = hasLimitedAccess ? 'tot je toegang sluit' : 'voor jouw account'
@@ -91,10 +84,10 @@ export function HomeKpiCards() {
         <div className="min-w-0">
           <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Volgende editie</p>
           <p className="truncate text-xl font-bold leading-tight">
-            {nextEdition ? `${nextEdition.spots_left} vrij` : '—'}
+            {nextEdition ? `${nextEdition.availablePercentage}% vrij` : '—'}
           </p>
           <p className="truncate text-[11px] text-muted-foreground">
-            {nextEdition ? formatEdition(nextEdition.starts_at) : 'Geen editie gepland'}
+            {nextEdition?.title ?? 'Live editie niet beschikbaar'}
           </p>
         </div>
       </article>
