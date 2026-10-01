@@ -45,6 +45,8 @@ interface UserRow {
   call_booked: boolean
   call_booked_at: string | null
   quiz_submission: { submitted_at: string; score: number; answers: { question_no: number; chosen: string; correct: boolean }[] } | null
+  vermogenstest_variant: 'A' | 'B' | null
+  vermogenstest_vragenset: 'oude_vragen' | 'nieuwe_vragen' | null
 }
 
 interface FunnelStep {
@@ -55,6 +57,13 @@ interface FunnelStep {
   avgMinutesFromPrevious: number | null
 }
 interface VideoStat { videoId: string; order: number; title: string; dropout?: number; avg_pct?: number; started_count?: number }
+interface CohortStat { count: number; percentage: number }
+interface VragensetFunnelRow {
+  label: string
+  totaal: CohortStat
+  oudeVragen: CohortStat
+  nieuweVragen: CohortStat
+}
 
 interface Insights {
   total: number
@@ -63,6 +72,8 @@ interface Insights {
   dropoutPerVideo: (VideoStat & { dropout: number })[]
   avgDepthPerVideo: (VideoStat & { avg_pct: number; started_count: number })[]
   funnelSteps: FunnelStep[]
+  vragensetFunnel: VragensetFunnelRow[]
+  periode: '7' | '30' | 'alles'
   tempo: { avgMinutesToFirstVideo: number | null; avgMinutesToComplete: number | null; completedAll: number; within1Day: number }
   riskList: { id: string; email: string; name: string; completed_count: number; ms_since_activity: number | null; days_trial_left: number | null }[]
 }
@@ -422,7 +433,7 @@ function UserDetailSlideOver({ user, onClose, onExtended }: { user: UserRow; onC
     })
   }
 
-  // ── Build timeline ──────────────────────��─────────────────────
+  // ── Build timeline ──��───────────────────��─────────────────────
   // Each event has a numeric timestamp for strict sorting.
   // Impossible timestamps (started_at before activated_at) are detected and flagged.
   type TimelineEvent = {
@@ -970,6 +981,7 @@ function UserDetailSlideOver({ user, onClose, onExtended }: { user: UserRow; onC
 
 // ── Main component ────────────────────────────────────────────
 type FilterStatus = 'all' | 'gekwalificeerd' | 'bezig' | 'voltooid' | 'inactief'
+type Periode = '7' | '30' | 'alles'
 
 export function VoortgangTab() {
   const [data, setData] = useState<{ userRows: UserRow[]; insights: Insights } | null>(null)
@@ -978,6 +990,7 @@ export function VoortgangTab() {
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null)
   const [filter, setFilter] = useState<FilterStatus>('all')
   const [search, setSearch] = useState('')
+  const [periode, setPeriode] = useState<Periode>('30')
   const [now, setNow] = useState(Date.now())
 
   useEffect(() => {
@@ -989,7 +1002,7 @@ export function VoortgangTab() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/admin/voortgang', { cache: 'no-store' })
+      const res = await fetch(`/api/admin/voortgang?periode=${periode}`, { cache: 'no-store' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setData(await res.json())
     } catch (e) {
@@ -997,7 +1010,7 @@ export function VoortgangTab() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [periode])
 
   useEffect(() => { load() }, [load])
 
@@ -1006,7 +1019,7 @@ export function VoortgangTab() {
   // zodat badge en vervaldatum meteen omslaan na een verlenging.
   const refreshSilent = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/voortgang', { cache: 'no-store' })
+      const res = await fetch(`/api/admin/voortgang?periode=${periode}`, { cache: 'no-store' })
       if (!res.ok) return
       const fresh = (await res.json()) as { userRows: UserRow[]; insights: Insights }
       setData(fresh)
@@ -1014,7 +1027,7 @@ export function VoortgangTab() {
     } catch {
       // De bestaande gegevens blijven zichtbaar bij een tijdelijke netwerkfout.
     }
-  }, [])
+  }, [periode])
 
   useEffect(() => {
     const id = window.setInterval(refreshSilent, 30000)
@@ -1078,14 +1091,34 @@ export function VoortgangTab() {
             {insights.totalAccounts} accounts · {insights.total} geactiveerd · {insights.qualifiedLeads} gekwalificeerd
           </p>
         </div>
-        <button
-          onClick={load}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold"
-          style={{ background: COBALT_08, color: COBALT }}
-        >
-          <RefreshCw size={12} />
-          Verversen
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 rounded-xl p-1" style={{ background: '#f0f3fb' }} aria-label="Periodefilter">
+            {([
+              { value: '7' as const, label: '7 dagen' },
+              { value: '30' as const, label: '30 dagen' },
+              { value: 'alles' as const, label: 'Alles' },
+            ]).map(option => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setPeriode(option.value)}
+                className="rounded-lg px-3 py-1 text-xs font-semibold transition-colors"
+                style={periode === option.value ? { background: COBALT, color: '#fff' } : { color: TEXT_DIM }}
+                aria-pressed={periode === option.value}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={load}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold"
+            style={{ background: COBALT_08, color: COBALT }}
+          >
+            <RefreshCw size={12} />
+            Verversen
+          </button>
+        </div>
       </div>
 
       {/* ── DEEL B: Per-user table ────���───────────────────────── */}
@@ -1338,6 +1371,41 @@ export function VoortgangTab() {
           </div>
         </InsightCard>
       </div>
+
+      {/* Gedetailleerde funnel per Vermogenstest-vragenset */}
+      <section className="overflow-hidden rounded-2xl" style={{ background: '#fff', border: `1px solid ${BORDER}`, boxShadow: '0 1px 4px rgba(13,15,20,0.06)' }}>
+        <div className="flex flex-col gap-1 px-5 py-4" style={{ borderBottom: `1px solid ${BORDER}` }}>
+          <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: TEXT_DIM }}>Funnel per vragenset</h3>
+          <p className="text-xs" style={{ color: TEXT_DIM }}>
+            Percentages worden berekend vanaf alle aangemaakte accounts binnen elk cohort. Leads zonder vragenset staan alleen in Totaal.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[680px] text-xs">
+            <thead>
+              <tr style={{ background: '#fafbff', borderBottom: `1px solid ${BORDER}` }}>
+                <th className="px-5 py-3 text-left font-semibold" style={{ color: TEXT_DIM }}>Stap</th>
+                <th className="px-5 py-3 text-right font-semibold" style={{ color: TEXT_DIM }}>Totaal</th>
+                <th className="px-5 py-3 text-right font-semibold" style={{ color: TEXT_DIM }}>Oude vragen</th>
+                <th className="px-5 py-3 text-right font-semibold" style={{ color: TEXT_DIM }}>Nieuwe vragen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {insights.vragensetFunnel.map((row, index) => (
+                <tr key={row.label} style={{ borderBottom: index === insights.vragensetFunnel.length - 1 ? undefined : `1px solid ${BORDER}` }}>
+                  <td className="px-5 py-3 font-semibold" style={{ color: TEXT }}>{row.label}</td>
+                  {([row.totaal, row.oudeVragen, row.nieuweVragen] as CohortStat[]).map((stat, statIndex) => (
+                    <td key={statIndex} className="px-5 py-3 text-right">
+                      <span className="font-bold" style={{ color: TEXT }}>{stat.count}</span>
+                      <span className="ml-1.5" style={{ color: TEXT_DIM }}>{stat.percentage}%</span>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {/* 5. Risk list */}
       {insights.riskList.length > 0 && (

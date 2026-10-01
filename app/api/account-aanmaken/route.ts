@@ -188,6 +188,30 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   }
 
   const name = [voornaam, achternaam].filter(Boolean).join(' ') || email.split('@')[0]
+  const variantRaw = pick(body, 'vermogenstest_variant')
+  const vragensetRaw = pick(body, 'vermogenstest_vragenset')
+  const vermogenstestVariant = variantRaw === 'A' || variantRaw === 'B' ? variantRaw : null
+  const vermogenstestVragenset = vragensetRaw === 'oude_vragen' || vragensetRaw === 'nieuwe_vragen'
+    ? vragensetRaw
+    : null
+  const geldigeVermogenstestKoppeling =
+    (!vermogenstestVariant && !vermogenstestVragenset)
+    || (vermogenstestVariant === 'A' && vermogenstestVragenset === 'oude_vragen')
+    || (vermogenstestVariant === 'B' && vermogenstestVragenset === 'nieuwe_vragen')
+
+  if (variantRaw && !vermogenstestVariant || vragensetRaw && !vermogenstestVragenset || !geldigeVermogenstestKoppeling) {
+    await logWebhookCall({
+      supabase,
+      email,
+      payload_json: { ...body, _bron: bron, _origin: origin },
+      outcome: 'error',
+      reden: 'ongeldige combinatie vermogenstest_variant en vermogenstest_vragenset',
+      activatielink: null,
+      http_status: 422,
+    })
+    return new Response('Invalid vermogenstest tracking', { status: 422, headers: CORS_HEADERS })
+  }
+
   let contactOwnerId = extractHubSpotOwnerId(body)
 
   // Niet elke HubSpot-workflow stuurt de owner opnieuw mee. Gebruik daarom de
@@ -272,6 +296,8 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
         whatsapp_opt_in: false,
         created_at: new Date().toISOString(),
         activated_at: null,
+        vermogenstest_variant: vermogenstestVariant,
+        vermogenstest_vragenset: vermogenstestVragenset,
       })
 
     if (insertError) {
@@ -310,6 +336,22 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
       outcome = 'created'
       console.log(`[v0] account-aanmaken: nieuw voorlopig account aangemaakt voor ${email} (id=${userId})`)
     }
+  }
+
+  // Bewaar de trackingwaarden exact zoals ze in deze webhook binnenkwamen.
+  // Ontbrekende waarden blijven expliciet null; er wordt geen vragenset afgeleid.
+  const { error: trackingError } = await supabase
+    .from('demo_invest_users')
+    .update({
+      vermogenstest_variant: vermogenstestVariant,
+      vermogenstest_vragenset: vermogenstestVragenset,
+    })
+    .eq('id', userId)
+
+  if (trackingError) {
+    console.error('[v0] account-aanmaken: vermogenstesttracking opslaan mislukt:', trackingError.message)
+    await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `DB update vermogenstesttracking: ${trackingError.message}`, activatielink: null, http_status: 500 })
+    return new Response(`Database error: ${trackingError.message}`, { status: 500, headers: CORS_HEADERS })
   }
 
   // Owner alleen invullen als die nog leeg is — nooit een bestaande owner

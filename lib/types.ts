@@ -16,6 +16,8 @@ export interface DemoUser {
   trial_started_at: string | null
   trial_expires_at: string | null
   last_activity_at: string | null
+  vermogenstest_variant: 'A' | 'B' | null
+  vermogenstest_vragenset: 'oude_vragen' | 'nieuwe_vragen' | null
   // Live afgeleide call-status — samengevoegd in /api/me, staat niet in de users-tabel.
   call_booked?: boolean
   call_booked_at?: string | null
