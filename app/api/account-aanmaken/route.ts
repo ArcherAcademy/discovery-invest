@@ -49,6 +49,15 @@ async function sha256hex(raw: string): Promise<string> {
     .join('')
 }
 
+async function stableUserIdForEmail(email: string): Promise<string> {
+  const hash = await sha256hex(`demo-invest-user:${email.trim().toLowerCase()}`)
+  const bytes = hash.slice(0, 32).split('')
+  bytes[12] = '5'
+  bytes[16] = ((Number.parseInt(bytes[16], 16) & 0x3) | 0x8).toString(16)
+  const value = bytes.join('')
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`
+}
+
 // ── Extract field with aliases ────────────────────────────────────────────────
 // HubSpot stuurt waarden zowel vlak als onder `properties`, en propertywaarden
 // kunnen een `{ value }`-object zijn. Normaliseer al die vormen zodat e-mail,
@@ -248,7 +257,10 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     existingOwnerId = (existing.hubspot_owner_id as string | null)?.trim() || null
     console.log(`[v0] account-aanmaken: bestaand account hergebruikt voor ${email} (id=${userId}, geactiveerd=${Boolean(existing.activated_at)})`)
   } else {
-    const newId = crypto.randomUUID()
+    // Een genormaliseerd e-mailadres levert altijd hetzelfde UUID op. Daardoor
+    // botsen gelijktijdige website- en HubSpot-webhooks op dezelfde primary key,
+    // ook wanneer de database-index op lower(email) nog niet is uitgerold.
+    const newId = await stableUserIdForEmail(email)
     const { error: insertError } = await supabase
       .from('demo_invest_users')
       .insert({

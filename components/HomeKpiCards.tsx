@@ -84,7 +84,7 @@ export function HomeKpiCards() {
         <div className="min-w-0">
           <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Volgende editie</p>
           <p className="truncate text-xl font-bold leading-tight">
-            {nextEdition ? `${nextEdition.availablePercentage}% vrij` : '—'}
+            {nextEdition ? `al ${nextEdition.filledPercentage}% vol` : '—'}
           </p>
           <p className="truncate text-[11px] text-muted-foreground">
             {nextEdition?.title ?? 'Live editie niet beschikbaar'}
