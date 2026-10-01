@@ -193,9 +193,13 @@ export async function GET(req: NextRequest) {
     }
     const callState = callStates.get(user.id)
     const storedOwnerId = ((callState?.contact_owner_email ?? user.hubspot_owner_id) as string | null | undefined)?.trim() || null
-    const ownerId = Object.prototype.hasOwnProperty.call(hubSpotOwnersByEmail, email)
-      ? hubSpotOwnersByEmail[email]
-      : storedOwnerId
+    const hubSpotRecordFound = Object.prototype.hasOwnProperty.call(hubSpotOwnersByEmail, email)
+    const ownerId = hubSpotRecordFound ? hubSpotOwnersByEmail[email] : storedOwnerId
+    const leadOwnerStatus = ownerId
+      ? 'toegewezen'
+      : hubSpotRecordFound
+        ? 'wordt_toegewezen'
+        : 'niet_beschikbaar'
 
     return {
       ...user,
@@ -203,6 +207,7 @@ export async function GET(req: NextRequest) {
       ...tracking,
       hubspot_owner_id: ownerId,
       contact_owner_email: ownerId,
+      lead_owner_status: leadOwnerStatus,
       opvolging_actief: !followUpDisabledUserIds.has(user.id),
       instroom: instroomByEmail.get(email) ?? 'onbekend',
     }

@@ -20,6 +20,8 @@ interface AdminUser extends DemoUser {
   funnel?: DemoUserFunnel
   /** Numerieke HubSpot owner-ID — wordt via bookingOwners naar een naam vertaald. */
   hubspot_owner_id?: string | null
+  /** Live status van de ownerkoppeling uit de HubSpot API. */
+  lead_owner_status?: 'toegewezen' | 'wordt_toegewezen' | 'niet_beschikbaar'
   /** Herkomst van het account, server-side bepaald uit de eerste bekende instroom. */
   instroom?: 'vermogenstest' | 'discovery' | 'onbekend'
   // Live afgeleide call-status en opvolgvlag — server-side samengevoegd in /api/admin/data.
@@ -752,7 +754,7 @@ export default function AdminPage() {
     }
 
     // Lijst met accountmanagers (lead owners) voor het dropdownfilter. Accounts
-    // zonder eigenaar vallen onder 'Round robin'.
+    // zonder definitieve API-toewijzing blijven als aparte status zichtbaar.
     const accountManagers = Array.from(
       new Set(users.map(u => (u.hubspot_owner_id ?? '').trim()).filter(Boolean))
     ).sort((a, b) => ownerName(a).localeCompare(ownerName(b)))
@@ -879,7 +881,7 @@ export default function AdminPage() {
                 aria-label="Filter op accountmanager"
               >
                 <option value="">Alle accountmanagers</option>
-                <option value="__roundrobin__">Round robin (geen eigenaar)</option>
+                  <option value="__roundrobin__">Nog niet toegewezen / niet beschikbaar</option>
                 {accountManagers.map(owner => (
                   <option key={owner} value={owner}>{ownerName(owner)}</option>
                 ))}
@@ -1006,11 +1008,13 @@ export default function AdminPage() {
                                 : <span style={{ color: 'rgba(13,15,20,0.3)' }}>—</span>}
                           </td>
 
-                          {/* Lead owner (accountmanager) — leeg = round robin */}
+                          {/* Lead owner (accountmanager) — altijd met expliciete API-status. */}
                           <td className="px-4 py-3 whitespace-nowrap font-medium" style={{ color: '#0d0f14' }}>
                             {u.hubspot_owner_id
                               ? ownerName(u.hubspot_owner_id)
-                              : <span style={{ color: 'rgba(13,15,20,0.55)' }}>Round robin</span>}
+                              : u.lead_owner_status === 'wordt_toegewezen'
+                                ? <span style={{ color: 'rgba(13,15,20,0.55)' }}>Wordt toegewezen in HubSpot</span>
+                                : <span style={{ color: 'rgba(13,15,20,0.55)' }}>Niet beschikbaar in HubSpot</span>}
                           </td>
 
                           {/* Status badge */}
