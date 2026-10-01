@@ -956,7 +956,7 @@ export default function AdminPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e8ecf4', background: '#F5F8FF' }}>
-                      {['Naam', 'E-mail', 'Instroom', 'Lead owner', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
+                      {['Naam', 'E-mail', 'Instroom', 'Vragenset', 'Lead owner', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
                         <th key={h} className="px-4 py-3 text-left font-semibold" style={{ color: 'rgba(13,15,20,0.45)' }}>{h}</th>
                       ))}
                     </tr>
@@ -995,6 +995,15 @@ export default function AdminPage() {
                                 </span>
                               )
                             })()}
+                          </td>
+
+                          {/* Interne Vermogenstest-vragenset */}
+                          <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'rgba(13,15,20,0.6)' }}>
+                            {u.vermogenstest_vragenset === 'oude_vragen'
+                              ? 'Oude vragen'
+                              : u.vermogenstest_vragenset === 'nieuwe_vragen'
+                                ? 'Nieuwe vragen'
+                                : <span style={{ color: 'rgba(13,15,20,0.3)' }}>—</span>}
                           </td>
 
                           {/* Lead owner (accountmanager) — leeg = round robin */}
@@ -1148,7 +1157,7 @@ export default function AdminPage() {
                     })}
                     {filtered.length === 0 && (
                       <tr>
-                        <td colSpan={13} className="px-4 py-8 text-center text-xs" style={{ color: 'rgba(13,15,20,0.35)' }}>
+                        <td colSpan={14} className="px-4 py-8 text-center text-xs" style={{ color: 'rgba(13,15,20,0.35)' }}>
                           Geen accounts gevonden
                         </td>
                       </tr>
