@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getAllCallUserStates } from '@/lib/call-booking-data'
 import { getHubSpotLeadOwnersByEmail, getHubSpotOwnerNames } from '@/lib/hubspot-api'
 
+export const maxDuration = 60
+
 /**
  * GET /api/admin/data
  * Returns all admin dashboard data. Requires an active admin session.
