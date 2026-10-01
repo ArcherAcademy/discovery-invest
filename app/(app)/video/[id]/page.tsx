@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   ChevronLeft, ChevronRight, CheckCircle2, Lock,
   Play, Clock, Trophy, Zap, FileText,
@@ -19,6 +19,8 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
   const { videos, progress, coreCompleted, refresh, locale, loading } = useApp()
   const tr = t(locale)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const shouldAutoPlay = searchParams.get('autoplay') === '1'
   const video = videos.find(v => v.id === id)
   const coreVideos = videos.filter(v => v.section === 'core')
   const bonusVideos = videos.filter(v => v.section === 'bonus')
@@ -173,6 +175,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                   thumbnailUrl={video.thumbnail_url}
                   completed={completed}
                   initialProgressPct={progressMap.get(video.id)?.progress_pct ?? 0}
+                  autoPlay={shouldAutoPlay}
                   nextVideoTitle={nextVideo?.title ?? null}
                   nextContentType={nextVideo?.content_type ?? null}
                   isLastVideo={isLastCoreVideo}

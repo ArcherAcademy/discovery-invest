@@ -84,6 +84,7 @@ export default function HomePage() {
       <PlatformIntroModal
         accountKey={user?.id ?? user?.email ?? null}
         isNewAccount={isNewAccount}
+        firstVideoId={coreVideos[0]?.id ?? null}
       />
 
       <p className="text-sm font-semibold text-muted-foreground">

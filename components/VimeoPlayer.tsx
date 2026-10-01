@@ -72,6 +72,7 @@ interface VimeoPlayerProps {
   thumbnailUrl?: string | null
   completed: boolean
   initialProgressPct?: number
+  autoPlay?: boolean
   nextVideoTitle?: string | null   // null = last video
   nextContentType?: 'video' | 'pdf' | null
   isLastVideo?: boolean
@@ -87,6 +88,7 @@ export default function VimeoPlayer({
   thumbnailUrl: fallbackThumbnailUrl = null,
   completed,
   initialProgressPct = 0,
+  autoPlay = false,
   nextVideoTitle,
   nextContentType,
   isLastVideo,
@@ -225,7 +227,9 @@ export default function VimeoPlayer({
     // normaal zelf een iframe aan; dat verliest op sommige browsers de verwijzer.
     // Maak het iframe expliciet aan zodat embeds op het live domein betrouwbaar werken.
     const iframe = document.createElement('iframe')
-    iframe.src = vimeoUrl
+    const playerUrl = new URL(vimeoUrl)
+    if (autoPlay) playerUrl.searchParams.set('autoplay', '1')
+    iframe.src = playerUrl.toString()
     iframe.title = 'Archer Invest video'
     iframe.allow = 'autoplay; fullscreen; picture-in-picture; encrypted-media; web-share'
     iframe.allowFullscreen = true
@@ -292,6 +296,13 @@ export default function VimeoPlayer({
         if (!completed && initialProgressPct > 0 && initialProgressPct < 90) {
           await withTimeout(player.setCurrentTime(duration * (initialProgressPct / 100)), PLAYER_CALL_TIMEOUT_MS)
         }
+        if (autoPlay) {
+          try {
+            await withTimeout(player.play(), PLAYER_CALL_TIMEOUT_MS)
+          } catch {
+            // Browsers kunnen autoplay met geluid blokkeren; de posterknop blijft dan beschikbaar.
+          }
+        }
         await heartbeat()
       } catch (error) {
         console.error('[v0] Vimeo initialisatie nog niet klaar; hartslag blijft proberen:', error)
@@ -331,7 +342,7 @@ export default function VimeoPlayer({
       player.destroy().catch(() => {})
       playerRef.current = null
     }
-  }, [src, vimeoId, playerRetryKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [src, vimeoId, playerRetryKey, autoPlay]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!vimeoId) {
     return (

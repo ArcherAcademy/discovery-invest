@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
+import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
 
 const INTRO_COOKIE_PREFIX = 'archer_platform_intro_seen'
@@ -8,10 +9,13 @@ const INTRO_COOKIE_PREFIX = 'archer_platform_intro_seen'
 interface PlatformIntroModalProps {
   accountKey: string | null
   isNewAccount: boolean
+  firstVideoId: string | null
 }
 
-export default function PlatformIntroModal({ accountKey, isNewAccount }: PlatformIntroModalProps) {
+export default function PlatformIntroModal({ accountKey, isNewAccount, firstVideoId }: PlatformIntroModalProps) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
+  const hasContinuedRef = useRef(false)
   const cookieName = accountKey
     ? `${INTRO_COOKIE_PREFIX}_${accountKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`
     : null
@@ -26,11 +30,29 @@ export default function PlatformIntroModal({ accountKey, isNewAccount }: Platfor
     if (!hasSeenIntro) setOpen(true)
   }, [cookieName, isNewAccount])
 
-  function close() {
+  function markAsSeen() {
     if (cookieName) {
       document.cookie = `${cookieName}=1; Max-Age=31536000; Path=/; SameSite=Lax`
     }
+  }
+
+  function close() {
+    markAsSeen()
     setOpen(false)
+  }
+
+  function continueToFirstVideo() {
+    if (hasContinuedRef.current || !firstVideoId) return
+    hasContinuedRef.current = true
+    markAsSeen()
+    setOpen(false)
+    router.push(`/video/${firstVideoId}?autoplay=1`)
+  }
+
+  function handleTimeUpdate(event: SyntheticEvent<HTMLVideoElement>) {
+    const video = event.currentTarget
+    if (!Number.isFinite(video.duration) || video.duration <= 0) return
+    if (video.currentTime / video.duration >= 0.9) continueToFirstVideo()
   }
 
   if (!open) return null
@@ -59,6 +81,8 @@ export default function PlatformIntroModal({ accountKey, isNewAccount }: Platfor
             autoPlay
             controls
             playsInline
+            onTimeUpdate={handleTimeUpdate}
+            onEnded={continueToFirstVideo}
             className="absolute inset-0 size-full object-contain"
           />
         </div>
