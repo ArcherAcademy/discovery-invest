@@ -53,12 +53,13 @@ export default function PlatformIntroModal({ accountKey, isNewAccount }: Platfor
         </button>
 
         <div className="relative aspect-video overflow-hidden rounded-2xl bg-transparent">
-          <iframe
-            src="https://player.vimeo.com/video/1230237190?badge=0&autopause=0&player_id=0&app_id=58479"
-            title="Pop-up video"
-            allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
-            referrerPolicy="strict-origin-when-cross-origin"
-            className="absolute inset-0 size-full border-0"
+          <video
+            src="/platform-intro-subtitles.mp4"
+            aria-label="Introductievideo met ondertitels"
+            autoPlay
+            controls
+            playsInline
+            className="absolute inset-0 size-full object-contain"
           />
         </div>
       </div>
