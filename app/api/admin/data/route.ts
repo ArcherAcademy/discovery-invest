@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminOrMentor } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getAllCallUserStates } from '@/lib/call-booking-data'
+import { getHubSpotLeadOwnersByEmail, getHubSpotOwnerNames } from '@/lib/hubspot-api'
 
 /**
  * GET /api/admin/data
@@ -73,6 +74,17 @@ export async function GET(req: NextRequest) {
 
   const usersData = usersResult.rows
   const callStates = await getAllCallUserStates(supabase)
+
+  let hubSpotOwnersByEmail: Record<string, string | null> = {}
+  let hubSpotOwnerNames: Record<string, string> = {}
+  try {
+    ;[hubSpotOwnersByEmail, hubSpotOwnerNames] = await Promise.all([
+      getHubSpotLeadOwnersByEmail(usersData.map(user => user.email ?? '')),
+      getHubSpotOwnerNames(),
+    ])
+  } catch (error) {
+    console.error('[admin/data] HubSpot lead owners ophalen mislukt:', error)
+  }
 
   // Instroom is de eerste herkenbare ingang van een account. Classificeer alleen
   // expliciete signalen; een ontbrekende bron als "Discovery" tonen zou de
@@ -164,7 +176,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Map van HubSpot owner-id → accountmanagernaam, uit de boekingslinks.
-  const ownerNames: Record<string, string> = {}
+  const ownerNames: Record<string, string> = { ...hubSpotOwnerNames }
   for (const row of (bookingLinksData ?? []) as { hubspot_owner_id: string | null; naam: string | null }[]) {
     const id = (row.hubspot_owner_id ?? '').trim()
     if (id && row.naam) ownerNames[id] = row.naam
@@ -177,10 +189,18 @@ export async function GET(req: NextRequest) {
       vermogenstest_variant: null,
       vermogenstest_vragenset: null,
     }
+    const callState = callStates.get(user.id)
+    const storedOwnerId = ((callState?.contact_owner_email ?? user.hubspot_owner_id) as string | null | undefined)?.trim() || null
+    const ownerId = Object.prototype.hasOwnProperty.call(hubSpotOwnersByEmail, email)
+      ? hubSpotOwnersByEmail[email]
+      : storedOwnerId
+
     return {
       ...user,
-      ...callStates.get(user.id),
+      ...callState,
       ...tracking,
+      hubspot_owner_id: ownerId,
+      contact_owner_email: ownerId,
       opvolging_actief: !followUpDisabledUserIds.has(user.id),
       instroom: instroomByEmail.get(email) ?? 'onbekend',
     }
