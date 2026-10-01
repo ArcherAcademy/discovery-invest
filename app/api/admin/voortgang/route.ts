@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     for (let from = 0; ; from += batchSize) {
       const { data, error } = await supabase
         .from('demo_invest_users')
-        .select('id, email, name, activated_at, trial_expires_at, last_activity_at, created_at, vermogenstest_variant, vermogenstest_vragenset')
+        .select('id, email, name, activated_at, trial_expires_at, last_activity_at, created_at')
         .eq('role', 'user')
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
@@ -52,15 +52,35 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  async function fetchAllTrackingLogs() {
+    const rows = []
+    for (let from = 0; ; from += batchSize) {
+      const { data, error } = await supabase
+        .from('demo_invest_account_webhook_log')
+        .select('email, payload_json')
+        .in('outcome', ['created', 'reused'])
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, from + batchSize - 1)
+
+      if (error) throw error
+      rows.push(...(data ?? []))
+      if (!data || data.length < batchSize) return rows
+    }
+  }
+
   let users: Awaited<ReturnType<typeof fetchAllUsers>> = []
   let progress: Awaited<ReturnType<typeof fetchAllProgress>> = []
+  let trackingLogs: Awaited<ReturnType<typeof fetchAllTrackingLogs>> = []
   try {
     const results = await Promise.all([
       fetchAllUsers(),
       fetchAllProgress(),
+      fetchAllTrackingLogs(),
     ])
     users = results[0]
     progress = results[1]
+    trackingLogs = results[2]
   } catch (error) {
     console.error('[admin/voortgang] Volledige voortgang ophalen mislukt:', error)
     return NextResponse.json(
@@ -94,6 +114,46 @@ export async function GET(req: NextRequest) {
   const callStates = await getAllCallUserStates(supabase)
   const coreVideos = (videos ?? []).filter(v => v.section === 'core')
   const now = Date.now()
+
+  type VermogenstestTracking = {
+    vermogenstest_variant: 'A' | 'B' | null
+    vermogenstest_vragenset: 'oude_vragen' | 'nieuwe_vragen' | null
+  }
+  const trackingByEmail = new Map<string, VermogenstestTracking>()
+  const scalarText = (value: unknown): string => {
+    if (typeof value === 'string') return value.trim()
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+    if (value && typeof value === 'object' && !Array.isArray(value) && 'value' in value) {
+      return scalarText((value as { value?: unknown }).value)
+    }
+    return ''
+  }
+  for (const row of trackingLogs as { email: string | null; payload_json: Record<string, unknown> | null }[]) {
+    const payload = row.payload_json ?? {}
+    const properties = payload.properties && typeof payload.properties === 'object' && !Array.isArray(payload.properties)
+      ? payload.properties as Record<string, unknown>
+      : null
+    const sources = [payload, properties].filter((source): source is Record<string, unknown> => Boolean(source))
+    const hasTracking = sources.some(source => (
+      Object.prototype.hasOwnProperty.call(source, 'vermogenstest_variant')
+      || Object.prototype.hasOwnProperty.call(source, 'vermogenstest_vragenset')
+    ))
+    const email = (row.email ?? '').toLowerCase()
+    if (!email || !hasTracking) continue
+    const read = (key: string) => {
+      for (const source of sources) {
+        const value = scalarText(source[key])
+        if (value) return value
+      }
+      return ''
+    }
+    const variant = read('vermogenstest_variant')
+    const vragenset = read('vermogenstest_vragenset')
+    trackingByEmail.set(email, {
+      vermogenstest_variant: variant === 'A' || variant === 'B' ? variant : null,
+      vermogenstest_vragenset: vragenset === 'oude_vragen' || vragenset === 'nieuwe_vragen' ? vragenset : null,
+    })
+  }
 
   // Index progress by user_id → video_id
   type ProgressRow = { user_id: string; video_id: string; status: string; progress_pct: number; started_at: string | null; completed_at: string | null }
@@ -164,8 +224,10 @@ export async function GET(req: NextRequest) {
       id: u.id,
       email: u.email,
       name: u.name,
-      vermogenstest_variant: u.vermogenstest_variant,
-      vermogenstest_vragenset: u.vermogenstest_vragenset,
+      ...(trackingByEmail.get((u.email ?? '').toLowerCase()) ?? {
+        vermogenstest_variant: null,
+        vermogenstest_vragenset: null,
+      }),
       opvolging_actief: !followUpDisabledUserIds.has(u.id),
       activated_at: u.activated_at,
       last_activity_at: u.last_activity_at,

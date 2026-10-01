@@ -79,7 +79,12 @@ export async function GET(req: NextRequest) {
   // marketingcijfers kunstmatig verbeteren. Oudere logs blijven bruikbaar doordat
   // we de volledige tabel chronologisch en in stabiele batches lezen.
   type Instroom = 'vermogenstest' | 'discovery' | 'onbekend'
+  type VermogenstestTracking = {
+    vermogenstest_variant: 'A' | 'B' | null
+    vermogenstest_vragenset: 'oude_vragen' | 'nieuwe_vragen' | null
+  }
   const instroomByEmail = new Map<string, Exclude<Instroom, 'onbekend'>>()
+  const trackingByEmail = new Map<string, VermogenstestTracking>()
 
   const scalarText = (value: unknown): string => {
     if (typeof value === 'string') return value.trim()
@@ -132,9 +137,27 @@ export async function GET(req: NextRequest) {
       for (const row of (data ?? []) as { email: string | null; payload_json: Record<string, unknown> | null }[]) {
         const payload = row.payload_json ?? {}
         const email = (row.email ?? payloadValue(payload, 'email', 'contact_email', 'hs_associated_contact_email')).toLowerCase()
-        if (!email || instroomByEmail.has(email)) continue
-        const instroom = classifyInstroom(payload)
-        if (instroom) instroomByEmail.set(email, instroom)
+        if (!email) continue
+        if (!instroomByEmail.has(email)) {
+          const instroom = classifyInstroom(payload)
+          if (instroom) instroomByEmail.set(email, instroom)
+        }
+
+        const sources = [payload, payload.properties].filter(
+          (source): source is Record<string, unknown> => Boolean(source && typeof source === 'object' && !Array.isArray(source)),
+        )
+        const hasTracking = sources.some(source => (
+          Object.prototype.hasOwnProperty.call(source, 'vermogenstest_variant')
+          || Object.prototype.hasOwnProperty.call(source, 'vermogenstest_vragenset')
+        ))
+        if (hasTracking) {
+          const variant = payloadValue(payload, 'vermogenstest_variant')
+          const vragenset = payloadValue(payload, 'vermogenstest_vragenset')
+          trackingByEmail.set(email, {
+            vermogenstest_variant: variant === 'A' || variant === 'B' ? variant : null,
+            vermogenstest_vragenset: vragenset === 'oude_vragen' || vragenset === 'nieuwe_vragen' ? vragenset : null,
+          })
+        }
       }
       if (!data || data.length < batch) break
     }
@@ -148,12 +171,20 @@ export async function GET(req: NextRequest) {
   }
 
   const followUpDisabledUserIds = new Set((followUpDisabledData ?? []).map(row => row.user_id))
-  const users = (usersData ?? []).map(user => ({
-    ...user,
-    ...callStates.get(user.id),
-    opvolging_actief: !followUpDisabledUserIds.has(user.id),
-    instroom: instroomByEmail.get((user.email ?? '').toLowerCase()) ?? 'onbekend',
-  }))
+  const users = (usersData ?? []).map(user => {
+    const email = (user.email ?? '').toLowerCase()
+    const tracking = trackingByEmail.get(email) ?? {
+      vermogenstest_variant: null,
+      vermogenstest_vragenset: null,
+    }
+    return {
+      ...user,
+      ...callStates.get(user.id),
+      ...tracking,
+      opvolging_actief: !followUpDisabledUserIds.has(user.id),
+      instroom: instroomByEmail.get(email) ?? 'onbekend',
+    }
+  })
 
   return NextResponse.json({
     users,
