@@ -23,6 +23,16 @@ function activationError(req: NextRequest, message: string, status: number, brow
   return NextResponse.json({ ok: false, error: message }, { status })
 }
 
+function activationAlreadyUsed(req: NextRequest, browserNavigation: boolean) {
+  if (browserNavigation) {
+    return NextResponse.redirect(new URL('/login', req.url), { status: 303 })
+  }
+  return NextResponse.json(
+    { ok: false, alreadyUsed: true, error: 'Deze activatielink is al gebruikt. Log opnieuw in met je e-mailadres.' },
+    { status: 409 },
+  )
+}
+
 async function activate(req: NextRequest, token: string, browserNavigation: boolean) {
   if (!token) return activationError(req, 'Geen activatietoken gevonden.', 400, browserNavigation)
 
@@ -30,12 +40,15 @@ async function activate(req: NextRequest, token: string, browserNavigation: bool
   const tokenHash = await sha256hex(token)
   const { data: invite, error: inviteError } = await supabase
     .from('demo_invest_invites')
-    .select('id, user_id')
+    .select('id, user_id, used_at')
     .eq('token_hash', tokenHash)
     .maybeSingle()
 
   if (inviteError || !invite) {
     return activationError(req, 'Deze activatielink is ongeldig.', 400, browserNavigation)
+  }
+  if (invite.used_at) {
+    return activationAlreadyUsed(req, browserNavigation)
   }
 
   const now = new Date()
@@ -96,11 +109,6 @@ async function activate(req: NextRequest, token: string, browserNavigation: bool
     }
     funnel = funnelData as DemoUserFunnel
 
-    await supabase
-      .from('demo_invest_invites')
-      .update({ used_at: nowIso })
-      .eq('id', invite.id)
-
     await cancelActivationMessages(supabase, user.id)
     await scheduleLeadTimeline(supabase, user)
 
@@ -120,12 +128,38 @@ async function activate(req: NextRequest, token: string, browserNavigation: bool
     }
   }
 
+  // Claim de link vlak vóór het aanmaken van de sessie. De voorwaarde op used_at
+  // zorgt ervoor dat ook bij twee gelijktijdige klikken slechts één verzoek
+  // automatisch kan inloggen.
+  const { data: claimedInvite, error: claimError } = await supabase
+    .from('demo_invest_invites')
+    .update({ used_at: nowIso })
+    .eq('id', invite.id)
+    .is('used_at', null)
+    .select('id')
+    .maybeSingle()
+
+  if (claimError) {
+    return activationError(req, 'Activatie mislukt. Probeer het opnieuw.', 500, browserNavigation)
+  }
+  if (!claimedInvite) {
+    return activationAlreadyUsed(req, browserNavigation)
+  }
+
   try {
     const rawToken = await createSession(user.id)
     const response = NextResponse.redirect(new URL('/home', req.url), { status: 303 })
     applySessionCookie(response, rawToken)
     return response
   } catch (error) {
+    // Als sessiecreatie faalt, geef de eenmalige link vrij zodat de gebruiker
+    // opnieuw kan proberen in plaats van permanent buitengesloten te zijn.
+    await supabase
+      .from('demo_invest_invites')
+      .update({ used_at: null })
+      .eq('id', invite.id)
+      .eq('used_at', nowIso)
+
     console.error('[activate] sessie aanmaken gefaald:', error)
     return activationError(req, 'Inloggen mislukt. Open de activatielink opnieuw.', 500, browserNavigation)
   }
