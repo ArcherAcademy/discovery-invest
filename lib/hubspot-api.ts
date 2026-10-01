@@ -180,8 +180,8 @@ const getCachedLeadOwners = unstable_cache(
 
     return ownersByEmail
   },
-  ['hubspot-lead-owners-v2'],
-  { revalidate: 600 },
+  ['hubspot-lead-owners-v3'],
+  { revalidate: 30 },
 )
 
 const getCachedOwnerNames = unstable_cache(
