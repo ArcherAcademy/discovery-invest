@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { ArrowRight, ExternalLink, X } from 'lucide-react'
 
 const EVENT_URL = 'https://workshops.archerinvest.be'
-const INTRO_VIDEO_URL = 'https://player.vimeo.com/video/1229085246?dnt=1&title=0&byline=0&portrait=0'
+const INTRO_VIDEO_URL = 'https://player.vimeo.com/video/1232291785?badge=0&autopause=0&player_id=0&app_id=58479'
 
 interface InvestAvondUnlockModalProps {
   open: boolean
@@ -59,9 +59,10 @@ export default function InvestAvondUnlockModal({ open, onUnlocked, onClose }: In
         <div className="order-1 flex aspect-video bg-foreground sm:order-2 sm:aspect-auto sm:min-h-full">
           <iframe
             src={INTRO_VIDEO_URL}
-            title="Wat is een kennismaking event?"
+            title="Video 0 - Pop-up (met ondertitels)"
             className="h-full min-h-56 w-full"
-            allow="autoplay; fullscreen; picture-in-picture"
+            allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+            referrerPolicy="strict-origin-when-cross-origin"
             allowFullScreen
           />
         </div>
