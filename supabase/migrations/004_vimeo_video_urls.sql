@@ -4,7 +4,7 @@
 -- Video 5 intentionally omitted (ID not yet available).
 -- ============================================================
 
-UPDATE demo_invest_videos SET video_url = 'https://player.vimeo.com/video/1216350623' WHERE section = 'core' AND order_no = 1;
+UPDATE demo_invest_videos SET video_url = 'https://player.vimeo.com/video/1232291315?badge=0&autopause=0&player_id=0&app_id=58479' WHERE section = 'core' AND order_no = 1;
 UPDATE demo_invest_videos SET video_url = 'https://player.vimeo.com/video/1216350621' WHERE section = 'core' AND order_no = 2;
 UPDATE demo_invest_videos SET video_url = 'https://player.vimeo.com/video/1216350622' WHERE section = 'core' AND order_no = 3;
 UPDATE demo_invest_videos SET video_url = 'https://player.vimeo.com/video/1216350624' WHERE section = 'core' AND order_no = 4;
