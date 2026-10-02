@@ -93,6 +93,15 @@ function escapeLike(value: string): string {
   return value.replace(/([\\%_])/g, '\\$1')
 }
 
+function mistVermogenstestKolom(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  const message = error.message?.toLowerCase() ?? ''
+  return error.code === 'PGRST204'
+    || message.includes('lead_flow')
+    || message.includes('vermogenstest_variant')
+    || message.includes('vermogenstest_vragenset')
+}
+
 // ── DB log helper (nooit blocking, nooit fatal) ───────────────────────────────
 async function logWebhookCall(opts: {
   supabase: ReturnType<typeof createAdminClient>
@@ -189,6 +198,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   }
 
   const name = [voornaam, achternaam].filter(Boolean).join(' ') || email.split('@')[0]
+  const leadFlow = pick(body, 'lead_flow') || null
   const variantRaw = pick(body, 'vermogenstest_variant')
   const vragensetRaw = pick(body, 'vermogenstest_vragenset')
   const vermogenstestVariant = variantRaw === 'A' || variantRaw === 'B' ? variantRaw : null
@@ -286,18 +296,33 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     // botsen gelijktijdige website- en HubSpot-webhooks op dezelfde primary key,
     // ook wanneer de database-index op lower(email) nog niet is uitgerold.
     const newId = await stableUserIdForEmail(email)
-    const { error: insertError } = await supabase
+    const basisGebruiker = {
+      id: newId,
+      email,
+      name,
+      role: 'user',
+      locale: 'nl',
+      whatsapp_opt_in: false,
+      created_at: new Date().toISOString(),
+      activated_at: null,
+    }
+    let { error: insertError } = await supabase
       .from('demo_invest_users')
       .insert({
-        id: newId,
-        email,
-        name,
-        role: 'user',
-        locale: 'nl',
-        whatsapp_opt_in: false,
-        created_at: new Date().toISOString(),
-        activated_at: null,
+        ...basisGebruiker,
+        lead_flow: leadFlow,
+        vermogenstest_variant: vermogenstestVariant,
+        vermogenstest_vragenset: vermogenstestVragenset,
       })
+
+    // Houd accountaanmaak beschikbaar zolang de migratie nog niet op een oudere
+    // omgeving is uitgerold. De volledige payload blijft in het webhooklog staan
+    // en wordt door de migratie achteraf gebackfilld.
+    if (mistVermogenstestKolom(insertError)) {
+      console.warn('[v0] account-aanmaken: trackingkolommen ontbreken nog; account wordt zonder trackingkolommen aangemaakt')
+      const fallbackInsert = await supabase.from('demo_invest_users').insert(basisGebruiker)
+      insertError = fallbackInsert.error
+    }
 
     if (insertError) {
       // Unieke index op lower(email): bij twee (bijna) gelijktijdige webhooks
@@ -337,10 +362,43 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     }
   }
 
-  // De volledige Lovable-payload, inclusief variant, vragenset en antwoorden,
-  // wordt aan het einde van deze flow opgeslagen in het webhooklog. We schrijven
-  // deze velden niet ook naar demo_invest_users: oudere live schema's hebben die
-  // kolommen niet, waardoor anders de volledige accountaanmaak wordt geblokkeerd.
+  // Bij een hergebruikte gebruiker vullen we uitsluitend lege trackingvelden
+  // aan. Bestaande waarden worden nooit overschreven.
+  if (outcome === 'reused' && (leadFlow || (vermogenstestVariant && vermogenstestVragenset))) {
+    const { data: bestaandeTracking, error: trackingError } = await supabase
+      .from('demo_invest_users')
+      .select('lead_flow, vermogenstest_variant, vermogenstest_vragenset')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (trackingError && !mistVermogenstestKolom(trackingError)) {
+      console.error('[v0] account-aanmaken: bestaande tracking ophalen mislukt:', trackingError.message)
+    } else if (bestaandeTracking) {
+      const trackingUpdates: Record<string, string> = {}
+      const bestaandeVariant = bestaandeTracking.vermogenstest_variant as string | null
+      const bestaandeVragenset = bestaandeTracking.vermogenstest_vragenset as string | null
+
+      if (!bestaandeTracking.lead_flow && leadFlow) trackingUpdates.lead_flow = leadFlow
+      if (vermogenstestVariant && vermogenstestVragenset) {
+        if (!bestaandeVariant && (!bestaandeVragenset || bestaandeVragenset === vermogenstestVragenset)) {
+          trackingUpdates.vermogenstest_variant = vermogenstestVariant
+        }
+        if (!bestaandeVragenset && (!bestaandeVariant || bestaandeVariant === vermogenstestVariant)) {
+          trackingUpdates.vermogenstest_vragenset = vermogenstestVragenset
+        }
+      }
+
+      if (Object.keys(trackingUpdates).length > 0) {
+        const { error: trackingUpdateError } = await supabase
+          .from('demo_invest_users')
+          .update(trackingUpdates)
+          .eq('id', userId)
+        if (trackingUpdateError) {
+          console.error('[v0] account-aanmaken: lege trackingvelden aanvullen mislukt:', trackingUpdateError.message)
+        }
+      }
+    }
+  }
 
   // Owner alleen invullen als die nog leeg is — nooit een bestaande owner
   // overschrijven, en nooit activatie/trial/wat-dan-ook resetten. Zo kan een

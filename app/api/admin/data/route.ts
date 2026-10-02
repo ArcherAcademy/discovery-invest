@@ -184,7 +184,9 @@ export async function GET(req: NextRequest) {
       hubspot_owner_id: ownerId,
       phone: livePhoneByEmail.get(email) ?? null,
       opvolging_actief: !followUpDisabledUserIds.has(user.id),
-      instroom: instroomByEmail.get(email) ?? 'onbekend',
+      instroom: user.lead_flow === 'vermogenstest'
+        ? 'vermogenstest'
+        : instroomByEmail.get(email) ?? 'onbekend',
     }
   })
 
