@@ -81,10 +81,16 @@ export default function LoginPage() {
             boxShadow: '0 8px 48px rgba(0,0,0,0.4)',
           }}
         >
-          <form onSubmit={handleLogin} className="flex flex-col gap-4" suppressHydrationWarning>
+          <form
+            onSubmit={handleLogin}
+            className="flex flex-col gap-4"
+            autoComplete="off"
+            data-lpignore="true"
+            data-form-type="other"
+          >
 
             {/* Email */}
-            <div className="flex flex-col gap-1.5" suppressHydrationWarning>
+            <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.85)' }}>
                 E-mailadres
               </label>
@@ -93,7 +99,11 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                autoComplete="email"
+                autoComplete="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-bwignore="true"
+                data-form-type="other"
                 placeholder="naam@voorbeeld.nl"
                 className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all"
                 style={{
