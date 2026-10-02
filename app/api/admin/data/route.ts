@@ -80,7 +80,13 @@ export async function GET(req: NextRequest) {
   // marketingcijfers kunstmatig verbeteren. Oudere logs blijven bruikbaar doordat
   // we de volledige tabel chronologisch en in stabiele batches lezen.
   type Instroom = 'vermogenstest' | 'discovery' | 'onbekend'
+  type VermogenstestTracking = {
+    lead_flow: string | null
+    vermogenstest_variant: 'A' | 'B' | null
+    vermogenstest_vragenset: 'oude_vragen' | 'nieuwe_vragen' | null
+  }
   const instroomByEmail = new Map<string, Exclude<Instroom, 'onbekend'>>()
+  const trackingByEmail = new Map<string, VermogenstestTracking>()
   const historicalOwnerByEmail = new Map<string, string>()
 
   const scalarText = (value: unknown): string => {
@@ -138,9 +144,31 @@ export async function GET(req: NextRequest) {
         const ownerId = extractHubSpotOwnerId(payload)
         if (ownerId) historicalOwnerByEmail.set(email, ownerId)
 
-        if (!instroomByEmail.has(email) && (row.outcome === 'created' || row.outcome === 'reused')) {
-          const instroom = classifyInstroom(payload)
-          if (instroom) instroomByEmail.set(email, instroom)
+        if (row.outcome === 'created' || row.outcome === 'reused') {
+          if (!instroomByEmail.has(email)) {
+            const instroom = classifyInstroom(payload)
+            if (instroom) instroomByEmail.set(email, instroom)
+          }
+
+          const leadFlow = payloadValue(payload, 'lead_flow') || null
+          const variantRaw = payloadValue(payload, 'vermogenstest_variant')
+          const vragensetRaw = payloadValue(payload, 'vermogenstest_vragenset')
+          const vermogenstestVariant = variantRaw === 'A' || variantRaw === 'B' ? variantRaw : null
+          const vermogenstestVragenset = vragensetRaw === 'oude_vragen' || vragensetRaw === 'nieuwe_vragen'
+            ? vragensetRaw
+            : null
+          const geldigeKoppeling =
+            (vermogenstestVariant === 'A' && vermogenstestVragenset === 'oude_vragen')
+            || (vermogenstestVariant === 'B' && vermogenstestVragenset === 'nieuwe_vragen')
+
+          if (leadFlow || geldigeKoppeling) {
+            const bestaand = trackingByEmail.get(email)
+            trackingByEmail.set(email, {
+              lead_flow: leadFlow ?? bestaand?.lead_flow ?? null,
+              vermogenstest_variant: geldigeKoppeling ? vermogenstestVariant : bestaand?.vermogenstest_variant ?? null,
+              vermogenstest_vragenset: geldigeKoppeling ? vermogenstestVragenset : bestaand?.vermogenstest_vragenset ?? null,
+            })
+          }
         }
       }
       if (!data || data.length < batch) break
@@ -177,14 +205,18 @@ export async function GET(req: NextRequest) {
     const storedOwnerId = ((callState?.contact_owner_email ?? user.hubspot_owner_id) as string | null | undefined)?.trim()
     const fallbackOwnerId = storedOwnerId || historicalOwnerByEmail.get(email) || null
     const ownerId = liveOwnerIdByEmail.has(email) ? liveOwnerIdByEmail.get(email) ?? null : fallbackOwnerId
+    const tracking = trackingByEmail.get(email)
 
     return {
       ...user,
       ...callState,
+      lead_flow: user.lead_flow ?? tracking?.lead_flow ?? null,
+      vermogenstest_variant: user.vermogenstest_variant ?? tracking?.vermogenstest_variant ?? null,
+      vermogenstest_vragenset: user.vermogenstest_vragenset ?? tracking?.vermogenstest_vragenset ?? null,
       hubspot_owner_id: ownerId,
       phone: livePhoneByEmail.get(email) ?? null,
       opvolging_actief: !followUpDisabledUserIds.has(user.id),
-      instroom: user.lead_flow === 'vermogenstest'
+      instroom: (user.lead_flow ?? tracking?.lead_flow) === 'vermogenstest'
         ? 'vermogenstest'
         : instroomByEmail.get(email) ?? 'onbekend',
     }

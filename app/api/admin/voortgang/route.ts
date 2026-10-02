@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     for (let from = 0; ; from += batchSize) {
       const { data, error } = await supabase
         .from('demo_invest_users')
-        .select('id, email, name, activated_at, trial_expires_at, last_activity_at, created_at, vermogenstest_variant, vermogenstest_vragenset')
+        .select('id, email, name, activated_at, trial_expires_at, last_activity_at, created_at')
         .eq('role', 'user')
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
@@ -52,15 +52,35 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  async function fetchAllAccountTracking() {
+    const rows = []
+    for (let from = 0; ; from += batchSize) {
+      const { data, error } = await supabase
+        .from('demo_invest_account_webhook_log')
+        .select('email, outcome, payload_json, created_at, id')
+        .in('outcome', ['created', 'reused'])
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, from + batchSize - 1)
+
+      if (error) throw error
+      rows.push(...(data ?? []))
+      if (!data || data.length < batchSize) return rows
+    }
+  }
+
   let users: Awaited<ReturnType<typeof fetchAllUsers>> = []
   let progress: Awaited<ReturnType<typeof fetchAllProgress>> = []
+  let accountTracking: Awaited<ReturnType<typeof fetchAllAccountTracking>> = []
   try {
     const results = await Promise.all([
       fetchAllUsers(),
       fetchAllProgress(),
+      fetchAllAccountTracking(),
     ])
     users = results[0]
     progress = results[1]
+    accountTracking = results[2]
   } catch (error) {
     console.error('[admin/voortgang] Volledige voortgang ophalen mislukt:', error)
     return NextResponse.json(
@@ -106,6 +126,25 @@ export async function GET(req: NextRequest) {
   const funnelByUser = new Map((funnels ?? []).map(f => [f.user_id, f]))
   const quizByUser = new Map((quizRows ?? []).map(q => [q.user_id, q]))
   const followUpDisabledUserIds = new Set((followUpDisabledRows ?? []).map(row => row.user_id))
+  const vermogenstestTrackingByEmail = new Map<string, {
+    variant: 'A' | 'B'
+    vragenset: 'oude_vragen' | 'nieuwe_vragen'
+  }>()
+
+  for (const row of accountTracking) {
+    const email = (row.email ?? '').trim().toLowerCase()
+    const payload = row.payload_json && typeof row.payload_json === 'object' && !Array.isArray(row.payload_json)
+      ? row.payload_json as Record<string, unknown>
+      : {}
+    const variant = payload.vermogenstest_variant
+    const vragenset = payload.vermogenstest_vragenset
+    if (!email) continue
+    if (variant === 'A' && vragenset === 'oude_vragen') {
+      vermogenstestTrackingByEmail.set(email, { variant, vragenset })
+    } else if (variant === 'B' && vragenset === 'nieuwe_vragen') {
+      vermogenstestTrackingByEmail.set(email, { variant, vragenset })
+    }
+  }
 
   // ── Per-user rows ─────────────────────────────────────────────
   const usersInPeriod = (users ?? []).filter(user => (
@@ -116,6 +155,7 @@ export async function GET(req: NextRequest) {
     const uProgress = progressByUser.get(u.id) ?? new Map()
     const funnel = funnelByUser.get(u.id)
     const callState = callStates.get(u.id)
+    const vermogenstestTracking = vermogenstestTrackingByEmail.get((u.email ?? '').trim().toLowerCase())
 
     // Always recount from DB rows
     const completedCount = coreVideos.filter(v => uProgress.get(v.id)?.status === 'completed').length
@@ -158,8 +198,8 @@ export async function GET(req: NextRequest) {
       id: u.id,
       email: u.email,
       name: u.name,
-      vermogenstest_variant: u.vermogenstest_variant,
-      vermogenstest_vragenset: u.vermogenstest_vragenset,
+      vermogenstest_variant: vermogenstestTracking?.variant ?? null,
+      vermogenstest_vragenset: vermogenstestTracking?.vragenset ?? null,
       opvolging_actief: !followUpDisabledUserIds.has(u.id),
       activated_at: u.activated_at,
       last_activity_at: u.last_activity_at,
