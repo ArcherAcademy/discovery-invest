@@ -187,7 +187,7 @@ END $$;
 INSERT INTO demo_invest_videos (order_no, section, title, description, duration_seconds, video_url)
 VALUES
   (1, 'core', 'De Why',        'Waarom zelf vermogen opbouwen noodzaak wordt: schuld, vergrijzing en inflatie als stille bedreigingen voor je financiële toekomst.', 720,  'https://player.vimeo.com/video/1232291315?badge=0&autopause=0&player_id=0&app_id=58479'),
-  (2, 'core', 'De Levensloop', 'Hoe je vermogen piekt rond je 60ste en daarna daalt zonder de juiste shift in strategie en asset-allocatie.', 840,                         'https://player.vimeo.com/video/1216350621'),
+  (2, 'core', 'De Levensloop', 'Hoe je vermogen piekt rond je 60ste en daarna daalt zonder de juiste shift in strategie en asset-allocatie.', 840,                         'https://player.vimeo.com/video/1232291854?badge=0&autopause=0&player_id=0&app_id=58479'),
   (3, 'core', 'GGR',           'Je gewogen gemiddeld rendement berekenen en waarom het in de praktijk vaak bedroevend tegenvalt.', 780,                                    'https://player.vimeo.com/video/1216350622'),
   (4, 'core', 'ETF',           'Hoe TER, dividendstructuur en domicilie je nettorendement bepalen. De kern-, satelliet- en speculatief-aanpak uitgelegd.', 900,            'https://player.vimeo.com/video/1216350624'),
   (5, 'core', 'De Invest-app', 'Al je assets in één dashboard: GGR berekenen en een 20-jaar levensprojectie in real time.', 300,                                          NULL),
