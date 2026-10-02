@@ -76,6 +76,40 @@ function pick(body: Record<string, unknown>, ...keys: string[]): string {
   return ''
 }
 
+type LeadFlow = 'vermogenstest' | 'demo' | 'onbekend'
+type VermogenstestVariant = 'A' | 'B'
+type VermogenstestVragenset = 'oude_vragen' | 'nieuwe_vragen'
+
+function normalizeLeadDetails(body: Record<string, unknown>): {
+  leadFlow: LeadFlow | null
+  variant: VermogenstestVariant | null
+  vragenset: VermogenstestVragenset | null
+} {
+  const leadFlowValue = pick(body, 'lead_flow').toLowerCase()
+  const leadFlow = ['vermogenstest', 'demo', 'onbekend'].includes(leadFlowValue)
+    ? leadFlowValue as LeadFlow
+    : null
+
+  if (leadFlow !== 'vermogenstest') {
+    return { leadFlow, variant: null, vragenset: null }
+  }
+
+  const variantValue = pick(body, 'vermogenstest_variant').toUpperCase()
+  const vragensetValue = pick(body, 'vermogenstest_vragenset').toLowerCase()
+  let variant = ['A', 'B'].includes(variantValue) ? variantValue as VermogenstestVariant : null
+  let vragenset = ['oude_vragen', 'nieuwe_vragen'].includes(vragensetValue)
+    ? vragensetValue as VermogenstestVragenset
+    : null
+
+  const expectedVragenset = variant === 'A' ? 'oude_vragen' : variant === 'B' ? 'nieuwe_vragen' : null
+  if (variant && vragenset && expectedVragenset !== vragenset) {
+    variant = null
+    vragenset = null
+  }
+
+  return { leadFlow, variant, vragenset }
+}
+
 // Escape LIKE-wildcards (% en _) zodat een e-mailadres met zo'n teken bij een
 // case-insensitieve ilike-match niet per ongeluk een ander account raakt.
 function escapeLike(value: string): string {
@@ -187,6 +221,11 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   // Een HubSpot owner-ID is numeriek. Gelijknamige marketingvelden zoals
   // `contactowner` bevatten antwoorden als "Social media" en zijn géén owner.
   const contactOwnerId = /^\d+$/.test(contactOwnerCandidate) ? contactOwnerCandidate : null
+  const {
+    leadFlow,
+    variant: vermogenstestVariant,
+    vragenset: vermogenstestVragenset,
+  } = normalizeLeadDetails(body)
 
   // ── 4. Account aanmaken of bestaand bijwerken ─────────────────────────────
   // Match op e-mailadres (case-insensitief), ONGEACHT activatiestatus. Zo maakt
@@ -229,6 +268,9 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
         role: 'user',
         locale: 'nl',
         whatsapp_opt_in: false,
+        lead_flow: leadFlow,
+        vermogenstest_variant: vermogenstestVariant,
+        vermogenstest_vragenset: vermogenstestVragenset,
         created_at: new Date().toISOString(),
         activated_at: null,
       })

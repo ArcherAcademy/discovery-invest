@@ -152,7 +152,11 @@ export async function GET(req: NextRequest) {
     ...user,
     ...callStates.get(user.id),
     opvolging_actief: !followUpDisabledUserIds.has(user.id),
-    instroom: instroomByEmail.get((user.email ?? '').toLowerCase()) ?? 'onbekend',
+    instroom: user.lead_flow === 'vermogenstest'
+      ? 'vermogenstest'
+      : user.lead_flow === 'demo'
+        ? 'discovery'
+        : instroomByEmail.get((user.email ?? '').toLowerCase()) ?? 'onbekend',
   }))
 
   return NextResponse.json({

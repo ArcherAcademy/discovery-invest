@@ -20,7 +20,7 @@ interface AdminUser extends DemoUser {
   funnel?: DemoUserFunnel
   /** Numerieke HubSpot owner-ID — wordt via bookingOwners naar een naam vertaald. */
   hubspot_owner_id?: string | null
-  /** Herkomst van het account, server-side bepaald uit de eerste bekende instroom. */
+  /** Herkomst van het account, server-side bepaald uit de opgeslagen lead-flow of eerste bekende instroom. */
   instroom?: 'vermogenstest' | 'discovery' | 'onbekend'
   // Live afgeleide call-status en opvolgvlag — server-side samengevoegd in /api/admin/data.
   call_clicked_at?: string | null
@@ -956,7 +956,7 @@ export default function AdminPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e8ecf4', background: '#F5F8FF' }}>
-                      {['Naam', 'E-mail', 'Instroom', 'Lead owner', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
+                      {['Naam', 'E-mail', 'Instroom / test', 'Lead owner', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
                         <th key={h} className="px-4 py-3 text-left font-semibold" style={{ color: 'rgba(13,15,20,0.45)' }}>{h}</th>
                       ))}
                     </tr>
@@ -985,14 +985,27 @@ export default function AdminPage() {
                             {(() => {
                               const instroom = u.instroom ?? 'onbekend'
                               return (
-                                <span
-                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                                  style={instroom === 'vermogenstest'
-                                    ? { background: 'rgba(37,0,245,0.1)', color: '#2500F5' }
-                                    : { background: '#f0f3fb', color: 'rgba(13,15,20,0.55)' }}
-                                >
-                                  {instroom === 'vermogenstest' ? 'Vermogenstest' : instroom === 'discovery' ? 'Discovery' : 'Onbekend'}
-                                </span>
+                                <>
+                                  <span
+                                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                                    style={instroom === 'vermogenstest'
+                                      ? { background: 'rgba(37,0,245,0.1)', color: '#2500F5' }
+                                      : { background: '#f0f3fb', color: 'rgba(13,15,20,0.55)' }}
+                                  >
+                                    {instroom === 'vermogenstest' ? 'Vermogenstest' : instroom === 'discovery' ? 'Discovery' : 'Onbekend'}
+                                  </span>
+                                  {instroom === 'vermogenstest' && (u.vermogenstest_variant || u.vermogenstest_vragenset) && (
+                                    <span className="mt-1 block text-[10px]" style={{ color: 'rgba(13,15,20,0.55)' }}>
+                                      {u.vermogenstest_variant ? `Variant ${u.vermogenstest_variant}` : 'Variant onbekend'}
+                                      {' · '}
+                                      {u.vermogenstest_vragenset === 'oude_vragen'
+                                        ? 'Oude vragenset'
+                                        : u.vermogenstest_vragenset === 'nieuwe_vragen'
+                                          ? 'Nieuwe vragenset'
+                                          : 'Vragenset onbekend'}
+                                    </span>
+                                  )}
+                                </>
                               )
                             })()}
                           </td>

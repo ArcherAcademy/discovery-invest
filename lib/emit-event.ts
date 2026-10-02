@@ -35,6 +35,8 @@ export async function emitEvent(opts: EmitEventOptions): Promise<void> {
     locale: user.locale ?? 'nl',
     timestamp: new Date().toISOString(),
     whatsapp_opt_in: user.whatsapp_opt_in ?? false,
+    lead_flow: user.lead_flow ?? null,
+    vermogenstest_variant: user.vermogenstest_variant ?? null,
     videos_completed_count: funnel?.videos_completed_count ?? 0,
     next_unwatched_video: nextVideo
       ? { id: nextVideo.id, order_no: nextVideo.order_no, title: nextVideo.title }

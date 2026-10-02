@@ -494,6 +494,8 @@ async function attemptFire(
   workflow: hubspotCode,
   email:    user.email,
   naam:     user.name ?? '',
+  lead_flow: user.lead_flow ?? null,
+  vermogenstest_variant: user.vermogenstest_variant ?? null,
   contact_owner_email: callState.contact_owner_email,
   appointment_url: booking?.booking_url ?? null,
   appointment_owner_name: booking?.owner_name ?? null,
@@ -536,6 +538,8 @@ async function attemptFire(
     hubspot_code:    HUBSPOT_CODE[workflow.naam] ?? workflow.naam,
     contact_email:   user.email,
     naam:            user.name ?? '',
+    lead_flow:       user.lead_flow ?? null,
+    vermogenstest_variant: user.vermogenstest_variant ?? null,
     timestamp:       new Date().toISOString(),
     ...extraPayload,
   }
