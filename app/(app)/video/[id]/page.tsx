@@ -188,6 +188,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                   nextVideoTitle={nextVideo?.title ?? null}
                   nextContentType={nextVideo?.content_type ?? null}
                   isLastVideo={isLastCoreVideo}
+                  requireEndedForCompletion={isLastCoreVideo}
                   onCompleted={handleCompleted}
                   onAutoNext={() => {
                     if (isLastCoreVideo && !investAvondGeclaimd) {

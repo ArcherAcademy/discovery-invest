@@ -76,6 +76,7 @@ interface VimeoPlayerProps {
   nextVideoTitle?: string | null   // null = last video
   nextContentType?: 'video' | 'pdf' | null
   isLastVideo?: boolean
+  requireEndedForCompletion?: boolean
   onUnlockNext?: () => void
   onRealDuration?: (seconds: number) => void
   onCompleted?: () => void
@@ -92,6 +93,7 @@ export default function VimeoPlayer({
   nextVideoTitle,
   nextContentType,
   isLastVideo,
+  requireEndedForCompletion = false,
   onUnlockNext,
   onRealDuration,
   onCompleted,
@@ -252,8 +254,8 @@ export default function VimeoPlayer({
       if (!Number.isFinite(percent) || percent < 0) return
       if (percent > 0) registerStarted()
 
-      // Completion is checked on every event/poll, before 10%-step throttling.
-      if (percent >= 0.9) {
+      // De laatste kernvideo telt pas wanneer Vimeo daadwerkelijk het einde meldt.
+      if (percent >= 0.9 && !requireEndedForCompletion) {
         void doComplete('threshold')
         return
       }
@@ -434,7 +436,7 @@ export default function VimeoPlayer({
                 <ExternalLink size={16} />
                 Open in Vimeo
               </a>
-              {!completed && (
+              {!completed && !requireEndedForCompletion && (
                 <button
                   type="button"
                   onClick={() => doComplete('manual')}
