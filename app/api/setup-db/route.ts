@@ -191,7 +191,7 @@ VALUES
   (3, 'core', 'GGR',           'Je gewogen gemiddeld rendement berekenen en waarom het in de praktijk vaak bedroevend tegenvalt.', 780,                                    'https://player.vimeo.com/video/1232291929?badge=0&autopause=0&player_id=0&app_id=58479'),
   (4, 'core', 'ETF',           'Hoe TER, dividendstructuur en domicilie je nettorendement bepalen. De kern-, satelliet- en speculatief-aanpak uitgelegd.', 900,            'https://player.vimeo.com/video/1232291971?badge=0&autopause=0&player_id=0&app_id=58479'),
   (5, 'core', 'De Invest-app', 'Al je assets in één dashboard: GGR berekenen en een 20-jaar levensprojectie in real time.', 300, 'https://player.vimeo.com/video/1232290182?badge=0&autopause=0&player_id=0&app_id=58479'),
-  (6, 'core', 'De Oplossing',  'Hoe de 4-daagse masterclass en de Invest-app samen één samenhangend systeem vormen voor structureel vermogensopbouw.', 750,                'https://player.vimeo.com/video/1216351086'),
+  (6, 'core', 'De Oplossing',  'Hoe de 4-daagse masterclass en de Invest-app samen één samenhangend systeem vormen voor structureel vermogensopbouw.', 750,                'https://player.vimeo.com/video/1232291988?badge=0&autopause=0&player_id=0&app_id=58479'),
   (7, 'bonus', 'Fragment dag 1 van de 4-daagse', 'Een exclusief fragment uit de eerste dag van de live masterclass: de fundamenten van je vermogensstrategie.', 1080,     NULL),
   (8, 'bonus', 'Uitgebreide ETF-gids',            'Verdiepende analyse van ETF-selectie, rebalancing, belastingoptimalisatie en domiciliekeuze.', 1320,                   NULL),
   (9, 'bonus', 'Bonus (verrassing)',               'Een verrassende extra les die we vrijspelen voor iedereen die alle 6 kernvideo''s afgerond heeft.', 600,              NULL)
