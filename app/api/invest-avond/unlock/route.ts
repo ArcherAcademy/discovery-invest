@@ -50,6 +50,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'complete_core_videos_first' }, { status: 403 })
   }
 
+  const { data: existingFunnel, error: funnelLookupError } = await supabase
+    .from('demo_invest_user_funnel')
+    .select('invest_avond_geclaimd')
+    .eq('user_id', authUser.id)
+    .maybeSingle()
+
+  if (funnelLookupError) {
+    console.error('[invest-avond/unlock] bestaande formulierstatus ophalen mislukt:', funnelLookupError)
+    return NextResponse.json({ error: 'funnel_lookup_failed' }, { status: 500 })
+  }
+  if (existingFunnel?.invest_avond_geclaimd) {
+    return NextResponse.json({ ok: true, submitted: true, alreadySubmitted: true })
+  }
+
   let snapshot: Awaited<ReturnType<typeof getHubSpotAccountOwnerSnapshot>>
   try {
     snapshot = await getHubSpotAccountOwnerSnapshot([authUser.email])
