@@ -104,9 +104,10 @@ async function logWebhookCall(opts: {
   http_status: number
 }) {
   try {
+    const { webhook_secret: _webhookSecret, ...veiligePayload } = opts.payload_json
     await opts.supabase.from('demo_invest_account_webhook_log').insert({
       email: opts.email,
-      payload_json: opts.payload_json,
+      payload_json: veiligePayload,
       outcome: opts.outcome,
       reden: opts.reden,
       activatielink: opts.activatielink,
@@ -296,8 +297,6 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
         whatsapp_opt_in: false,
         created_at: new Date().toISOString(),
         activated_at: null,
-        vermogenstest_variant: vermogenstestVariant,
-        vermogenstest_vragenset: vermogenstestVragenset,
       })
 
     if (insertError) {
@@ -338,21 +337,10 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     }
   }
 
-  // Bewaar de trackingwaarden exact zoals ze in deze webhook binnenkwamen.
-  // Ontbrekende waarden blijven expliciet null; er wordt geen vragenset afgeleid.
-  const { error: trackingError } = await supabase
-    .from('demo_invest_users')
-    .update({
-      vermogenstest_variant: vermogenstestVariant,
-      vermogenstest_vragenset: vermogenstestVragenset,
-    })
-    .eq('id', userId)
-
-  if (trackingError) {
-    console.error('[v0] account-aanmaken: vermogenstesttracking opslaan mislukt:', trackingError.message)
-    await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `DB update vermogenstesttracking: ${trackingError.message}`, activatielink: null, http_status: 500 })
-    return new Response(`Database error: ${trackingError.message}`, { status: 500, headers: CORS_HEADERS })
-  }
+  // De volledige Lovable-payload, inclusief variant, vragenset en antwoorden,
+  // wordt aan het einde van deze flow opgeslagen in het webhooklog. We schrijven
+  // deze velden niet ook naar demo_invest_users: oudere live schema's hebben die
+  // kolommen niet, waardoor anders de volledige accountaanmaak wordt geblokkeerd.
 
   // Owner alleen invullen als die nog leeg is — nooit een bestaande owner
   // overschrijven, en nooit activatie/trial/wat-dan-ook resetten. Zo kan een
