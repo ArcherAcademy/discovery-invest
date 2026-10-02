@@ -1,4 +1,17 @@
 @import 'tailwindcss';
+
+@keyframes signup-banner-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0% , transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 10%, transparent); }
+}
+
+.signup-banner-cta {
+  animation: signup-banner-breathe 3.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signup-banner-cta { animation: none; }
+}
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 

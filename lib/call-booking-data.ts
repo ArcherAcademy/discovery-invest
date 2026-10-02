@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { getHubSpotOwnerName } from '@/lib/hubspot-owners'
 
 const CALL_OPENED_MARKER = '__persoonlijke_call_geopend__'
 const CALL_CLICKED_MARKER = '__persoonlijke_call_geklikt__'
@@ -333,7 +334,7 @@ export async function resolveBookingLink(
   const toResult = (link: ResolveBookingLinkRow, isFallback: boolean): BookingLinkResult => ({
     booking_url: link.booking_url!.trim(),
     owner_email: link.hubspot_owner_id,
-    owner_name: link.naam,
+    owner_name: getHubSpotOwnerName(link.hubspot_owner_id, link.naam),
     is_fallback: isFallback,
   })
 

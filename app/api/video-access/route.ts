@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { hasAppAccess } from '@/lib/access'
 
 /**
  * GET /api/video-access?videoId=<id>
@@ -17,6 +18,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 export async function GET(req: NextRequest) {
   const authUser = await getSessionUser(req)
   if (!authUser) return NextResponse.json({ allowed: false, reason: 'unauthenticated' }, { status: 401 })
+  if (!hasAppAccess(authUser)) return NextResponse.json({ allowed: false, reason: 'trial_expired' }, { status: 403 })
 
   const videoId = req.nextUrl.searchParams.get('videoId')
   if (!videoId) return NextResponse.json({ allowed: false, reason: 'missing_video_id' }, { status: 400 })
@@ -54,7 +56,7 @@ export async function GET(req: NextRequest) {
   const coreCompletedCount = coreVideos.filter(v => completedIds.has(v.id)).length
 
   if (target.section === 'bonus') {
-    if (coreCompletedCount < 6) {
+    if (coreCompletedCount < coreVideos.length) {
       return NextResponse.json({
         allowed: false,
         reason: 'bonus_locked',
@@ -81,7 +83,7 @@ export async function GET(req: NextRequest) {
       allowed: false,
       reason: 'previous_not_completed',
       previousVideoId: previousVideo.id,
-      message: `Kijk eerst de vorige video volledig af (80%+) om deze video te ontgrendelen.`,
+      message: `Kijk eerst de vorige video volledig af (90%+) om deze video te ontgrendelen.`,
     })
   }
 

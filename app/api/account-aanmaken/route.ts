@@ -3,6 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { updateCallUserState } from '@/lib/call-booking-data'
 import { emitEvent } from '@/lib/emit-event'
 import type { DemoUser } from '@/lib/types'
+import { extractHubSpotOwnerId, getHubSpotOwner } from '@/lib/hubspot-owners'
+import { scheduleLeadTimeline } from '@/lib/scheduled-messages'
 
 // ── CORS helpers ──────────────────────────────────────────────────────────────
 // Allow any origin so both the Lovable marketing site and HubSpot can call this.
@@ -45,6 +47,15 @@ async function sha256hex(raw: string): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('')
+}
+
+async function stableUserIdForEmail(email: string): Promise<string> {
+  const hash = await sha256hex(`demo-invest-user:${email.trim().toLowerCase()}`)
+  const bytes = hash.slice(0, 32).split('')
+  bytes[12] = '5'
+  bytes[16] = ((Number.parseInt(bytes[16], 16) & 0x3) | 0x8).toString(16)
+  const value = bytes.join('')
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`
 }
 
 // ── Extract field with aliases ────────────────────────────────────────────────
@@ -177,16 +188,67 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   }
 
   const name = [voornaam, achternaam].filter(Boolean).join(' ') || email.split('@')[0]
-  const contactOwnerCandidate = pick(
-    body,
-    'hubspot_owner_id',
-    'contact_owner_id',
-    'owner_id',
-    'contacteigenaar_id',
-  )
-  // Een HubSpot owner-ID is numeriek. Gelijknamige marketingvelden zoals
-  // `contactowner` bevatten antwoorden als "Social media" en zijn géén owner.
-  const contactOwnerId = /^\d+$/.test(contactOwnerCandidate) ? contactOwnerCandidate : null
+  const variantRaw = pick(body, 'vermogenstest_variant')
+  const vragensetRaw = pick(body, 'vermogenstest_vragenset')
+  const vermogenstestVariant = variantRaw === 'A' || variantRaw === 'B' ? variantRaw : null
+  const vermogenstestVragenset = vragensetRaw === 'oude_vragen' || vragensetRaw === 'nieuwe_vragen'
+    ? vragensetRaw
+    : null
+  const geldigeVermogenstestKoppeling =
+    (!vermogenstestVariant && !vermogenstestVragenset)
+    || (vermogenstestVariant === 'A' && vermogenstestVragenset === 'oude_vragen')
+    || (vermogenstestVariant === 'B' && vermogenstestVragenset === 'nieuwe_vragen')
+
+  if (variantRaw && !vermogenstestVariant || vragensetRaw && !vermogenstestVragenset || !geldigeVermogenstestKoppeling) {
+    await logWebhookCall({
+      supabase,
+      email,
+      payload_json: { ...body, _bron: bron, _origin: origin },
+      outcome: 'error',
+      reden: 'ongeldige combinatie vermogenstest_variant en vermogenstest_vragenset',
+      activatielink: null,
+      http_status: 422,
+    })
+    return new Response('Invalid vermogenstest tracking', { status: 422, headers: CORS_HEADERS })
+  }
+
+  let contactOwnerId = extractHubSpotOwnerId(body)
+
+  // Niet elke HubSpot-workflow stuurt de owner opnieuw mee. Gebruik daarom de
+  // meest recente geldige owner uit elke eerdere webhook voor hetzelfde adres.
+  if (!contactOwnerId) {
+    const { data: previousWebhooks, error: historyError } = await supabase
+      .from('demo_invest_account_webhook_log')
+      .select('payload_json')
+      .ilike('email', escapeLike(email))
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(100)
+
+    if (historyError) {
+      console.error('[v0] account-aanmaken: ownerhistoriek ophalen mislukt:', historyError.message)
+    } else {
+      for (const webhook of previousWebhooks ?? []) {
+        contactOwnerId = extractHubSpotOwnerId(webhook.payload_json)
+        if (contactOwnerId) break
+      }
+    }
+  }
+
+  const hubSpotOwner = getHubSpotOwner(contactOwnerId)
+  const payloadWithOwner = {
+    ...body,
+    ...(contactOwnerId ? { _hubspot_owner_id: contactOwnerId } : {}),
+    ...(hubSpotOwner
+      ? {
+          _hubspot_owner_name: hubSpotOwner.name,
+          _hubspot_owner_email: hubSpotOwner.email,
+          _hubspot_owner_team: hubSpotOwner.team,
+        }
+      : {}),
+    _bron: bron,
+    _origin: origin,
+  }
 
   // ── 4. Account aanmaken of bestaand bijwerken ─────────────────────────────
   // Match op e-mailadres (case-insensitief), ONGEACHT activatiestatus. Zo maakt
@@ -203,7 +265,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
 
   if (matchError) {
     console.error('[v0] account-aanmaken: lookup demo_invest_users gefaald:', matchError.message)
-    await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: `DB lookup gebruiker: ${matchError.message}`, activatielink: null, http_status: 500 })
+    await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `DB lookup gebruiker: ${matchError.message}`, activatielink: null, http_status: 500 })
     return new Response(`Database error: ${matchError.message}`, { status: 500, headers: CORS_HEADERS })
   }
 
@@ -219,7 +281,10 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     existingOwnerId = (existing.hubspot_owner_id as string | null)?.trim() || null
     console.log(`[v0] account-aanmaken: bestaand account hergebruikt voor ${email} (id=${userId}, geactiveerd=${Boolean(existing.activated_at)})`)
   } else {
-    const newId = crypto.randomUUID()
+    // Een genormaliseerd e-mailadres levert altijd hetzelfde UUID op. Daardoor
+    // botsen gelijktijdige website- en HubSpot-webhooks op dezelfde primary key,
+    // ook wanneer de database-index op lower(email) nog niet is uitgerold.
+    const newId = await stableUserIdForEmail(email)
     const { error: insertError } = await supabase
       .from('demo_invest_users')
       .insert({
@@ -231,6 +296,8 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
         whatsapp_opt_in: false,
         created_at: new Date().toISOString(),
         activated_at: null,
+        vermogenstest_variant: vermogenstestVariant,
+        vermogenstest_vragenset: vermogenstestVragenset,
       })
 
     if (insertError) {
@@ -256,12 +323,12 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
           console.log(`[v0] account-aanmaken: insert-botsing opgevangen, bestaand account hergebruikt voor ${email} (id=${userId})`)
         } else {
           console.error('[v0] account-aanmaken: unique_violation maar geen bestaand account gevonden voor', email)
-          await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
+          await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
           return new Response(`Database error: ${insertError.message}`, { status: 500, headers: CORS_HEADERS })
         }
       } else {
         console.error('[v0] account-aanmaken: insert demo_invest_users gefaald:', insertError.message, insertError.details)
-        await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
+        await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `DB insert gebruiker: ${insertError.message}`, activatielink: null, http_status: 500 })
         return new Response(`Database error: ${insertError.message}`, { status: 500, headers: CORS_HEADERS })
       }
     } else {
@@ -269,6 +336,22 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
       outcome = 'created'
       console.log(`[v0] account-aanmaken: nieuw voorlopig account aangemaakt voor ${email} (id=${userId})`)
     }
+  }
+
+  // Bewaar de trackingwaarden exact zoals ze in deze webhook binnenkwamen.
+  // Ontbrekende waarden blijven expliciet null; er wordt geen vragenset afgeleid.
+  const { error: trackingError } = await supabase
+    .from('demo_invest_users')
+    .update({
+      vermogenstest_variant: vermogenstestVariant,
+      vermogenstest_vragenset: vermogenstestVragenset,
+    })
+    .eq('id', userId)
+
+  if (trackingError) {
+    console.error('[v0] account-aanmaken: vermogenstesttracking opslaan mislukt:', trackingError.message)
+    await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `DB update vermogenstesttracking: ${trackingError.message}`, activatielink: null, http_status: 500 })
+    return new Response(`Database error: ${trackingError.message}`, { status: 500, headers: CORS_HEADERS })
   }
 
   // Owner alleen invullen als die nog leeg is — nooit een bestaande owner
@@ -339,7 +422,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
 
     if (inviteError) {
       console.error('[v0] account-aanmaken: insert demo_invest_invites gefaald:', inviteError.message)
-      await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: `DB insert invite: ${inviteError.message}`, activatielink: null, http_status: 500 })
+      await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `DB insert invite: ${inviteError.message}`, activatielink: null, http_status: 500 })
       return new Response(`Database error: ${inviteError.message}`, { status: 500, headers: CORS_HEADERS })
     }
     console.log(`[v0] account-aanmaken: nieuwe invite aangemaakt voor ${email}`)
@@ -361,6 +444,9 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     }
   }
 
+  const { data: timelineUser } = await supabase.from('demo_invest_users').select('*').eq('id', userId).single()
+  if (timelineUser) await scheduleLeadTimeline(supabase, timelineUser as DemoUser)
+
   // ── 6. Activatielink bouwen ───────────────────────────────────────────────
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
@@ -371,7 +457,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   await logWebhookCall({
     supabase,
     email,
-    payload_json: { ...body, _bron: bron, _origin: origin },
+    payload_json: payloadWithOwner,
     outcome,
     reden: null,
     activatielink: activatieLink,

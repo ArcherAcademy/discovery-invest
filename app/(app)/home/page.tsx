@@ -1,8 +1,12 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { Play } from 'lucide-react'
 import VimeoPlayer from '@/components/VimeoPlayer'
+import PlatformIntroModal from '@/components/PlatformIntroModal'
+import { HomeKpiCards } from '@/components/HomeKpiCards'
 import { HomeTrajectOverview } from '@/components/HomeTrajectOverview'
 import { VermogensavondCta } from '@/components/VermogensavondCta'
 import { useApp } from '@/components/app-context'
@@ -11,6 +15,7 @@ const VIDEO_TITLES = ['De Why', 'De Levensloop', 'GGR', 'ETF', 'De Invest-app', 
 const VIDEO_DURATIONS = [12, 18, 22, 25, 15, 20]
 
 export default function HomePage() {
+  const router = useRouter()
   const { user, videos, progress, coreCompleted, allCoreCompleted, refresh } = useApp()
 
   const coreVideos = [...videos].filter(video => video.section === 'core').sort((a, b) => a.order_no - b.order_no)
@@ -18,6 +23,8 @@ export default function HomePage() {
   const isLoading = videos.length === 0
   const firstName = user?.name?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'Investeerder'
   const videoProgressMap = new Map(progress.map(item => [item.video_id, item]))
+  const accountAgeMs = user?.created_at ? Date.now() - new Date(user.created_at).getTime() : Infinity
+  const isNewAccount = accountAgeMs >= 0 && accountAgeMs <= 7 * 24 * 60 * 60 * 1000
 
   function getStatus(videoId: string): 'not_started' | 'in_progress' | 'completed' {
     const status = videoProgressMap.get(videoId)?.status
@@ -74,6 +81,12 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
+      <PlatformIntroModal
+        accountKey={user?.id ?? user?.email ?? null}
+        isNewAccount={isNewAccount}
+        firstVideoId={coreVideos[0]?.id ?? null}
+      />
+
       <p className="text-sm font-semibold text-muted-foreground">
         Welkom terug, <span className="text-primary">{firstName}</span>
       </p>
@@ -101,19 +114,7 @@ export default function HomePage() {
                   key={featuredVideo.id}
                   src={coreVideos[featuredVideo.index]?.video_url ?? ''}
                   videoDbId={featuredVideo.id}
-                  completed={featuredVideo.status === 'completed'}
-                  initialProgressPct={featuredVideo.progressPct}
-                  nextVideoTitle={featuredNextVideo?.title ?? null}
-                  nextContentType={featuredNextVideo?.contentType ?? null}
-                  isLastVideo={featuredVideo.index === displayVideos.length - 1}
-                  onCompleted={() => refresh()}
-                  onUnlockNext={() => refresh()}
-                />
-              </div>
-            ) : (
-              <Link href={heroHref} className="group relative flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-foreground text-background">
-                <img
-                  src={
+                  thumbnailUrl={
                     featuredVideo.index === 0
                       ? '/images/video-1-thumbnail.png'
                       : featuredVideo.index === 1
@@ -124,10 +125,35 @@ export default function HomePage() {
                             ? '/video-4-thumbnail.png'
                             : featuredVideo.index === 4
                               ? '/video-5-thumbnail.png'
-                              : featuredVideo.index === 5
-                                ? '/video-6-thumbnail.png'
-                                : '/video-thumbnail.png'
+                              : '/video-6-thumbnail.png'
                   }
+                  completed={featuredVideo.status === 'completed'}
+                  initialProgressPct={featuredVideo.progressPct}
+                  nextVideoTitle={featuredNextVideo?.title ?? null}
+                  nextContentType={featuredNextVideo?.contentType ?? null}
+                  isLastVideo={featuredVideo.index === displayVideos.length - 1}
+                  onCompleted={() => refresh()}
+                  onAutoNext={() => router.push('/traject#bonusmateriaal')}
+                />
+              </div>
+            ) : (
+              <Link href={heroHref} className="group relative flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-foreground text-background">
+                <img
+                    src={
+                      featuredVideo.index === 0
+                        ? '/images/video-1-thumbnail.png'
+                        : featuredVideo.index === 1
+                          ? '/video-2-thumbnail.png'
+                          : featuredVideo.index === 2
+                            ? '/video-3-thumbnail.png'
+                            : featuredVideo.index === 3
+                              ? '/video-4-thumbnail.png'
+                              : featuredVideo.index === 4
+                                ? '/video-5-thumbnail.png'
+                                : featuredVideo.index === 5
+                                  ? '/video-6-thumbnail.png'
+                                  : '/video-thumbnail.png'
+                    }
                   alt=""
                   className="absolute inset-0 size-full object-cover opacity-45 transition-transform duration-300 group-hover:scale-105"
                 />
@@ -145,7 +171,7 @@ export default function HomePage() {
         )}
       </section>
 
-      <VermogensavondCta />
+      <HomeKpiCards />
 
       <HomeTrajectOverview
         coreVideos={displayVideos}
@@ -154,6 +180,8 @@ export default function HomePage() {
         allCoreCompleted={allCoreCompleted}
         loading={isLoading}
       />
+
+      <VermogensavondCta />
 
     </div>
   )

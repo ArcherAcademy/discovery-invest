@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminOrMentor } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getAllCallUserStates } from '@/lib/call-booking-data'
+import { extractHubSpotOwnerId, getHubSpotAccountOwnerSnapshot } from '@/lib/hubspot-owners'
 
 /**
  * GET /api/admin/data
@@ -80,6 +81,7 @@ export async function GET(req: NextRequest) {
   // we de volledige tabel chronologisch en in stabiele batches lezen.
   type Instroom = 'vermogenstest' | 'discovery' | 'onbekend'
   const instroomByEmail = new Map<string, Exclude<Instroom, 'onbekend'>>()
+  const historicalOwnerByEmail = new Map<string, string>()
 
   const scalarText = (value: unknown): string => {
     if (typeof value === 'string') return value.trim()
@@ -120,8 +122,7 @@ export async function GET(req: NextRequest) {
     for (let from = 0; ; from += batch) {
       const { data, error } = await supabase
         .from('demo_invest_account_webhook_log')
-        .select('email, payload_json')
-        .in('outcome', ['created', 'reused'])
+        .select('email, payload_json, outcome')
         .order('created_at', { ascending: true })
         .order('id', { ascending: true })
         .range(from, from + batch - 1)
@@ -129,31 +130,63 @@ export async function GET(req: NextRequest) {
         console.error('[admin/data] instroom-classificatie mislukt:', error)
         break
       }
-      for (const row of (data ?? []) as { email: string | null; payload_json: Record<string, unknown> | null }[]) {
+      for (const row of (data ?? []) as { email: string | null; payload_json: Record<string, unknown> | null; outcome: string | null }[]) {
         const payload = row.payload_json ?? {}
-        const email = (row.email ?? payloadValue(payload, 'email', 'contact_email', 'hs_associated_contact_email')).toLowerCase()
-        if (!email || instroomByEmail.has(email)) continue
-        const instroom = classifyInstroom(payload)
-        if (instroom) instroomByEmail.set(email, instroom)
+        const email = (row.email ?? payloadValue(payload, 'email', 'contact_email', 'hs_associated_contact_email')).trim().toLowerCase()
+        if (!email) continue
+
+        const ownerId = extractHubSpotOwnerId(payload)
+        if (ownerId) historicalOwnerByEmail.set(email, ownerId)
+
+        if (!instroomByEmail.has(email) && (row.outcome === 'created' || row.outcome === 'reused')) {
+          const instroom = classifyInstroom(payload)
+          if (instroom) instroomByEmail.set(email, instroom)
+        }
       }
       if (!data || data.length < batch) break
     }
   }
 
-  // Map van HubSpot owner-id → accountmanagernaam, uit de boekingslinks.
+  // HubSpot is de source of truth voor zowel de actuele contact-owner als de naam.
+  // Bij een tijdelijke API-fout blijven de opgeslagen owner en webhookhistoriek beschikbaar.
+  let liveOwnerIdByEmail = new Map<string, string | null>()
+  let livePhoneByEmail = new Map<string, string | null>()
+  let liveOwnersById = new Map<string, { name: string }>()
+  try {
+    const snapshot = await getHubSpotAccountOwnerSnapshot(
+      usersData.map(user => (user.email ?? '').trim()).filter(Boolean),
+    )
+    liveOwnerIdByEmail = snapshot.ownerIdByEmail
+    livePhoneByEmail = snapshot.phoneByEmail
+    liveOwnersById = snapshot.ownersById
+  } catch (error) {
+    console.error('[admin/data] Actuele HubSpot owners ophalen mislukt; lokale fallback wordt gebruikt:', error)
+  }
+
   const ownerNames: Record<string, string> = {}
   for (const row of (bookingLinksData ?? []) as { hubspot_owner_id: string | null; naam: string | null }[]) {
     const id = (row.hubspot_owner_id ?? '').trim()
     if (id && row.naam) ownerNames[id] = row.naam
   }
+  for (const [id, owner] of liveOwnersById) ownerNames[id] = owner.name
 
   const followUpDisabledUserIds = new Set((followUpDisabledData ?? []).map(row => row.user_id))
-  const users = (usersData ?? []).map(user => ({
-    ...user,
-    ...callStates.get(user.id),
-    opvolging_actief: !followUpDisabledUserIds.has(user.id),
-    instroom: instroomByEmail.get((user.email ?? '').toLowerCase()) ?? 'onbekend',
-  }))
+  const users = (usersData ?? []).map(user => {
+    const callState = callStates.get(user.id)
+    const email = (user.email ?? '').trim().toLowerCase()
+    const storedOwnerId = ((callState?.contact_owner_email ?? user.hubspot_owner_id) as string | null | undefined)?.trim()
+    const fallbackOwnerId = storedOwnerId || historicalOwnerByEmail.get(email) || null
+    const ownerId = liveOwnerIdByEmail.has(email) ? liveOwnerIdByEmail.get(email) ?? null : fallbackOwnerId
+
+    return {
+      ...user,
+      ...callState,
+      hubspot_owner_id: ownerId,
+      phone: livePhoneByEmail.get(email) ?? null,
+      opvolging_actief: !followUpDisabledUserIds.has(user.id),
+      instroom: instroomByEmail.get(email) ?? 'onbekend',
+    }
+  })
 
   return NextResponse.json({
     users,

@@ -3,11 +3,14 @@ import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitEvent } from '@/lib/emit-event'
 import { fireInstant } from '@/lib/workflow-engine'
+import { cancelVideoMessages, scheduleLeadTimeline, scheduleSixOfSixFollowUps } from '@/lib/scheduled-messages'
 import type { DemoUser, DemoUserFunnel, DemoVideo, DemoVideoProgress } from '@/lib/types'
+import { hasAppAccess } from '@/lib/access'
 
 export async function POST(req: NextRequest) {
   const authUser = await getSessionUser(req)
   if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!hasAppAccess(authUser)) return NextResponse.json({ error: 'Trial expired' }, { status: 403 })
   const supabase = createAdminClient()
 
   const { videoId, action, progressPct } = await req.json() as {
@@ -37,6 +40,13 @@ export async function POST(req: NextRequest) {
     supabase.from('demo_invest_user_funnel').select('*').eq('user_id', authUser.id).single(),
     supabase.from('demo_invest_videos').select('*').eq('id', videoId).single(),
   ])
+
+  if (!userData) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  }
+  if (!videoData) {
+    return NextResponse.json({ error: 'Video not found' }, { status: 404 })
+  }
 
   const user = userData as DemoUser
   const funnel = funnelData as DemoUserFunnel
@@ -89,13 +99,38 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { error: progressError } = await supabase
-    .from('demo_invest_video_progress')
-    .upsert(upsertPayload, { onConflict: 'user_id,video_id' })
+  let progressError: { message: string; details?: string | null } | null = null
+
+  if (action === 'completed') {
+    const result = await supabase
+      .from('demo_invest_video_progress')
+      .upsert(upsertPayload, { onConflict: 'user_id,video_id' })
+    progressError = result.error
+  } else {
+    // Een late started/progress-request mag een reeds voltooide video nooit terugzetten.
+    const { data: updatedRows, error: updateError } = await supabase
+      .from('demo_invest_video_progress')
+      .update(upsertPayload)
+      .eq('user_id', authUser.id)
+      .eq('video_id', videoId)
+      .neq('status', 'completed')
+      .select('video_id')
+
+    progressError = updateError
+
+    if (!progressError && (updatedRows?.length ?? 0) === 0 && !existingProgress) {
+      const insertResult = await supabase
+        .from('demo_invest_video_progress')
+        .upsert(upsertPayload, {
+          onConflict: 'user_id,video_id',
+          ignoreDuplicates: true,
+        })
+      progressError = insertResult.error
+    }
+  }
 
   if (progressError) {
-    console.error('[v0] video_progress upsert failed:', progressError.message, progressError.details)
-    // Hard fail — do NOT silently continue; caller must know the write failed
+    console.error('[v0] video_progress write failed:', progressError.message, progressError.details)
     return NextResponse.json({ error: 'progress_upsert_failed', detail: progressError.message }, { status: 500 })
   }
 
@@ -107,6 +142,8 @@ export async function POST(req: NextRequest) {
   if (activityError) {
     console.error('[v0] last_activity_at update failed:', activityError.message)
   }
+  await cancelVideoMessages(supabase, authUser.id)
+  await scheduleLeadTimeline(supabase, { ...user, last_activity_at: now.toISOString() })
 
   // Re-read all progress fresh from DB (never trust the in-memory set) to get accurate counts
   const { data: allVideos } = await supabase.from('demo_invest_videos').select('*').order('order_no')
@@ -144,9 +181,9 @@ export async function POST(req: NextRequest) {
         },
       })
 
-      if (video?.section === 'core' && completedCoreCount === 2) {
-        await emitEvent({
-          type: 'lead.qualified',
+  if (video?.section === 'core' && completedCoreCount === 1) {
+    await emitEvent({
+      type: 'lead.qualified',
           user,
           funnel: { ...funnel, videos_completed_count: completedCoreCount },
           nextVideo,
@@ -157,7 +194,7 @@ export async function POST(req: NextRequest) {
 
     // Update funnel — upsert so it works even if no funnel row exists yet
     if (video?.section === 'core') {
-      const isAllCompleted = completedCoreCount >= 6
+      const isAllCompleted = coreVideos.length > 0 && completedCoreCount >= coreVideos.length
 
       const { error: funnelError } = await supabase
         .from('demo_invest_user_funnel')
@@ -173,9 +210,15 @@ export async function POST(req: NextRequest) {
         console.error('[v0] funnel upsert failed:', funnelError.message, funnelError.details)
       }
 
-      if (isAllCompleted && !funnel?.all_completed_at) {
-        const updatedFunnel = { ...funnel, videos_completed_count: completedCoreCount, all_completed_at: now.toISOString() }
-        await emitEvent({ type: 'videos.all_completed', user, funnel: updatedFunnel, nextVideo: null, data: {} })
+  if (isAllCompleted && !funnel?.all_completed_at) {
+  const completedAt = now.toISOString()
+  const updatedFunnel = { ...funnel, videos_completed_count: completedCoreCount, all_completed_at: completedAt }
+  try {
+  await scheduleSixOfSixFollowUps(supabase, authUser.id, completedAt)
+  } catch (error) {
+  console.error('[v0] 6/6 mailopvolging plannen mislukt:', error)
+  }
+  await emitEvent({ type: 'videos.all_completed', user, funnel: updatedFunnel, nextVideo: null, data: {} })
         await emitEvent({ type: 'bonus.unlocked', user, funnel: updatedFunnel, nextVideo: null, data: {} })
         await emitEvent({ type: 'event.ticket_unlocked', user, funnel: updatedFunnel, nextVideo: null, data: {} })
         // W11 — instant: alle 6 kernvideo's bekeken

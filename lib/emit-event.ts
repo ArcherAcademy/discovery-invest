@@ -13,6 +13,7 @@ export type WebhookEventType =
   | 'bonus.video_completed'
   | 'event.ticket_unlocked'
   | 'event.booked'
+  | 'call.booked'
   | 'event.booking_cancelled'
   | 'trial.expired'
 

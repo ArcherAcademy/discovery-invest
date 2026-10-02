@@ -12,6 +12,11 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createAdminClient()
+  const periodeParam = req.nextUrl.searchParams.get('periode')
+  const periode = periodeParam === '7' || periodeParam === '30' ? periodeParam : 'alles'
+  const createdAfter = periode === 'alles'
+    ? null
+    : Date.now() - Number(periode) * 24 * 60 * 60 * 1000
   const batchSize = 1000
 
   async function fetchAllUsers() {
@@ -19,7 +24,7 @@ export async function GET(req: NextRequest) {
     for (let from = 0; ; from += batchSize) {
       const { data, error } = await supabase
         .from('demo_invest_users')
-        .select('id, email, name, activated_at, trial_expires_at, last_activity_at, created_at')
+        .select('id, email, name, activated_at, trial_expires_at, last_activity_at, created_at, vermogenstest_variant, vermogenstest_vragenset')
         .eq('role', 'user')
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
@@ -103,7 +108,11 @@ export async function GET(req: NextRequest) {
   const followUpDisabledUserIds = new Set((followUpDisabledRows ?? []).map(row => row.user_id))
 
   // ── Per-user rows ─────────────────────────────────────────────
-  const userRows = (users ?? []).map(u => {
+  const usersInPeriod = (users ?? []).filter(user => (
+    createdAfter === null || new Date(user.created_at).getTime() >= createdAfter
+  ))
+
+  const userRows = usersInPeriod.map(u => {
     const uProgress = progressByUser.get(u.id) ?? new Map()
     const funnel = funnelByUser.get(u.id)
     const callState = callStates.get(u.id)
@@ -138,23 +147,19 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
     const leadStage = funnel?.event_booked
       ? 'Afspraak geboekt'
-      : completedCount >= 2
+      : completedCount >= 1
         ? 'Gekwalificeerde lead'
-        : completedCount === 1
-          ? 'Eerste video voltooid'
-          : u.activated_at
-            ? 'Account geactiveerd'
-            : 'Account aangemaakt'
-    const leadPriority = funnel?.event_booked || completedCount >= 2
-      ? 'hoog'
-      : completedCount === 1
-        ? 'middel'
-        : 'normaal'
+        : u.activated_at
+          ? 'Account geactiveerd'
+          : 'Account aangemaakt'
+    const leadPriority = funnel?.event_booked || completedCount >= 1 ? 'hoog' : 'normaal'
 
     return {
       id: u.id,
       email: u.email,
       name: u.name,
+      vermogenstest_variant: u.vermogenstest_variant,
+      vermogenstest_vragenset: u.vermogenstest_vragenset,
       opvolging_actief: !followUpDisabledUserIds.has(u.id),
       activated_at: u.activated_at,
       last_activity_at: u.last_activity_at,
@@ -163,7 +168,7 @@ export async function GET(req: NextRequest) {
       trial_expires_at: u.trial_expires_at,
       completed_count: completedCount,
       first_video_completed_at: completedAt[0] ?? null,
-      qualified_at: completedAt[1] ?? null,
+      qualified_at: completedAt[0] ?? null,
       lead_stage: leadStage,
       lead_priority: leadPriority,
       current_video: currentVideo ? { id: currentVideo.id, order: currentVideo.order_no, title: currentVideo.title } : null,
@@ -205,8 +210,9 @@ export async function GET(req: NextRequest) {
   })
 
   // 2. Average progress_pct per video
+  const scopedUserIds = new Set(userRows.map(user => user.id))
   const avgDepthPerVideo = coreVideos.map(v => {
-    const started = (progress ?? []).filter(p => p.video_id === v.id && p.progress_pct > 0)
+    const started = (progress ?? []).filter(p => scopedUserIds.has(p.user_id) && p.video_id === v.id && p.progress_pct > 0)
     const avg = started.length === 0 ? 0 : Math.round(started.reduce((s, p) => s + p.progress_pct, 0) / started.length)
     return { videoId: v.id, order: v.order_no, title: v.title, avg_pct: avg, started_count: started.length }
   })
@@ -250,7 +256,40 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  // 4. Tempo
+  // 4. Gedetailleerde funnel per vragenset. Het totaal bevat ook demo- en
+  // onbekende leads; de twee vragensetkolommen bevatten uitsluitend hun eigen cohort.
+  const detailedMilestones: { label: string; reached: (user: typeof userRows[number]) => boolean }[] = [
+    { label: 'Account aangemaakt', reached: () => true },
+    { label: 'Account geactiveerd', reached: user => Boolean(user.activated_at) },
+    ...coreVideos.flatMap(video => [
+      {
+        label: `Video ${video.order_no} gestart`,
+        reached: (user: typeof userRows[number]) => Boolean(user.video_strip.find(item => item.videoId === video.id)?.started_at),
+      },
+      {
+        label: `Video ${video.order_no} beëindigd`,
+        reached: (user: typeof userRows[number]) => Boolean(user.video_strip.find(item => item.videoId === video.id)?.completed_at),
+      },
+    ]),
+  ]
+
+  const oudeVragenUsers = userRows.filter(user => user.vermogenstest_vragenset === 'oude_vragen')
+  const nieuweVragenUsers = userRows.filter(user => user.vermogenstest_vragenset === 'nieuwe_vragen')
+  const cohortStat = (cohort: typeof userRows, reached: (user: typeof userRows[number]) => boolean) => {
+    const count = cohort.filter(reached).length
+    return {
+      count,
+      percentage: cohort.length === 0 ? 0 : Math.round((count / cohort.length) * 100),
+    }
+  }
+  const vragensetFunnel = detailedMilestones.map(milestone => ({
+    label: milestone.label,
+    totaal: cohortStat(userRows, milestone.reached),
+    oudeVragen: cohortStat(oudeVragenUsers, milestone.reached),
+    nieuweVragen: cohortStat(nieuweVragenUsers, milestone.reached),
+  }))
+
+  // 5. Tempo
   const withFirstVideo = activatedUsers.filter(u => {
     return u.video_strip.some(s => s.started_at !== null)
   })
@@ -299,6 +338,8 @@ export async function GET(req: NextRequest) {
       dropoutPerVideo,
       avgDepthPerVideo,
       funnelSteps,
+      vragensetFunnel,
+      periode,
       tempo: { avgMinutesToFirstVideo, avgMinutesToComplete, completedAll: completedAll.length, within1Day },
       riskList,
     },

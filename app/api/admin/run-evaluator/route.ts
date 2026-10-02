@@ -12,9 +12,14 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createAdminClient()
+  const dryRun = req.nextUrl.searchParams.get('dryRun') === 'true'
+  const requestedLimit = Number(req.nextUrl.searchParams.get('limit') ?? 10)
+  const candidateLimit = dryRun && Number.isFinite(requestedLimit)
+    ? Math.max(1, Math.min(Math.trunc(requestedLimit), 25))
+    : 250
 
   try {
-    const result = await runEvaluator(supabase)
+    const result = await runEvaluator(supabase, { dryRun, candidateLimit })
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown error'

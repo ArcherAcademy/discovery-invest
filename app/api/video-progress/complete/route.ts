@@ -3,6 +3,8 @@ import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitEvent } from '@/lib/emit-event'
 import { fireInstant } from '@/lib/workflow-engine'
+import { cancelVideoMessages, scheduleLeadTimeline, scheduleSixOfSixFallback, scheduleSixOfSixFollowUps } from '@/lib/scheduled-messages'
+import { advanceHubSpotLeadStage } from '@/lib/hubspot-lead-stage'
 import type { DemoUser, DemoUserFunnel, DemoVideo } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
@@ -47,6 +49,8 @@ export async function POST(req: NextRequest) {
 
   // Update last_activity on user
   await supabase.from('demo_invest_users').update({ last_activity_at: now.toISOString() }).eq('id', authUser.id)
+  await cancelVideoMessages(supabase, authUser.id)
+  await scheduleLeadTimeline(supabase, { ...user, last_activity_at: now.toISOString() })
 
   // Recount from DB — fresh read
   const [{ data: allVideos }, { data: allProgress }] = await Promise.all([
@@ -62,6 +66,22 @@ export async function POST(req: NextRequest) {
 
   const isNewCompletion = existingProgress?.status !== 'completed'
 
+  if (isNewCompletion && video?.section === 'core' && completedCoreCount === 1) {
+    try {
+      await advanceHubSpotLeadStage(user.email, 'one_core_video')
+    } catch (error) {
+      console.error('[video-complete] HubSpot leadstage update mislukt:', error)
+    }
+  }
+
+  if (isNewCompletion && video?.section === 'core' && completedCoreCount === 6) {
+    try {
+      await scheduleSixOfSixFallback(supabase, authUser.id)
+    } catch (error) {
+      console.error('[video-complete] 6/6 stage fallback plannen mislukt:', error)
+    }
+  }
+
   if (isNewCompletion) {
     await emitEvent({
       type: 'video.completed',
@@ -71,13 +91,13 @@ export async function POST(req: NextRequest) {
       data: {
         video_id: videoId,
         video_title: video?.title,
-        stage: completedCoreCount >= 2 ? 'qualified_lead' : 'first_video_completed',
+        stage: completedCoreCount >= 1 ? 'qualified_lead' : 'first_video_completed',
       },
     })
 
-    if (video?.section === 'core' && completedCoreCount === 2) {
-      await emitEvent({
-        type: 'lead.qualified',
+  if (video?.section === 'core' && completedCoreCount === 1) {
+    await emitEvent({
+      type: 'lead.qualified',
         user,
         funnel: { ...funnel, videos_completed_count: completedCoreCount },
         nextVideo,
@@ -101,7 +121,13 @@ export async function POST(req: NextRequest) {
     if (funnelError) console.error('[complete] funnel upsert failed:', funnelError.message)
 
     if (isAllCompleted && !funnel?.all_completed_at) {
-      const updatedFunnel = { ...funnel, videos_completed_count: completedCoreCount, all_completed_at: now.toISOString() }
+      const completedAt = now.toISOString()
+      const updatedFunnel = { ...funnel, videos_completed_count: completedCoreCount, all_completed_at: completedAt }
+      try {
+        await scheduleSixOfSixFollowUps(supabase, authUser.id, completedAt)
+      } catch (error) {
+        console.error('[complete] 6/6 mailopvolging plannen mislukt:', error)
+      }
       await Promise.all([
         emitEvent({ type: 'videos.all_completed', user, funnel: updatedFunnel, nextVideo: null, data: {} }),
         emitEvent({ type: 'bonus.unlocked', user, funnel: updatedFunnel, nextVideo: null, data: {} }),
