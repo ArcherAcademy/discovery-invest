@@ -46,10 +46,11 @@ const EDITIONS: Edition[] = [
 interface InvestAvondUnlockModalProps {
   open: boolean
   onClose?: () => void
+  onSubmitted?: () => void | Promise<void>
   onViewBonus: () => void
 }
 
-export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: InvestAvondUnlockModalProps) {
+export default function InvestAvondUnlockModal({ open, onClose, onSubmitted, onViewBonus }: InvestAvondUnlockModalProps) {
   const [selectedEdition, setSelectedEdition] = useState<string | null>('februari-2027')
   const [confirmed, setConfirmed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -80,6 +81,7 @@ export default function InvestAvondUnlockModal({ open, onClose, onViewBonus }: I
       })
       if (!response.ok) throw new Error('submission_failed')
       setConfirmed(true)
+      void onSubmitted?.()
     } catch {
       setSubmitError('Je keuze kon niet worden verstuurd. Probeer het opnieuw.')
     } finally {

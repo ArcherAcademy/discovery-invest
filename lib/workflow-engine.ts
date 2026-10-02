@@ -475,6 +475,7 @@ export async function attemptFire(
           appointment_url: booking?.booking_url ?? null,
           appointment_owner_name: booking?.owner_name ?? null,
           appointment_link_is_fallback: booking?.is_fallback ?? null,
+          ...(typeof extraPayload.edition === 'string' ? { edition: extraPayload.edition } : {}),
         })
 
         const res = await fetch(centralUrl, {
