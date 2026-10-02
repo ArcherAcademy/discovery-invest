@@ -11,7 +11,6 @@ import {
 import { useApp } from '@/components/app-context'
 import { t } from '@/lib/i18n'
 import VimeoPlayer from '@/components/VimeoPlayer'
-import InvestAvondUnlockModal from '@/components/InvestAvondUnlockModal'
 import PdfItem from '@/components/PdfItem'
 
 
@@ -20,8 +19,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
   const { videos, progress, coreCompleted, refresh, locale, loading } = useApp()
   const tr = t(locale)
   const router = useRouter()
-  const [investAvondModalOpen, setInvestAvondModalOpen] = useState(false)
-
   const video = videos.find(v => v.id === id)
   const coreVideos = videos.filter(v => v.section === 'core')
   const bonusVideos = videos.filter(v => v.section === 'bonus')
@@ -57,7 +54,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
   const [accessChecked, setAccessChecked] = useState(false)
   useEffect(() => {
     if (!id) return
-    fetch(`/api/video-access?videoId=${id}`)
+    fetch(`/api/video-access?videoId=${id}`, { cache: 'no-store', credentials: 'include' })
       .then(r => r.json())
       .then((data) => {
         if (!data.allowed) {
@@ -66,7 +63,7 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
           setAccessChecked(true)
         }
       })
-      .catch(() => setAccessChecked(true)) // network error: allow client-side check to handle
+      .catch(() => router.replace('/traject'))
   }, [id, progress]) // re-check whenever progress changes (live unlock)
 
   const [completed, setCompleted] = useState(false)
@@ -83,7 +80,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
   function handleCompleted() {
     setCompleted(true)
     refresh()
-    if (isLastCoreVideo) setInvestAvondModalOpen(true)
   }
 
   if (!video) {
@@ -100,6 +96,15 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
     return (
       <div className="flex items-center justify-center h-64">
         <p style={{ color: 'rgba(13,15,20,0.4)' }}>Video niet gevonden.</p>
+      </div>
+    )
+  }
+
+  if (!accessChecked) {
+    return (
+      <div className="flex min-h-64 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: 'rgba(13,15,20,0.12)', borderTopColor: '#2500F5' }} />
+        <span className="sr-only">Toegang controleren...</span>
       </div>
     )
   }
@@ -165,16 +170,17 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                   key={video.id}
                   src={video.video_url}
                   videoDbId={video.id}
+                  thumbnailUrl={video.thumbnail_url}
                   completed={completed}
+                  initialProgressPct={progressMap.get(video.id)?.progress_pct ?? 0}
                   nextVideoTitle={nextVideo?.title ?? null}
                   nextContentType={nextVideo?.content_type ?? null}
                   isLastVideo={isLastCoreVideo}
                   onCompleted={handleCompleted}
-                  onUnlockNext={() => refresh()}
                   onAutoNext={() => {
-                if (isLastCoreVideo) {
-                  setInvestAvondModalOpen(true)
-                } else if (nextVideo) {
+                    if (isLastCoreVideo) {
+                      router.push('/traject#bonusmateriaal')
+                    } else if (nextVideo) {
                       router.push(`/video/${nextVideo.id}`)
                     }
                   }}
@@ -190,8 +196,8 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                 >
                   <img
                     src={
-video.order_no === 1
-                  ? '/images/video-1-thumbnail.png'
+                      video.order_no === 1
+                        ? '/images/video-1-thumbnail.png'
                         : video.order_no === 2
                           ? '/video-2-thumbnail.png'
                           : video.order_no === 3
@@ -576,11 +582,6 @@ video.order_no === 1
           </div>
         </div>
       </div>
-      <InvestAvondUnlockModal
-        open={investAvondModalOpen && isLastCoreVideo}
-        onUnlocked={refresh}
-        onClose={() => setInvestAvondModalOpen(false)}
-      />
     </div>
   )
 }

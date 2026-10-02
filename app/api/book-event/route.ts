@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitEvent } from '@/lib/emit-event'
-import { fireInstant } from '@/lib/workflow-engine'
 import type { DemoUser, DemoUserFunnel } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
@@ -66,14 +65,6 @@ export async function POST(req: NextRequest) {
       nextVideo: null,
       data: { event_id: eventId },
     })
-    // W14 — instant: workshop boeking bevestigd
-    const { data: existingLogRows } = await supabase
-      .from('demo_invest_trigger_log')
-      .select('workflow_naam')
-      .eq('user_id', authUser.id)
-      .eq('status', 'verstuurd')
-    const firedNamen = new Set<string>((existingLogRows ?? []).map((r: { workflow_naam: string }) => r.workflow_naam))
-    await fireInstant(supabase, 'workshop_bevestiging', user, firedNamen, { event_id: eventId })
   } else if (action === 'cancel') {
     await supabase.from('demo_invest_event_bookings')
       .update({ status: 'cancelled' })

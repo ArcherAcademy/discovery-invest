@@ -52,5 +52,6 @@ export function hasAppAccess(
 ): boolean {
   if (!user) return false
   if (hasPermanentAccess(user.role)) return true
+  if (!user.activated_at) return false
   return !isTrialExpired(user, now)
 }

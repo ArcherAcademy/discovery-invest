@@ -29,5 +29,9 @@ export async function GET(req: NextRequest) {
     funnel: funnelData ?? null,
     progress: progressData ?? [],
     videos: videosData ?? [],
+  }, {
+    headers: {
+      'Cache-Control': 'private, no-store, max-age=0',
+    },
   })
 }

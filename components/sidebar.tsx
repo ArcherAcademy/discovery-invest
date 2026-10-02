@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
-import { Clock, Settings, LogOut, Home, PlaySquare, CalendarDays, GraduationCap, ShieldCheck } from 'lucide-react'
+import { Clock, Settings, LogOut, Home, PlaySquare, CalendarDays, GraduationCap, ShieldCheck, BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp } from './app-context'
 import { SidebarCallStatus } from './SidebarCallStatus'
@@ -33,15 +33,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         { label: tr.nav.traject, href: '/traject', icon: <PlaySquare size={16} /> },
         {
           label: tr.nav.events,
-          href: 'https://workshops.archerinvest.be',
+          href: '/kennismakingsevent',
           icon: <CalendarDays size={16} />,
-          external: true,
         },
         {
           label: tr.nav.masterclass,
-          href: 'https://archerinvest.be',
+          href: '/masterclass',
           icon: <GraduationCap size={16} />,
-          external: true,
         },
       ],
     },
@@ -50,6 +48,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       adminOnly: true,
       items: [
         { label: tr.nav.adminCenter, href: '/admin', icon: <ShieldCheck size={16} />, adminOnly: true },
+        { label: 'Analytics', href: '/admin/analytics', icon: <BarChart3 size={16} />, adminOnly: true },
       ],
     },
   ]
@@ -101,7 +100,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                         rel={item.external ? 'noopener noreferrer' : undefined}
                         aria-label={item.external ? `${item.label} openen in een nieuw tabblad` : undefined}
                         onClick={onNavigate}
-                        className="flex items-center gap-2.5 px-3 py-3 sm:py-2 rounded-full text-sm font-medium transition-all duration-150"
+                        className={cn(
+                          'flex items-center gap-2.5 px-3 py-3 sm:py-2 rounded-full text-sm font-medium transition-all duration-150',
+                        )}
                         style={
                           active
                             ? { background: '#2500F5', color: '#ffffff' }
@@ -197,15 +198,13 @@ function MobileBottomNav() {
     { label: tr.nav.traject, href: '/traject', icon: <PlaySquare size={21} /> },
     {
       label: tr.nav.events,
-      href: 'https://workshops.archerinvest.be',
+      href: '/kennismakingsevent',
       icon: <CalendarDays size={21} />,
-      external: true,
     },
     {
       label: tr.nav.masterclass,
-      href: 'https://archerinvest.be',
+      href: '/masterclass',
       icon: <GraduationCap size={21} />,
-      external: true,
     },
   ]
 
