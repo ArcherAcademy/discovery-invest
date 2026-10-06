@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fireInstant } from '@/lib/workflow-engine'
-import { scheduleOneOfSixFallback } from '@/lib/scheduled-messages'
-import { advanceHubSpotLeadStage } from '@/lib/hubspot-lead-stage'
+import { ensureHubSpotLeadStage } from '@/lib/hubspot-lead-stage'
 import { hasAppAccess } from '@/lib/access'
 
 export async function POST(req: NextRequest) {
@@ -82,20 +81,23 @@ export async function POST(req: NextRequest) {
 
   const videosCompletedCount = (completedRows ?? []).length
   const allCompleted = coreIds.length > 0 && videosCompletedCount >= coreIds.length
-  const isNewCompletion = existing?.status !== 'completed'
 
-  // ── 4. Synchroniseer 1/6 met HubSpot en plan een duurzame retry ─────────────
-  if (isNewCompletion && targetVideo.section === 'core' && videosCompletedCount === 1) {
+  // ── 4. Synchroniseer de HubSpot-stage onmiddellijk en idempotent ───────────
+  if (targetVideo.section === 'core' && videosCompletedCount === 1) {
     try {
-      await advanceHubSpotLeadStage(authUser.email, 'one_core_video')
+      await ensureHubSpotLeadStage(authUser.email, 'one_core_video')
     } catch (error) {
-      console.error('[video-complete] HubSpot 1/6-update mislukt:', error)
+      console.error('[video-complete] Directe HubSpot 1/6-update mislukt:', error)
+      return NextResponse.json({ error: 'hubspot_stage_update_failed' }, { status: 502 })
     }
+  }
 
+  if (targetVideo.section === 'core' && allCompleted) {
     try {
-      await scheduleOneOfSixFallback(supabase, authUser.id)
+      await ensureHubSpotLeadStage(authUser.email, 'six_core_videos')
     } catch (error) {
-      console.error('[video-complete] 1/6 stage fallback plannen mislukt:', error)
+      console.error('[video-complete] Directe HubSpot 6/6-update mislukt:', error)
+      return NextResponse.json({ error: 'hubspot_stage_update_failed' }, { status: 502 })
     }
   }
 

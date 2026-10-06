@@ -3,8 +3,8 @@ import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitEvent } from '@/lib/emit-event'
 import { fireInstant } from '@/lib/workflow-engine'
-import { cancelVideoMessages, scheduleLeadTimeline, scheduleOneOfSixFallback, scheduleSixOfSixFallback, scheduleSixOfSixFollowUps } from '@/lib/scheduled-messages'
-import { advanceHubSpotLeadStage } from '@/lib/hubspot-lead-stage'
+import { cancelVideoMessages, scheduleLeadTimeline, scheduleSixOfSixFollowUps } from '@/lib/scheduled-messages'
+import { ensureHubSpotLeadStage } from '@/lib/hubspot-lead-stage'
 import type { DemoUser, DemoUserFunnel, DemoVideo } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
@@ -66,25 +66,21 @@ export async function POST(req: NextRequest) {
 
   const isNewCompletion = existingProgress?.status !== 'completed'
 
-  if (isNewCompletion && video?.section === 'core' && completedCoreCount === 1) {
+  if (video?.section === 'core' && completedCoreCount === 1) {
     try {
-      await advanceHubSpotLeadStage(user.email, 'one_core_video')
+      await ensureHubSpotLeadStage(user.email, 'one_core_video')
     } catch (error) {
-      console.error('[video-complete] HubSpot leadstage update mislukt:', error)
-    }
-
-    try {
-      await scheduleOneOfSixFallback(supabase, authUser.id)
-    } catch (error) {
-      console.error('[video-complete] 1/6 stage fallback plannen mislukt:', error)
+      console.error('[video-complete] Directe HubSpot 1/6-update mislukt:', error)
+      return NextResponse.json({ error: 'hubspot_stage_update_failed' }, { status: 502 })
     }
   }
 
-  if (isNewCompletion && video?.section === 'core' && completedCoreCount === 6) {
+  if (video?.section === 'core' && isAllCompleted) {
     try {
-      await scheduleSixOfSixFallback(supabase, authUser.id)
+      await ensureHubSpotLeadStage(user.email, 'six_core_videos')
     } catch (error) {
-      console.error('[video-complete] 6/6 stage fallback plannen mislukt:', error)
+      console.error('[video-complete] Directe HubSpot 6/6-update mislukt:', error)
+      return NextResponse.json({ error: 'hubspot_stage_update_failed' }, { status: 502 })
     }
   }
 

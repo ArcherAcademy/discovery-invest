@@ -1,5 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-
 const HUBSPOT_API = 'https://api.hubapi.com'
 const LEAD_PIPELINE_ID = '3961435370'
 const LEAD_STAGE_PROPERTY = 'hs_pipeline_stage'
@@ -174,194 +172,29 @@ export async function advanceHubSpotLeadStage(email: string, trigger: LeadStageT
   return { updated: true, leadId: lead.id, fromStage: currentStage, toStage: targetStage }
 }
 
-type ReconciliationCandidate = {
-  email: string
-  trigger: LeadStageTrigger
-}
-
-type ContactWithEdition = HubSpotContact & {
-  properties?: { email?: string | null; voorkeurseditie?: string | null }
-}
-
-const RECONCILIATION_PAGE_SIZE = 1000
-const HUBSPOT_BATCH_SIZE = 100
-
-function chunks<T>(items: T[], size: number): T[][] {
-  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size))
-}
-
-async function readAllRows<T>(loadPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
-  const rows: T[] = []
-  for (let from = 0; ; from += RECONCILIATION_PAGE_SIZE) {
-    const { data, error } = await loadPage(from, from + RECONCILIATION_PAGE_SIZE - 1)
-    if (error) throw new Error(error.message)
-    const page = data ?? []
-    rows.push(...page)
-    if (page.length < RECONCILIATION_PAGE_SIZE) return rows
+export async function ensureHubSpotLeadStage(email: string, trigger: LeadStageTrigger) {
+  const result = await advanceHubSpotLeadStage(email, trigger)
+  if (!result.leadId) {
+    throw new Error(`Geen gekoppelde Discovery-lead gevonden voor ${email}`)
   }
-}
-
-async function findEditionContacts(): Promise<ContactWithEdition[]> {
-  const contacts: ContactWithEdition[] = []
-  let after: string | undefined
-
-  do {
-    const result = await hubSpotRequest<{
-      results?: ContactWithEdition[]
-      paging?: { next?: { after?: string } }
-    }>('/crm/v3/objects/contacts/search', {
-      method: 'POST',
-      body: JSON.stringify({
-        filterGroups: [{ filters: [{ propertyName: 'voorkeurseditie', operator: 'HAS_PROPERTY' }] }],
-        properties: ['email', 'voorkeurseditie'],
-        limit: 100,
-        ...(after ? { after } : {}),
-      }),
-    })
-    contacts.push(...(result.results ?? []))
-    after = result.paging?.next?.after
-  } while (after)
-
-  return contacts
-}
-
-export type HubSpotStageReconciliationResult = {
-  candidates: number
-  updated: number
-  alreadyCorrect: number
-  contactsMissing: number
-  leadsMissing: number
-  verificationFailed: number
-}
-
-export async function reconcileHubSpotLeadStages(supabase: SupabaseClient): Promise<HubSpotStageReconciliationResult> {
-  const [{ data: coreVideos, error: videosError }, users, completedProgress, funnels, editionContacts] = await Promise.all([
-    supabase.from('demo_invest_videos').select('id').eq('section', 'core'),
-    readAllRows<{ id: string; email: string }>((from, to) => supabase.from('demo_invest_users').select('id, email').not('email', 'is', null).range(from, to)),
-    readAllRows<{ user_id: string; video_id: string }>((from, to) => supabase.from('demo_invest_video_progress').select('user_id, video_id').eq('status', 'completed').range(from, to)),
-    readAllRows<{ user_id: string; all_completed_at: string | null }>((from, to) => supabase.from('demo_invest_user_funnel').select('user_id, all_completed_at').range(from, to)),
-    findEditionContacts(),
-  ])
-  if (videosError) throw new Error(videosError.message)
-
-  const coreVideoIds = new Set((coreVideos ?? []).map(video => video.id))
-  if (coreVideoIds.size === 0) throw new Error('Geen kernvideo’s gevonden voor HubSpot-reconciliatie')
-
-  const completedByUser = new Map<string, number>()
-  for (const row of completedProgress) {
-    if (!coreVideoIds.has(row.video_id)) continue
-    completedByUser.set(row.user_id, (completedByUser.get(row.user_id) ?? 0) + 1)
+  if (!result.updated && result.reason !== 'already_at_or_beyond_target') {
+    throw new Error(`HubSpot-stage niet bijgewerkt: ${result.reason ?? 'onbekende reden'}`)
   }
-  const allCompletedUsers = new Set(funnels.filter(funnel => Boolean(funnel.all_completed_at)).map(funnel => funnel.user_id))
-  const candidateByEmail = new Map<string, ReconciliationCandidate>()
 
-  for (const user of users) {
-    const email = user.email.trim().toLowerCase()
-    if (!email) continue
-    const completedCount = completedByUser.get(user.id) ?? 0
-    if (completedCount >= coreVideoIds.size || allCompletedUsers.has(user.id)) {
-      candidateByEmail.set(email, { email, trigger: 'six_core_videos' })
-    } else if (completedCount >= 1 && !candidateByEmail.has(email)) {
-      candidateByEmail.set(email, { email, trigger: 'one_core_video' })
+  const targetOrder = stageOrder.get(result.toStage)
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const verifiedLead = await hubSpotRequest<HubSpotLead>(
+      `/crm/v3/objects/leads/${encodeURIComponent(result.leadId)}?properties=${LEAD_STAGE_PROPERTY}`,
+    )
+    const verifiedStage = verifiedLead.properties?.[LEAD_STAGE_PROPERTY] ?? null
+    const verifiedOrder = verifiedStage ? stageOrder.get(verifiedStage) : undefined
+    if (targetOrder !== undefined && verifiedOrder !== undefined && verifiedOrder >= targetOrder) {
+      return { ...result, verifiedStage }
     }
+    if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)))
   }
 
-  const contactByEmail = new Map<string, ContactWithEdition>()
-  for (const contact of editionContacts) {
-    const email = contact.properties?.email?.trim().toLowerCase()
-    if (!email) continue
-    contactByEmail.set(email, contact)
-    candidateByEmail.set(email, { email, trigger: 'edition_selected' })
-  }
-
-  const unresolvedEmails = Array.from(candidateByEmail.keys()).filter(email => !contactByEmail.has(email))
-  for (const batch of chunks(unresolvedEmails, HUBSPOT_BATCH_SIZE)) {
-    const response = await hubSpotRequest<{ results?: ContactWithEdition[] }>('/crm/v3/objects/contacts/batch/read', {
-      method: 'POST',
-      body: JSON.stringify({ idProperty: 'email', properties: ['email'], inputs: batch.map(id => ({ id })) }),
-    })
-    for (const contact of response.results ?? []) {
-      const email = contact.properties?.email?.trim().toLowerCase()
-      if (email) contactByEmail.set(email, contact)
-    }
-  }
-
-  const emailByContactId = new Map(Array.from(contactByEmail.entries()).map(([email, contact]) => [contact.id, email]))
-  const leadIdsByEmail = new Map<string, string[]>()
-  for (const batch of chunks(Array.from(emailByContactId.keys()), HUBSPOT_BATCH_SIZE)) {
-    const response = await hubSpotRequest<{ results?: HubSpotAssociation[] }>('/crm/v4/associations/contacts/leads/batch/read', {
-      method: 'POST',
-      body: JSON.stringify({ inputs: batch.map(id => ({ id })) }),
-    })
-    for (const association of response.results ?? []) {
-      const email = emailByContactId.get(association.from.id)
-      if (!email) continue
-      leadIdsByEmail.set(email, (association.to ?? []).map(lead => String(lead.toObjectId ?? lead.id ?? '')).filter(Boolean))
-    }
-  }
-
-  const uniqueLeadIds = Array.from(new Set(Array.from(leadIdsByEmail.values()).flat()))
-  const leadById = new Map<string, HubSpotLead>()
-  for (const batch of chunks(uniqueLeadIds, HUBSPOT_BATCH_SIZE)) {
-    const response = await hubSpotRequest<{ results?: HubSpotLead[] }>('/crm/v3/objects/leads/batch/read', {
-      method: 'POST',
-      body: JSON.stringify({ properties: ['hs_pipeline', LEAD_STAGE_PROPERTY], inputs: batch.map(id => ({ id })) }),
-    })
-    for (const lead of response.results ?? []) leadById.set(lead.id, lead)
-  }
-
-  const updates: Array<{ id: string; properties: Record<string, string> }> = []
-  let alreadyCorrect = 0
-  let leadsMissing = 0
-
-  for (const candidate of candidateByEmail.values()) {
-    const lead = (leadIdsByEmail.get(candidate.email) ?? [])
-      .map(id => leadById.get(id))
-      .filter((item): item is HubSpotLead => item?.properties?.hs_pipeline === LEAD_PIPELINE_ID)
-      .sort((first, second) => (second.updatedAt ?? '').localeCompare(first.updatedAt ?? ''))[0]
-    if (!lead) {
-      leadsMissing += 1
-      continue
-    }
-
-    const targetStage = STAGE_BY_TRIGGER[candidate.trigger]
-    const currentStage = lead.properties?.[LEAD_STAGE_PROPERTY] ?? null
-    const currentOrder = currentStage ? stageOrder.get(currentStage) : undefined
-    const targetOrder = stageOrder.get(targetStage)
-    if (targetOrder === undefined || (currentOrder !== undefined && currentOrder >= targetOrder)) {
-      alreadyCorrect += 1
-      continue
-    }
-    updates.push({ id: lead.id, properties: { [LEAD_STAGE_PROPERTY]: targetStage } })
-  }
-
-  for (const batch of chunks(updates, HUBSPOT_BATCH_SIZE)) {
-    await hubSpotRequest('/crm/v3/objects/leads/batch/update', {
-      method: 'POST',
-      body: JSON.stringify({ inputs: batch }),
-    })
-  }
-
-  let verificationFailed = 0
-  for (const batch of chunks(updates, HUBSPOT_BATCH_SIZE)) {
-    const response = await hubSpotRequest<{ results?: HubSpotLead[] }>('/crm/v3/objects/leads/batch/read', {
-      method: 'POST',
-      body: JSON.stringify({ properties: [LEAD_STAGE_PROPERTY], inputs: batch.map(update => ({ id: update.id })) }),
-    })
-    const verifiedStages = new Map((response.results ?? []).map(lead => [lead.id, lead.properties?.[LEAD_STAGE_PROPERTY]]))
-    verificationFailed += batch.filter(update => verifiedStages.get(update.id) !== update.properties[LEAD_STAGE_PROPERTY]).length
-  }
-
-  if (verificationFailed > 0) throw new Error(`${verificationFailed} HubSpot-stageupdates konden niet worden bevestigd`)
-
-  return {
-    candidates: candidateByEmail.size,
-    updated: updates.length,
-    alreadyCorrect,
-    contactsMissing: unresolvedEmails.filter(email => !contactByEmail.has(email)).length,
-    leadsMissing,
-    verificationFailed,
-  }
+  throw new Error(`HubSpot bevestigde stage ${result.toStage} niet voor lead ${result.leadId}`)
 }
 
 export function isLeadStageTrigger(value: string): value is LeadStageTrigger {
