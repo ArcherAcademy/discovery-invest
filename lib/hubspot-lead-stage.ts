@@ -172,6 +172,31 @@ export async function advanceHubSpotLeadStage(email: string, trigger: LeadStageT
   return { updated: true, leadId: lead.id, fromStage: currentStage, toStage: targetStage }
 }
 
+export async function ensureHubSpotLeadStage(email: string, trigger: LeadStageTrigger) {
+  const result = await advanceHubSpotLeadStage(email, trigger)
+  if (!result.leadId) {
+    throw new Error(`Geen gekoppelde Discovery-lead gevonden voor ${email}`)
+  }
+  if (!result.updated && result.reason !== 'already_at_or_beyond_target') {
+    throw new Error(`HubSpot-stage niet bijgewerkt: ${result.reason ?? 'onbekende reden'}`)
+  }
+
+  const targetOrder = stageOrder.get(result.toStage)
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const verifiedLead = await hubSpotRequest<HubSpotLead>(
+      `/crm/v3/objects/leads/${encodeURIComponent(result.leadId)}?properties=${LEAD_STAGE_PROPERTY}`,
+    )
+    const verifiedStage = verifiedLead.properties?.[LEAD_STAGE_PROPERTY] ?? null
+    const verifiedOrder = verifiedStage ? stageOrder.get(verifiedStage) : undefined
+    if (targetOrder !== undefined && verifiedOrder !== undefined && verifiedOrder >= targetOrder) {
+      return { ...result, verifiedStage }
+    }
+    if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)))
+  }
+
+  throw new Error(`HubSpot bevestigde stage ${result.toStage} niet voor lead ${result.leadId}`)
+}
+
 export function isLeadStageTrigger(value: string): value is LeadStageTrigger {
   return value in STAGE_BY_TRIGGER
 }

@@ -17,8 +17,8 @@ export async function GET(req: NextRequest) {
     const supabase = createAdminClient()
     const result = await runScheduledEvaluator(supabase, 200)
     return NextResponse.json({ ok: true, ...result })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'unknown error'
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown error'
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
 }
