@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Player from '@vimeo/player'
-import { CheckCircle2, ExternalLink, FileText, Play, RefreshCw, SkipForward, Trophy, X } from 'lucide-react'
+import { CheckCircle2, ExternalLink, FileText, RefreshCw, SkipForward, Trophy, X } from 'lucide-react'
 
 function parseVimeoId(src: string): number | null {
   const m = src.match(/(?:vimeo\.com\/|video\/)(\d+)/)
@@ -398,10 +398,7 @@ export default function VimeoPlayer({
             aria-label="Video afspelen"
             className="absolute inset-0 z-10 flex items-center justify-center overflow-hidden bg-black focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-white"
           >
-            <img src={thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" />
-            <span className="relative flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl transition-transform hover:scale-105">
-              <Play size={24} fill="currentColor" className="ml-1" />
-            </span>
+        <img src={thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" />
           </button>
         )}
 
