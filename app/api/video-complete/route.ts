@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fireInstant } from '@/lib/workflow-engine'
+import { scheduleOneOfSixFallback } from '@/lib/scheduled-messages'
+import { advanceHubSpotLeadStage } from '@/lib/hubspot-lead-stage'
 import { hasAppAccess } from '@/lib/access'
 
 export async function POST(req: NextRequest) {
@@ -80,8 +82,24 @@ export async function POST(req: NextRequest) {
 
   const videosCompletedCount = (completedRows ?? []).length
   const allCompleted = coreIds.length > 0 && videosCompletedCount >= coreIds.length
+  const isNewCompletion = existing?.status !== 'completed'
 
-  // ── 4. Read current funnel to check if all_completed_at is already set ─────
+  // ── 4. Synchroniseer 1/6 met HubSpot en plan een duurzame retry ─────────────
+  if (isNewCompletion && targetVideo.section === 'core' && videosCompletedCount === 1) {
+    try {
+      await advanceHubSpotLeadStage(authUser.email, 'one_core_video')
+    } catch (error) {
+      console.error('[video-complete] HubSpot 1/6-update mislukt:', error)
+    }
+
+    try {
+      await scheduleOneOfSixFallback(supabase, authUser.id)
+    } catch (error) {
+      console.error('[video-complete] 1/6 stage fallback plannen mislukt:', error)
+    }
+  }
+
+  // ── 5. Read current funnel to check if all_completed_at is already set ─────
   const { data: existingFunnel } = await supabase
     .from('demo_invest_user_funnel')
     .select('all_completed_at')

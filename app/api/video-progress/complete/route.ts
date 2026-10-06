@@ -3,7 +3,7 @@ import { getSessionUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitEvent } from '@/lib/emit-event'
 import { fireInstant } from '@/lib/workflow-engine'
-import { cancelVideoMessages, scheduleLeadTimeline, scheduleSixOfSixFallback, scheduleSixOfSixFollowUps } from '@/lib/scheduled-messages'
+import { cancelVideoMessages, scheduleLeadTimeline, scheduleOneOfSixFallback, scheduleSixOfSixFallback, scheduleSixOfSixFollowUps } from '@/lib/scheduled-messages'
 import { advanceHubSpotLeadStage } from '@/lib/hubspot-lead-stage'
 import type { DemoUser, DemoUserFunnel, DemoVideo } from '@/lib/types'
 
@@ -71,6 +71,12 @@ export async function POST(req: NextRequest) {
       await advanceHubSpotLeadStage(user.email, 'one_core_video')
     } catch (error) {
       console.error('[video-complete] HubSpot leadstage update mislukt:', error)
+    }
+
+    try {
+      await scheduleOneOfSixFallback(supabase, authUser.id)
+    } catch (error) {
+      console.error('[video-complete] 1/6 stage fallback plannen mislukt:', error)
     }
   }
 

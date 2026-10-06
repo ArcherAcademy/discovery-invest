@@ -7,7 +7,7 @@ const ACTIVATION_WORKFLOWS = ['activatie_2u', 'activatie_24u', 'activatie_72u']
 const VIDEO_WORKFLOWS = [2, 3, 4, 5, 6].map(index => `video_${index}_herinnering`)
 const CONVERSION_WORKFLOWS = ['plaats_ligt_klaar', 'laatste_dag']
 const EXPIRY_WORKFLOWS = ['trial_verlopen', 'verloopt_5d', 'verloopt_3d', 'verloopt_1d', 'verloopt_6u']
-const STAGE_WORKFLOWS = ['lead_stage_6of6_fallback', 'lead_stage_waitlist_discovery']
+const STAGE_WORKFLOWS = ['lead_stage_1of6_fallback', 'lead_stage_6of6_fallback', 'lead_stage_waitlist_discovery']
 const SCHEDULED_EVALUATOR_CONCURRENCY = 10
 const SCHEDULED_EVALUATOR_LIMIT = 50
 const MAX_SCHEDULED_MESSAGE_ATTEMPTS = 5
@@ -126,6 +126,15 @@ export async function scheduleSixOfSixFollowUps(supabase: SupabaseClient, leadId
   if (error) throw new Error(`6/6-opvolging plannen mislukt: ${error.message}`)
 }
 
+export async function scheduleOneOfSixFallback(supabase: SupabaseClient, leadId: string) {
+  const scheduledFor = new Date(Date.now() + 5 * 60_000).toISOString()
+  const { error } = await supabase.rpc('demo_invest_schedule_messages', {
+    p_lead_id: leadId,
+    p_messages: [{ workflow: 'lead_stage_1of6_fallback', scheduled_for: scheduledFor, condition_key: 'one_core_video_completed' }],
+  })
+  if (error) throw new Error(`1/6 stage fallback plannen mislukt: ${error.message}`)
+}
+
 export async function scheduleSixOfSixFallback(supabase: SupabaseClient, leadId: string) {
   const scheduledFor = new Date(Date.now() + 5 * 60_000).toISOString()
   const { error } = await supabase.rpc('demo_invest_schedule_messages', {
@@ -189,16 +198,22 @@ export async function runScheduledEvaluator(supabase: SupabaseClient, limit = SC
           .single()
         if (userError || !user?.email) throw new Error(userError?.message ?? 'Discovery-gebruiker of e-mailadres niet gevonden')
 
-        const trigger = row.workflow === 'lead_stage_6of6_fallback' ? 'six_core_videos' : 'edition_selected'
+        const trigger = row.workflow === 'lead_stage_1of6_fallback'
+          ? 'one_core_video'
+          : row.workflow === 'lead_stage_6of6_fallback'
+            ? 'six_core_videos'
+            : 'edition_selected'
         const stageResult = await advanceHubSpotLeadStage(user.email, trigger)
-        const finalStatus = stageResult.updated || stageResult.reason === 'already_at_or_beyond_target' ? 'sent' : 'skipped'
+        if (!stageResult.updated && stageResult.reason !== 'already_at_or_beyond_target') {
+          throw new Error(`HubSpot-stage niet bijgewerkt: ${stageResult.reason ?? 'onbekende reden'}`)
+        }
         const { error: updateError } = await supabase
           .from('demo_invest_scheduled_messages')
-          .update({ status: finalStatus, sent_at: new Date().toISOString(), claim_token: null, claim_until: null })
+          .update({ status: 'sent', sent_at: new Date().toISOString(), claim_token: null, claim_until: null })
           .eq('id', row.id)
           .eq('claim_token', row.claim_token)
         if (updateError) throw updateError
-        return stageResult.updated ? 'sent' : 'skipped'
+        return 'sent'
       }
 
       const workflow = WORKFLOWS.find(item => item.naam === row.workflow)
