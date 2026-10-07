@@ -209,19 +209,37 @@ export async function mergeDuplicateHubSpotContacts(maxMerges = 50) {
       return firstCreatedAt.localeCompare(secondCreatedAt) || Number(first.id) - Number(second.id)
     })
 
-    const [primaryContact, ...duplicates] = canonicalGroup
-    for (const duplicate of duplicates) {
+    let primaryContactId = canonicalGroup[0].id
+    for (const duplicate of canonicalGroup.slice(1)) {
       if (mergedContacts >= maxMerges) {
         return { scannedContacts: contacts.length, duplicateGroups, mergedContacts, limitReached: true }
       }
-      await hubSpotRequest('/crm/objects/2026-09/contacts/merge', {
-        method: 'POST',
-        body: JSON.stringify({
-          primaryObjectId: primaryContact.id,
-          objectIdToMerge: duplicate.id,
-        }),
-      })
-      mergedContacts += 1
+
+      let duplicateContactId = duplicate.id
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          await hubSpotRequest('/crm/objects/2026-09/contacts/merge', {
+            method: 'POST',
+            body: JSON.stringify({
+              primaryObjectId: primaryContactId,
+              objectIdToMerge: duplicateContactId,
+            }),
+          })
+          mergedContacts += 1
+          break
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          const aliasMatch = message.match(/objectId=(\d+).*forward reference to (\d+)/)
+          if (!aliasMatch || attempt === 2) throw error
+
+          const [, aliasId, canonicalId] = aliasMatch
+          if (aliasId === primaryContactId) primaryContactId = canonicalId
+          else if (aliasId === duplicateContactId) duplicateContactId = canonicalId
+          else throw error
+
+          if (primaryContactId === duplicateContactId) break
+        }
+      }
     }
   }
 
