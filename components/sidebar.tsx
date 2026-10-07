@@ -45,6 +45,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           href: '/kennismakingsevent',
           icon: <CalendarDays size={16} />,
         },
+        ...(allCoreCompleted && !investAvondGeclaimd
+          ? [{ label: 'Schrijf je in', href: '/masterclass', icon: <GraduationCap size={16} /> }]
+          : []),
       ],
     },
     {
@@ -98,24 +101,38 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   const active = !item.external && (pathname === item.href || pathname.startsWith(item.href + '/'))
                   return (
                     <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        target={item.external ? '_blank' : undefined}
-                        rel={item.external ? 'noopener noreferrer' : undefined}
-                        aria-label={item.external ? `${item.label} openen in een nieuw tabblad` : undefined}
-                        onClick={onNavigate}
-                        className={cn(
-                          'flex items-center gap-2.5 px-3 py-3 sm:py-2 rounded-full text-sm font-medium transition-all duration-150',
-                        )}
-                        style={
-                          active
-                            ? { background: '#2500F5', color: '#ffffff' }
-                            : { color: 'rgba(13,15,20,0.65)' }
-                        }
-                      >
-                        <span style={{ opacity: active ? 1 : 0.6 }}>{item.icon}</span>
-                        {item.label}
-                      </Link>
+                      {item.href === '/masterclass' ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            openInvestAvondPrompt('sidebar')
+                            onNavigate?.()
+                          }}
+                          className="flex min-h-12 w-full items-center gap-2.5 rounded-full bg-primary px-4 py-3 text-left text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                        >
+                          <span aria-hidden="true">{item.icon}</span>
+                          {item.label}
+                        </button>
+                      ) : (
+                        <Link
+                          href={item.href}
+                          target={item.external ? '_blank' : undefined}
+                          rel={item.external ? 'noopener noreferrer' : undefined}
+                          aria-label={item.external ? `${item.label} openen in een nieuw tabblad` : undefined}
+                          onClick={onNavigate}
+                          className={cn(
+                            'flex items-center gap-2.5 px-3 py-3 sm:py-2 rounded-full text-sm font-medium transition-all duration-150',
+                          )}
+                          style={
+                            active
+                              ? { background: '#2500F5', color: '#ffffff' }
+                              : { color: 'rgba(13,15,20,0.65)' }
+                          }
+                        >
+                          <span style={{ opacity: active ? 1 : 0.6 }}>{item.icon}</span>
+                          {item.label}
+                        </Link>
+                      )}
                     </li>
                   )
                 })}
@@ -125,19 +142,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           )
         })}
 
-        {allCoreCompleted && !investAvondGeclaimd ? (
-          <button
-            type="button"
-            onClick={() => {
-              openInvestAvondPrompt('sidebar')
-              onNavigate?.()
-            }}
-            className="mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-[0_8px_24px_rgba(37,0,245,0.28)] transition-colors hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          >
-            <GraduationCap size={18} aria-hidden="true" />
-            Schrijf je in
-          </button>
-        ) : null}
       </nav>
 
       {/* Trial countdown + profile */}
@@ -207,7 +211,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
 function MobileBottomNav() {
   const pathname = usePathname()
-  const { user, locale } = useApp()
+  const {
+    user,
+    locale,
+    allCoreCompleted,
+    investAvondGeclaimd,
+    openInvestAvondPrompt,
+  } = useApp()
   const tr = t(locale)
   const isMentorOrAdmin = user?.role === 'admin' || user?.role === 'mentor'
 
@@ -219,6 +229,9 @@ function MobileBottomNav() {
       href: '/kennismakingsevent',
       icon: <CalendarDays size={21} />,
     },
+    ...(allCoreCompleted && !investAvondGeclaimd
+      ? [{ label: 'Schrijf je in', href: '/masterclass', icon: <GraduationCap size={21} /> }]
+      : []),
   ]
 
   if (isMentorOrAdmin) {
@@ -236,27 +249,41 @@ function MobileBottomNav() {
 
           return (
             <li key={item.href} className="flex min-w-0 flex-1">
-              <Link
-                href={item.href}
-                target={item.external ? '_blank' : undefined}
-                rel={item.external ? 'noopener noreferrer' : undefined}
-                aria-current={active ? 'page' : undefined}
-                aria-label={item.external ? `${item.label} openen in een nieuw tabblad` : item.label}
-                className={cn(
-                  'flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-center transition-colors',
-                  active ? 'bg-primary/10 text-primary' : 'text-muted-foreground',
-                )}
-              >
-                <span aria-hidden="true">{item.icon}</span>
-                <span
+              {item.href === '/masterclass' ? (
+                <button
+                  type="button"
+                  onClick={() => openInvestAvondPrompt('sidebar')}
+                  aria-label={item.label}
+                  className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl bg-primary px-1 py-2 text-center text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                >
+                  <span aria-hidden="true">{item.icon}</span>
+                  <span className="whitespace-nowrap text-[9px] font-bold leading-tight min-[375px]:text-[10px]">
+                    {item.label}
+                  </span>
+                </button>
+              ) : (
+                <Link
+                  href={item.href}
+                  target={item.external ? '_blank' : undefined}
+                  rel={item.external ? 'noopener noreferrer' : undefined}
+                  aria-current={active ? 'page' : undefined}
+                  aria-label={item.external ? `${item.label} openen in een nieuw tabblad` : item.label}
                   className={cn(
-                    'whitespace-nowrap font-medium leading-tight',
-                    isMentorOrAdmin ? 'text-[8px] min-[375px]:text-[9px]' : 'text-[9px] min-[375px]:text-[10px]',
+                    'flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-center transition-colors',
+                    active ? 'bg-primary/10 text-primary' : 'text-muted-foreground',
                   )}
                 >
-                  {item.label}
-                </span>
-              </Link>
+                  <span aria-hidden="true">{item.icon}</span>
+                  <span
+                    className={cn(
+                      'whitespace-nowrap font-medium leading-tight',
+                      isMentorOrAdmin ? 'text-[8px] min-[375px]:text-[9px]' : 'text-[9px] min-[375px]:text-[10px]',
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                </Link>
+              )}
             </li>
           )
         })}
