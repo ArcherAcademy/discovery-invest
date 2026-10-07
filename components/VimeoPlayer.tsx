@@ -80,6 +80,7 @@ interface VimeoPlayerProps {
   onUnlockNext?: () => void
   onRealDuration?: (seconds: number) => void
   onCompleted?: () => void
+  onReplayEnded?: () => void
   onAutoNext?: () => void          // called when countdown finishes
 }
 
@@ -97,6 +98,7 @@ export default function VimeoPlayer({
   onUnlockNext,
   onRealDuration,
   onCompleted,
+  onReplayEnded,
   onAutoNext,
 }: VimeoPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -109,7 +111,9 @@ export default function VimeoPlayer({
   const heartbeatRef = useRef<(() => Promise<void>) | null>(null)
   const heartbeatFailuresRef = useRef(0)
   const onAutoNextRef = useRef(onAutoNext)
+  const onReplayEndedRef = useRef(onReplayEnded)
   useEffect(() => { onAutoNextRef.current = onAutoNext }, [onAutoNext])
+  useEffect(() => { onReplayEndedRef.current = onReplayEnded }, [onReplayEnded])
 
   const [ended, setEnded] = useState(false)
   const [hasStarted, setHasStarted] = useState(false)
@@ -191,6 +195,7 @@ export default function VimeoPlayer({
   // ── doComplete — called at 90%, by 'ended' and by the manual fallback ─────
   const doComplete = useCallback(async (source: 'threshold' | 'ended' | 'manual') => {
     if (marked.current) {
+      if (source === 'ended') onReplayEndedRef.current?.()
       if (source === 'ended' && isLastVideo) onAutoNextRef.current?.()
       if (source === 'ended' && !isLastVideo && onAutoNextRef.current) startCountdown(5)
       return

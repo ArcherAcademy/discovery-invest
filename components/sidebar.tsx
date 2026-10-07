@@ -20,7 +20,16 @@ interface NavItem {
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { user, trialDaysLeft, isExpired, isAdminOrMentor, locale } = useApp()
+  const {
+    user,
+    trialDaysLeft,
+    isExpired,
+    isAdminOrMentor,
+    locale,
+    allCoreCompleted,
+    investAvondGeclaimd,
+    openInvestAvondPrompt,
+  } = useApp()
   const tr = t(locale)
 
   const isMentorOrAdmin = user?.role === 'admin' || user?.role === 'mentor'
@@ -35,11 +44,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           label: tr.nav.events,
           href: '/kennismakingsevent',
           icon: <CalendarDays size={16} />,
-        },
-        {
-          label: tr.nav.masterclass,
-          href: '/masterclass',
-          icon: <GraduationCap size={16} />,
         },
       ],
     },
@@ -120,6 +124,20 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             </div>
           )
         })}
+
+        {allCoreCompleted && !investAvondGeclaimd ? (
+          <button
+            type="button"
+            onClick={() => {
+              openInvestAvondPrompt('sidebar')
+              onNavigate?.()
+            }}
+            className="mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-[0_8px_24px_rgba(37,0,245,0.28)] transition-colors hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            <GraduationCap size={18} aria-hidden="true" />
+            Schrijf je in
+          </button>
+        ) : null}
       </nav>
 
       {/* Trial countdown + profile */}
@@ -200,11 +218,6 @@ function MobileBottomNav() {
       label: tr.nav.events,
       href: '/kennismakingsevent',
       icon: <CalendarDays size={21} />,
-    },
-    {
-      label: tr.nav.masterclass,
-      href: '/masterclass',
-      icon: <GraduationCap size={21} />,
     },
   ]
 

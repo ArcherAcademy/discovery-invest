@@ -12,12 +12,21 @@ import { useApp } from '@/components/app-context'
 import { t } from '@/lib/i18n'
 import VimeoPlayer from '@/components/VimeoPlayer'
 import PdfItem from '@/components/PdfItem'
-import InvestAvondUnlockModal from '@/components/InvestAvondUnlockModal'
 
 
 export default function VideoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const { videos, progress, coreCompleted, investAvondGeclaimd, refresh, locale, loading } = useApp()
+  const {
+    videos,
+    progress,
+    coreCompleted,
+    allCoreCompleted,
+    investAvondGeclaimd,
+    openInvestAvondPrompt,
+    refresh,
+    locale,
+    loading,
+  } = useApp()
   const tr = t(locale)
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -70,7 +79,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
   }, [id, progress]) // re-check whenever progress changes (live unlock)
 
   const [completed, setCompleted] = useState(false)
-  const [showInvestAvondModal, setShowInvestAvondModal] = useState(false)
   const [realDurationSeconds, setRealDurationSeconds] = useState<number | null>(null)
   // Cache real durations per video so sidebar shows correct times
   const [realDurations, setRealDurations] = useState<Record<string, number>>({})
@@ -80,17 +88,19 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
     setCompleted(existing?.status === 'completed')
   }, [progress, id])
 
-  useEffect(() => {
-    if (accessChecked && isLastCoreVideo && completed && !investAvondGeclaimd) {
-      setShowInvestAvondModal(true)
-    }
-  }, [accessChecked, completed, investAvondGeclaimd, isLastCoreVideo])
-
-  // Called by VimeoPlayer when 90% is reached — refresh progress from DB
+  // Called by VimeoPlayer when this video is completed for the first time.
   function handleCompleted() {
     setCompleted(true)
-    if (isLastCoreVideo && !investAvondGeclaimd) setShowInvestAvondModal(true)
+    if (isLastCoreVideo && !investAvondGeclaimd) {
+      openInvestAvondPrompt('video_completion', id)
+    }
     void refresh()
+  }
+
+  function handleReplayEnded() {
+    if (allCoreCompleted && !investAvondGeclaimd) {
+      openInvestAvondPrompt('video_rewatch', id)
+    }
   }
 
   if (!video) {
@@ -190,12 +200,11 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                   isLastVideo={isLastCoreVideo}
                   requireEndedForCompletion={isLastCoreVideo}
                   onCompleted={handleCompleted}
+                  onReplayEnded={handleReplayEnded}
                   onAutoNext={() => {
-                    if (isLastCoreVideo && !investAvondGeclaimd) {
-                      setShowInvestAvondModal(true)
-                    } else if (isLastCoreVideo) {
+                    if (isLastCoreVideo && investAvondGeclaimd) {
                       router.push('/traject#bonusmateriaal')
-                    } else if (nextVideo) {
+                    } else if (!isLastCoreVideo && nextVideo) {
                       router.push(`/video/${nextVideo.id}`)
                     }
                   }}
@@ -597,16 +606,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
           </div>
         </div>
       </div>
-
-      <InvestAvondUnlockModal
-        open={showInvestAvondModal}
-        onClose={() => setShowInvestAvondModal(false)}
-        onSubmitted={refresh}
-        onViewBonus={() => {
-          setShowInvestAvondModal(false)
-          router.push('/traject#bonusmateriaal')
-        }}
-      />
     </div>
   )
 }

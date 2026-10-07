@@ -1,10 +1,14 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
 import type { DemoUser, DemoUserFunnel, DemoVideoProgress, DemoVideo } from '@/lib/types'
 import type { Locale } from '@/lib/i18n'
 import { hasPermanentAccess, isTrialExpired } from '@/lib/access'
+import InvestAvondUnlockModal from '@/components/InvestAvondUnlockModal'
+
+export type InvestAvondPromptSource = 'header' | 'sidebar' | 'video_completion' | 'video_rewatch'
 
 interface AppContextValue {
   user: DemoUser | null
@@ -22,6 +26,7 @@ interface AppContextValue {
   coreCompleted: number
   allCoreCompleted: boolean
   investAvondGeclaimd: boolean
+  openInvestAvondPrompt: (source: InvestAvondPromptSource, videoId?: string) => void
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
@@ -58,7 +63,12 @@ async function fetchAppData(url: string): Promise<AppData> {
 }
 
 export function AppProvider({ children, initialUser }: AppProviderProps) {
+  const router = useRouter()
   const [locale, setLocale] = useState<Locale>((initialUser.locale as Locale) ?? 'nl')
+  const [investAvondPrompt, setInvestAvondPrompt] = useState<{
+    source: InvestAvondPromptSource
+    videoId?: string
+  } | null>(null)
   const { data, isLoading, mutate } = useSWR<AppData>('/api/me', fetchAppData, {
     revalidateOnFocus: true,
     revalidateOnReconnect: true,
@@ -98,13 +108,53 @@ export function AppProvider({ children, initialUser }: AppProviderProps) {
   const allCoreCompleted = coreCompleted >= 6
   const investAvondGeclaimd = funnel?.invest_avond_geclaimd ?? false
 
+  const trackInvestAvondPrompt = useCallback((
+    action: 'opened' | 'closed' | 'submitted',
+    source: InvestAvondPromptSource,
+    videoId?: string,
+  ) => {
+    void fetch('/api/invest-avond/track', {
+      method: 'POST',
+      credentials: 'include',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, source, videoId: videoId ?? null }),
+    })
+  }, [])
+
+  const openInvestAvondPrompt = useCallback((source: InvestAvondPromptSource, videoId?: string) => {
+    if ((!allCoreCompleted && source !== 'video_completion') || investAvondGeclaimd) return
+    setInvestAvondPrompt({ source, videoId })
+    trackInvestAvondPrompt('opened', source, videoId)
+  }, [allCoreCompleted, investAvondGeclaimd, trackInvestAvondPrompt])
+
+  const closeInvestAvondPrompt = useCallback(() => {
+    if (!investAvondPrompt) return
+    trackInvestAvondPrompt('closed', investAvondPrompt.source, investAvondPrompt.videoId)
+    setInvestAvondPrompt(null)
+  }, [investAvondPrompt, trackInvestAvondPrompt])
+
   return (
     <AppContext.Provider value={{
       user, funnel, progress, videos, loading, locale, setLocale,
       refresh, trialDaysLeft, trialHoursLeft, isExpired, isAdminOrMentor,
-      coreCompleted, allCoreCompleted, investAvondGeclaimd,
+      coreCompleted, allCoreCompleted, investAvondGeclaimd, openInvestAvondPrompt,
     }}>
       {children}
+      <InvestAvondUnlockModal
+        open={investAvondPrompt !== null}
+        onClose={closeInvestAvondPrompt}
+        onSubmitted={async () => {
+          if (investAvondPrompt) {
+            trackInvestAvondPrompt('submitted', investAvondPrompt.source, investAvondPrompt.videoId)
+          }
+          await refresh()
+        }}
+        onViewBonus={() => {
+          setInvestAvondPrompt(null)
+          router.push('/traject#bonusmateriaal')
+        }}
+      />
     </AppContext.Provider>
   )
 }
