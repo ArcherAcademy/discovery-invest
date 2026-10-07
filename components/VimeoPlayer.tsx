@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Player from '@vimeo/player'
-import { CheckCircle2, ExternalLink, FileText, RefreshCw, SkipForward, Trophy, X } from 'lucide-react'
+import { CheckCircle2, ExternalLink, FileText, Maximize2, Pause, Play, RefreshCw, SkipForward, Trophy, X } from 'lucide-react'
 
 function parseVimeoId(src: string): number | null {
   const m = src.match(/(?:vimeo\.com\/|video\/)(\d+)/)
@@ -99,6 +99,7 @@ export default function VimeoPlayer({
   onCompleted,
   onAutoNext,
 }: VimeoPlayerProps) {
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<Player | null>(null)
   const marked = useRef(completed)
@@ -113,6 +114,8 @@ export default function VimeoPlayer({
 
   const [ended, setEnded] = useState(false)
   const [hasStarted, setHasStarted] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [playerReady, setPlayerReady] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [cancelled, setCancelled] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -133,6 +136,8 @@ export default function VimeoPlayer({
     heartbeatFailuresRef.current = 0
     setEnded(false)
     setHasStarted(false)
+    setIsPlaying(false)
+    setPlayerReady(false)
     setCountdown(null)
     setCancelled(false)
     setErrorMsg(null)
@@ -230,6 +235,12 @@ export default function VimeoPlayer({
     // Maak het iframe expliciet aan zodat embeds op het live domein betrouwbaar werken.
     const iframe = document.createElement('iframe')
     const playerUrl = new URL(vimeoUrl)
+    playerUrl.searchParams.set('controls', '0')
+    playerUrl.searchParams.set('title', '0')
+    playerUrl.searchParams.set('byline', '0')
+    playerUrl.searchParams.set('portrait', '0')
+    playerUrl.searchParams.set('pip', '0')
+    playerUrl.searchParams.set('keyboard', '0')
     if (autoPlay) playerUrl.searchParams.set('autoplay', '1')
     iframe.src = playerUrl.toString()
     iframe.title = 'Archer Invest video'
@@ -292,6 +303,7 @@ export default function VimeoPlayer({
 
     player.ready().then(async () => {
       try {
+        setPlayerReady(true)
         const duration = await withTimeout(player.getDuration(), PLAYER_CALL_TIMEOUT_MS)
         if (disposed || !duration || duration <= 0) return
         onRealDuration?.(duration)
@@ -319,14 +331,20 @@ export default function VimeoPlayer({
       setErrorMsg(getPlayerErrorMessage(error))
     })
 
-    const handlePlay = () => registerStarted()
+    const handlePlay = () => {
+      setIsPlaying(true)
+      registerStarted()
+    }
+    const handlePause = () => setIsPlaying(false)
     const handleTimeUpdate = ({ percent }: { percent: number }) => registerPercent(percent)
     const handleEnded = () => {
+      setIsPlaying(false)
       setEnded(true)
       void doComplete('ended')
     }
 
     player.on('play', handlePlay)
+    player.on('pause', handlePause)
     player.on('timeupdate', handleTimeUpdate)
     player.on('ended', handleEnded)
 
@@ -338,6 +356,7 @@ export default function VimeoPlayer({
       window.clearInterval(heartbeatTimer)
       heartbeatRef.current = null
       player.off('play', handlePlay)
+      player.off('pause', handlePause)
       player.off('timeupdate', handleTimeUpdate)
       player.off('ended', handleEnded)
       player.off('error')
@@ -367,6 +386,32 @@ export default function VimeoPlayer({
     }
   }
 
+  const togglePlayback = async () => {
+    try {
+      if (isPlaying) {
+        await playerRef.current?.pause()
+      } else {
+        await playerRef.current?.play()
+      }
+    } catch (error) {
+      console.error('[v0] Vimeo afspeelbediening mislukt:', error)
+      setErrorMsg('De videobediening reageert niet. Probeer opnieuw.')
+    }
+  }
+
+  const openFullscreen = async () => {
+    try {
+      if (wrapperRef.current?.requestFullscreen) {
+        await wrapperRef.current.requestFullscreen()
+      } else {
+        await playerRef.current?.requestFullscreen()
+      }
+    } catch (error) {
+      console.error('[v0] Volledig scherm openen mislukt:', error)
+      setErrorMsg('Volledig scherm kon niet worden geopend. Probeer opnieuw.')
+    }
+  }
+
   const retryPlayer = () => {
     heartbeatFailuresRef.current = 0
     setErrorMsg(null)
@@ -387,19 +432,49 @@ export default function VimeoPlayer({
   return (
     <div className="w-full">
       {/* Player + end-screen overlay */}
-      <div className="relative w-full" style={{ aspectRatio: '16/9', background: '#000', borderRadius: '1rem', overflow: 'hidden' }}>
-        {/* Vimeo player container */}
-        <div ref={containerRef} className="absolute inset-0 w-full h-full" />
+      <div
+        ref={wrapperRef}
+        className="relative w-full"
+        style={{ aspectRatio: '16/9', background: '#000', borderRadius: '1rem', overflow: 'hidden' }}
+      >
+        {/* Vimeo rendert alleen de video. De bediening hieronder is volledig van Archer. */}
+        <div ref={containerRef} className="absolute inset-0 size-full" />
 
         {!hasStarted && !playerLoadError && thumbnailUrl && (
           <button
             type="button"
             onClick={handlePosterPlay}
             aria-label="Video afspelen"
-            className="absolute inset-0 z-10 flex items-center justify-center overflow-hidden bg-black focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-white"
+            className="absolute inset-0 z-10 flex items-center justify-center overflow-hidden bg-background focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-primary"
           >
-        <img src={thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" />
+            <img src={thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" />
+            <span className="relative flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 sm:size-20">
+              <Play className="ml-1 size-7 fill-current sm:size-8" aria-hidden="true" />
+            </span>
           </button>
+        )}
+
+        {!playerLoadError && !ended && (
+          <div className="absolute inset-x-3 bottom-3 z-30 flex items-center justify-between rounded-full border border-border/40 bg-background/85 p-1.5 text-foreground shadow-lg backdrop-blur-md sm:inset-x-4 sm:bottom-4">
+            <button
+              type="button"
+              onClick={togglePlayback}
+              disabled={!playerReady}
+              aria-label={isPlaying ? 'Video pauzeren' : 'Video afspelen'}
+              className="flex size-10 items-center justify-center rounded-full transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-50"
+            >
+              {isPlaying ? <Pause className="size-5 fill-current" aria-hidden="true" /> : <Play className="ml-0.5 size-5 fill-current" aria-hidden="true" />}
+            </button>
+            <button
+              type="button"
+              onClick={openFullscreen}
+              disabled={!playerReady}
+              aria-label="Video op volledig scherm bekijken"
+              className="flex size-10 items-center justify-center rounded-full transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-50"
+            >
+              <Maximize2 className="size-5" aria-hidden="true" />
+            </button>
+          </div>
         )}
 
         {playerLoadError && !ended && (
