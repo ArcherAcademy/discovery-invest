@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runScheduledEvaluator } from '@/lib/scheduled-messages'
+import { syncHubSpotNewsletterSegment } from '@/lib/hubspot-lead-stage'
 
 export const maxDuration = 60
 
@@ -16,7 +17,8 @@ export async function GET(req: NextRequest) {
   try {
     const supabase = createAdminClient()
     const result = await runScheduledEvaluator(supabase, 200)
-    return NextResponse.json({ ok: true, ...result })
+    const newsletterSync = await syncHubSpotNewsletterSegment()
+    return NextResponse.json({ ok: true, ...result, newsletterSync })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error'
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
