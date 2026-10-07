@@ -4,6 +4,8 @@ const LEAD_STAGE_PROPERTY = 'hs_pipeline_stage'
 const WAITLIST_DISCOVERY_STAGE_ID = '6147230967'
 const NEWSLETTER_STAGE_IDS = ['6161831098', '5709325549'] as const
 const NEWSLETTER_CONTACT_PROPERTY = 'nieuwsbrief_leads_nl_via_archer_invest'
+const REACTIVATION_SOURCE_STAGE_IDS = new Set(['5709325549', '5709325554'])
+const REACTIVATION_TARGET_STAGE_IDS = new Set(['5849884862', '5779412163'])
 
 const STAGE_BY_TRIGGER = {
   one_core_video: '6150881500',
@@ -26,7 +28,7 @@ type HubSpotAssociation = {
   to?: Array<{ toObjectId?: string; id?: string }>
 }
 
-type StageDefinition = { id: string; label: string; displayOrder: number }
+type StageDefinition = { id: string; label: string; displayOrder: number; archived?: boolean }
 
 const stageDefinitions: StageDefinition[] = [
   { id: '5706792162', label: 'New Lead Ads', displayOrder: 0 },
@@ -42,10 +44,10 @@ const stageDefinitions: StageDefinition[] = [
   { id: '5706792163', label: 'Attempted To Contact', displayOrder: 10 },
   { id: '5709325551', label: 'Contacted', displayOrder: 11 },
   { id: '5706792165', label: '1-1 Meeting', displayOrder: 12 },
-  { id: '5709325552', label: 'Sales Qualified', displayOrder: 13 },
-  { id: '5709325549', label: 'Marketing Qualified', displayOrder: 14 },
-  { id: '5706792164', label: 'Qualified', displayOrder: 15 },
-  { id: '5709325548', label: 'Workshop / Event', displayOrder: 16 },
+  { id: '5709325548', label: 'Workshop / Event', displayOrder: 13 },
+  { id: '5709325552', label: 'Sales Qualified', displayOrder: 14 },
+  { id: '5709325549', label: 'Marketing Qualified', displayOrder: 15 },
+  { id: '5706792164', label: 'Qualified', displayOrder: 16 },
   { id: '5709325554', label: 'Not Qualified', displayOrder: 17 },
   { id: '5709325555', label: 'Newsletter Anthony', displayOrder: 18 },
   { id: '5709325553', label: 'Fund Qualified', displayOrder: 19 },
@@ -78,7 +80,11 @@ async function hubSpotRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
     if ((response.status === 429 || response.status >= 500) && attempt < 3) {
       const retryAfter = Number(response.headers.get('retry-after'))
-      await new Promise(resolve => setTimeout(resolve, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 500 * (attempt + 1)))
+      const fallbackDelay = response.status === 429 ? 11_000 : 500 * (attempt + 1)
+      await new Promise(resolve => setTimeout(
+        resolve,
+        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : fallbackDelay,
+      ))
       continue
     }
 
@@ -127,6 +133,147 @@ function inChunks<T>(items: T[], size = 100) {
   return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
     items.slice(index * size, (index + 1) * size),
   )
+}
+
+export async function mergeDuplicateHubSpotLeads(maxArchivedLeads = 50) {
+  const pipeline = await hubSpotRequest<{ stages?: StageDefinition[] }>(
+    `/crm/v3/pipelines/leads/${LEAD_PIPELINE_ID}`,
+  )
+  const liveStageOrder = new Map(
+    (pipeline.stages ?? [])
+      .filter(stage => !('archived' in stage) || !stage.archived)
+      .map(stage => [stage.id, stage.displayOrder]),
+  )
+  if (liveStageOrder.size === 0) {
+    throw new Error('HubSpot-pipeline heeft geen actieve stages')
+  }
+
+  const leads: HubSpotLead[] = []
+  let after: string | undefined
+
+  do {
+    const page = await hubSpotRequest<{
+      results?: HubSpotLead[]
+      paging?: { next?: { after?: string } }
+    }>('/crm/v3/objects/leads/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        filterGroups: [{ filters: [{ propertyName: 'hs_pipeline', operator: 'EQ', value: LEAD_PIPELINE_ID }] }],
+        properties: ['hs_pipeline', LEAD_STAGE_PROPERTY, 'hs_createdate'],
+        limit: 200,
+        ...(after ? { after } : {}),
+      }),
+    })
+    leads.push(...(page.results ?? []))
+    after = page.paging?.next?.after
+  } while (after)
+
+  const leadById = new Map(leads.map(lead => [lead.id, lead]))
+  const leadsByContact = new Map<string, HubSpotLead[]>()
+  for (const leadBatch of inChunks(leads)) {
+    const associations = await hubSpotRequest<{ results?: HubSpotAssociation[] }>(
+      '/crm/v4/associations/leads/contacts/batch/read',
+      { method: 'POST', body: JSON.stringify({ inputs: leadBatch.map(lead => ({ id: lead.id })) }) },
+    )
+    for (const association of associations.results ?? []) {
+      const lead = leadById.get(String(association.from.id))
+      const contactId = String(association.to?.[0]?.toObjectId ?? association.to?.[0]?.id ?? '')
+      if (!lead || !contactId) continue
+      const group = leadsByContact.get(contactId) ?? []
+      group.push(lead)
+      leadsByContact.set(contactId, group)
+    }
+  }
+
+  let duplicateGroups = 0
+  let archivedLeads = 0
+  let promotedPrimaryLeads = 0
+  let reactivatedPrimaryLeads = 0
+  let skippedUnsafeGroups = 0
+  let limitReached = false
+  for (const group of leadsByContact.values()) {
+    const uniqueGroup = [...new Map(group.map(lead => [lead.id, lead])).values()]
+    if (uniqueGroup.length < 2) continue
+    duplicateGroups += 1
+    uniqueGroup.sort((first, second) => {
+      const firstCreatedAt = first.properties?.hs_createdate ?? ''
+      const secondCreatedAt = second.properties?.hs_createdate ?? ''
+      return firstCreatedAt.localeCompare(secondCreatedAt) || Number(first.id) - Number(second.id)
+    })
+
+    const stages = uniqueGroup.map(lead => lead.properties?.[LEAD_STAGE_PROPERTY] ?? '')
+    if (stages.some(stage => !stage || !liveStageOrder.has(stage))) {
+      skippedUnsafeGroups += 1
+      continue
+    }
+
+    const [primaryLead, ...duplicates] = uniqueGroup
+    const remainingArchiveCapacity = Math.max(0, maxArchivedLeads - archivedLeads)
+    if (duplicates.length > remainingArchiveCapacity) {
+      limitReached = true
+      break
+    }
+    const duplicateBatch = duplicates
+
+    const primaryStage = primaryLead.properties?.[LEAD_STAGE_PROPERTY] ?? ''
+    const reactivationLead = REACTIVATION_SOURCE_STAGE_IDS.has(primaryStage)
+      ? duplicates.filter(lead =>
+          REACTIVATION_TARGET_STAGE_IDS.has(lead.properties?.[LEAD_STAGE_PROPERTY] ?? ''),
+        ).at(-1)
+      : undefined
+    const furthestLead = uniqueGroup.reduce((furthest, lead) => {
+      const furthestOrder = liveStageOrder.get(furthest.properties?.[LEAD_STAGE_PROPERTY] ?? '') ?? -1
+      const leadOrder = liveStageOrder.get(lead.properties?.[LEAD_STAGE_PROPERTY] ?? '') ?? -1
+      return leadOrder > furthestOrder ? lead : furthest
+    }, primaryLead)
+    const targetStage = reactivationLead?.properties?.[LEAD_STAGE_PROPERTY]
+      ?? furthestLead.properties?.[LEAD_STAGE_PROPERTY]
+      ?? ''
+    const primaryOrder = liveStageOrder.get(primaryStage) ?? -1
+    const targetOrder = liveStageOrder.get(targetStage) ?? -1
+    const isReactivation = Boolean(reactivationLead)
+
+    if (!isReactivation && targetOrder < primaryOrder) {
+      skippedUnsafeGroups += 1
+      continue
+    }
+
+    if (targetStage !== primaryStage) {
+      await hubSpotRequest(`/crm/v3/objects/leads/${primaryLead.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ properties: { [LEAD_STAGE_PROPERTY]: targetStage } }),
+      })
+      const verifiedPrimary = await hubSpotRequest<HubSpotLead>(
+        `/crm/v3/objects/leads/${primaryLead.id}?properties=${LEAD_STAGE_PROPERTY}`,
+      )
+      const verifiedStage = verifiedPrimary.properties?.[LEAD_STAGE_PROPERTY] ?? ''
+      if (verifiedStage !== targetStage) {
+        throw new Error(`Lead ${primaryLead.id} kon niet veilig naar de doelstage worden gebracht`)
+      }
+      if (isReactivation) reactivatedPrimaryLeads += 1
+      else promotedPrimaryLeads += 1
+    }
+
+    await hubSpotRequest('/crm/v3/objects/leads/batch/archive', {
+      method: 'POST',
+      body: JSON.stringify({ inputs: duplicateBatch.map(lead => ({ id: lead.id })) }),
+    })
+    archivedLeads += duplicateBatch.length
+    if (archivedLeads >= maxArchivedLeads) {
+      limitReached = true
+      break
+    }
+  }
+
+  return {
+    scannedLeads: leads.length,
+    duplicateGroups,
+    archivedLeads,
+    promotedPrimaryLeads,
+    reactivatedPrimaryLeads,
+    skippedUnsafeGroups,
+    limitReached,
+  }
 }
 
 export async function syncHubSpotNewsletterSegment() {
