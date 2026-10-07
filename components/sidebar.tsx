@@ -45,7 +45,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           href: '/kennismakingsevent',
           icon: <CalendarDays size={16} />,
         },
-        ...(allCoreCompleted && !investAvondGeclaimd
+        ...(allCoreCompleted
           ? [{ label: 'Schrijf je in', href: '/masterclass', icon: <GraduationCap size={16} /> }]
           : []),
       ],
@@ -105,7 +105,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                         <button
                           type="button"
                           onClick={() => {
-                            openInvestAvondPrompt('sidebar')
+                            if (investAvondGeclaimd) {
+                              router.push('/masterclass')
+                            } else {
+                              openInvestAvondPrompt('sidebar')
+                            }
                             onNavigate?.()
                           }}
                           className="flex min-h-12 w-full items-center gap-2.5 rounded-full bg-primary px-4 py-3 text-left text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
@@ -211,6 +215,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
 function MobileBottomNav() {
   const pathname = usePathname()
+  const router = useRouter()
   const {
     user,
     locale,
@@ -229,7 +234,7 @@ function MobileBottomNav() {
       href: '/kennismakingsevent',
       icon: <CalendarDays size={21} />,
     },
-    ...(allCoreCompleted && !investAvondGeclaimd
+    ...(allCoreCompleted
       ? [{ label: 'Schrijf je in', href: '/masterclass', icon: <GraduationCap size={21} /> }]
       : []),
   ]
@@ -252,7 +257,13 @@ function MobileBottomNav() {
               {item.href === '/masterclass' ? (
                 <button
                   type="button"
-                  onClick={() => openInvestAvondPrompt('sidebar')}
+                  onClick={() => {
+                    if (investAvondGeclaimd) {
+                      router.push('/masterclass')
+                    } else {
+                      openInvestAvondPrompt('sidebar')
+                    }
+                  }}
                   aria-label={item.label}
                   className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl bg-primary px-1 py-2 text-center text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                 >
