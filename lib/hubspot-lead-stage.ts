@@ -129,6 +129,86 @@ function inChunks<T>(items: T[], size = 100) {
   )
 }
 
+type MergeableHubSpotContact = {
+  id: string
+  createdAt?: string
+  properties?: Record<string, string | null>
+}
+
+function normalizeContactName(value?: string | null) {
+  return (value ?? '').trim().toLocaleLowerCase('nl-BE').replace(/\s+/g, ' ')
+}
+
+function normalizeBelgianPhone(value?: string | null) {
+  let digits = (value ?? '').replace(/\D/g, '')
+  if (digits.startsWith('00')) digits = digits.slice(2)
+  if (digits.startsWith('0') && digits.length >= 9) digits = `32${digits.slice(1)}`
+  return digits
+}
+
+export async function mergeDuplicateHubSpotContacts(maxMerges = 50) {
+  const contacts: MergeableHubSpotContact[] = []
+  let after: string | undefined
+
+  do {
+    const query = new URLSearchParams({
+      limit: '100',
+      properties: 'firstname,lastname,phone,mobilephone,createdate',
+      archived: 'false',
+    })
+    if (after) query.set('after', after)
+
+    const page = await hubSpotRequest<{
+      results?: MergeableHubSpotContact[]
+      paging?: { next?: { after?: string } }
+    }>(`/crm/v3/objects/contacts?${query.toString()}`)
+    contacts.push(...(page.results ?? []))
+    after = page.paging?.next?.after
+  } while (after)
+
+  const groups = new Map<string, MergeableHubSpotContact[]>()
+  for (const contact of contacts) {
+    const firstName = normalizeContactName(contact.properties?.firstname)
+    const lastName = normalizeContactName(contact.properties?.lastname)
+    const phone = normalizeBelgianPhone(contact.properties?.phone || contact.properties?.mobilephone)
+    if (!firstName || !lastName || phone.length < 9) continue
+
+    const key = `${firstName}|${lastName}|${phone}`
+    const group = groups.get(key) ?? []
+    group.push(contact)
+    groups.set(key, group)
+  }
+
+  let mergedContacts = 0
+  let duplicateGroups = 0
+  for (const group of groups.values()) {
+    if (group.length < 2) continue
+    duplicateGroups += 1
+    group.sort((first, second) => {
+      const firstCreatedAt = first.properties?.createdate ?? first.createdAt ?? ''
+      const secondCreatedAt = second.properties?.createdate ?? second.createdAt ?? ''
+      return firstCreatedAt.localeCompare(secondCreatedAt) || Number(first.id) - Number(second.id)
+    })
+
+    const [primaryContact, ...duplicates] = group
+    for (const duplicate of duplicates) {
+      if (mergedContacts >= maxMerges) {
+        return { scannedContacts: contacts.length, duplicateGroups, mergedContacts, limitReached: true }
+      }
+      await hubSpotRequest('/crm/objects/2026-09/contacts/merge', {
+        method: 'POST',
+        body: JSON.stringify({
+          primaryObjectId: primaryContact.id,
+          objectIdToMerge: duplicate.id,
+        }),
+      })
+      mergedContacts += 1
+    }
+  }
+
+  return { scannedContacts: contacts.length, duplicateGroups, mergedContacts, limitReached: false }
+}
+
 export async function syncHubSpotNewsletterSegment() {
   const leads: HubSpotLead[] = []
   let after: string | undefined
