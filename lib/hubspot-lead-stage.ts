@@ -78,7 +78,11 @@ async function hubSpotRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
     if ((response.status === 429 || response.status >= 500) && attempt < 3) {
       const retryAfter = Number(response.headers.get('retry-after'))
-      await new Promise(resolve => setTimeout(resolve, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 500 * (attempt + 1)))
+      const fallbackDelay = response.status === 429 ? 11_000 : 500 * (attempt + 1)
+      await new Promise(resolve => setTimeout(
+        resolve,
+        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : fallbackDelay,
+      ))
       continue
     }
 
