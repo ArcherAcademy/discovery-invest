@@ -42,10 +42,10 @@ const stageDefinitions: StageDefinition[] = [
   { id: '5706792163', label: 'Attempted To Contact', displayOrder: 10 },
   { id: '5709325551', label: 'Contacted', displayOrder: 11 },
   { id: '5706792165', label: '1-1 Meeting', displayOrder: 12 },
-  { id: '5709325552', label: 'Sales Qualified', displayOrder: 13 },
-  { id: '5709325549', label: 'Marketing Qualified', displayOrder: 14 },
-  { id: '5706792164', label: 'Qualified', displayOrder: 15 },
-  { id: '5709325548', label: 'Workshop / Event', displayOrder: 16 },
+  { id: '5709325548', label: 'Workshop / Event', displayOrder: 13 },
+  { id: '5709325552', label: 'Sales Qualified', displayOrder: 14 },
+  { id: '5709325549', label: 'Marketing Qualified', displayOrder: 15 },
+  { id: '5706792164', label: 'Qualified', displayOrder: 16 },
   { id: '5709325554', label: 'Not Qualified', displayOrder: 17 },
   { id: '5709325555', label: 'Newsletter Anthony', displayOrder: 18 },
   { id: '5709325553', label: 'Fund Qualified', displayOrder: 19 },
@@ -133,121 +133,90 @@ function inChunks<T>(items: T[], size = 100) {
   )
 }
 
-type MergeableHubSpotContact = {
-  id: string
-  createdAt?: string
-  properties?: Record<string, string | null>
-}
-
-function normalizeContactName(value?: string | null) {
-  return (value ?? '').trim().toLocaleLowerCase('nl-BE').replace(/\s+/g, ' ')
-}
-
-function normalizeBelgianPhone(value?: string | null) {
-  let digits = (value ?? '').replace(/\D/g, '')
-  if (digits.startsWith('00')) digits = digits.slice(2)
-  if (digits.startsWith('0') && digits.length >= 9) digits = `32${digits.slice(1)}`
-  return digits
-}
-
-function contactMergeKey(contact: MergeableHubSpotContact) {
-  const firstName = normalizeContactName(contact.properties?.firstname)
-  const lastName = normalizeContactName(contact.properties?.lastname)
-  const phone = normalizeBelgianPhone(contact.properties?.phone || contact.properties?.mobilephone)
-  return firstName && lastName && phone.length >= 9 ? `${firstName}|${lastName}|${phone}` : null
-}
-
-export async function mergeDuplicateHubSpotContacts(maxMerges = 50) {
-  const contacts: MergeableHubSpotContact[] = []
+export async function mergeDuplicateHubSpotLeads(maxArchivedLeads = 50) {
+  const leads: HubSpotLead[] = []
   let after: string | undefined
 
   do {
-    const query = new URLSearchParams({
-      limit: '100',
-      properties: 'firstname,lastname,phone,mobilephone,createdate',
-      archived: 'false',
-    })
-    if (after) query.set('after', after)
-
     const page = await hubSpotRequest<{
-      results?: MergeableHubSpotContact[]
+      results?: HubSpotLead[]
       paging?: { next?: { after?: string } }
-    }>(`/crm/v3/objects/contacts?${query.toString()}`)
-    contacts.push(...(page.results ?? []))
+    }>('/crm/v3/objects/leads/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        filterGroups: [{ filters: [{ propertyName: 'hs_pipeline', operator: 'EQ', value: LEAD_PIPELINE_ID }] }],
+        properties: ['hs_pipeline', LEAD_STAGE_PROPERTY, 'hs_createdate'],
+        limit: 200,
+        ...(after ? { after } : {}),
+      }),
+    })
+    leads.push(...(page.results ?? []))
     after = page.paging?.next?.after
   } while (after)
 
-  const groups = new Map<string, MergeableHubSpotContact[]>()
-  for (const contact of contacts) {
-    const key = contactMergeKey(contact)
-    if (!key) continue
-
-    const group = groups.get(key) ?? []
-    group.push(contact)
-    groups.set(key, group)
+  const leadById = new Map(leads.map(lead => [lead.id, lead]))
+  const leadsByContact = new Map<string, HubSpotLead[]>()
+  for (const leadBatch of inChunks(leads)) {
+    const associations = await hubSpotRequest<{ results?: HubSpotAssociation[] }>(
+      '/crm/v4/associations/leads/contacts/batch/read',
+      { method: 'POST', body: JSON.stringify({ inputs: leadBatch.map(lead => ({ id: lead.id })) }) },
+    )
+    for (const association of associations.results ?? []) {
+      const lead = leadById.get(String(association.from.id))
+      const contactId = String(association.to?.[0]?.toObjectId ?? association.to?.[0]?.id ?? '')
+      if (!lead || !contactId) continue
+      const group = leadsByContact.get(contactId) ?? []
+      group.push(lead)
+      leadsByContact.set(contactId, group)
+    }
   }
 
-  let mergedContacts = 0
   let duplicateGroups = 0
-  for (const group of groups.values()) {
-    if (group.length < 2) continue
-
-    const canonicalContacts = new Map<string, MergeableHubSpotContact>()
-    for (const contact of group) {
-      const canonicalContact = await hubSpotRequest<MergeableHubSpotContact>(
-        `/crm/v3/objects/contacts/${contact.id}?properties=firstname,lastname,phone,mobilephone,createdate`,
-      )
-      canonicalContacts.set(canonicalContact.id, canonicalContact)
-    }
-
-    const expectedKey = contactMergeKey(group[0])
-    const canonicalGroup = [...canonicalContacts.values()].filter(
-      contact => contactMergeKey(contact) === expectedKey,
-    )
-    if (canonicalGroup.length < 2) continue
-
+  let archivedLeads = 0
+  let promotedPrimaryLeads = 0
+  for (const group of leadsByContact.values()) {
+    const uniqueGroup = [...new Map(group.map(lead => [lead.id, lead])).values()]
+    if (uniqueGroup.length < 2) continue
     duplicateGroups += 1
-    canonicalGroup.sort((first, second) => {
-      const firstCreatedAt = first.properties?.createdate ?? first.createdAt ?? ''
-      const secondCreatedAt = second.properties?.createdate ?? second.createdAt ?? ''
+    uniqueGroup.sort((first, second) => {
+      const firstCreatedAt = first.properties?.hs_createdate ?? ''
+      const secondCreatedAt = second.properties?.hs_createdate ?? ''
       return firstCreatedAt.localeCompare(secondCreatedAt) || Number(first.id) - Number(second.id)
     })
 
-    let primaryContactId = canonicalGroup[0].id
-    for (const duplicate of canonicalGroup.slice(1)) {
-      if (mergedContacts >= maxMerges) {
-        return { scannedContacts: contacts.length, duplicateGroups, mergedContacts, limitReached: true }
-      }
+    const [primaryLead, ...duplicates] = uniqueGroup
+    const duplicateBatch = duplicates.slice(0, Math.max(0, maxArchivedLeads - archivedLeads))
+    if (duplicateBatch.length === 0) break
 
-      let duplicateContactId = duplicate.id
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        try {
-          await hubSpotRequest('/crm/objects/2026-09/contacts/merge', {
-            method: 'POST',
-            body: JSON.stringify({
-              primaryObjectId: primaryContactId,
-              objectIdToMerge: duplicateContactId,
-            }),
-          })
-          mergedContacts += 1
-          break
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
-          const aliasMatch = message.match(/objectId=(\d+).*forward reference to (\d+)/)
-          if (!aliasMatch || attempt === 2) throw error
-
-          const [, aliasId, canonicalId] = aliasMatch
-          if (aliasId === primaryContactId) primaryContactId = canonicalId
-          else if (aliasId === duplicateContactId) duplicateContactId = canonicalId
-          else throw error
-
-          if (primaryContactId === duplicateContactId) break
-        }
-      }
+    const furthestLead = uniqueGroup.reduce((furthest, lead) => {
+      const furthestOrder = stageOrder.get(furthest.properties?.[LEAD_STAGE_PROPERTY] ?? '') ?? -1
+      const leadOrder = stageOrder.get(lead.properties?.[LEAD_STAGE_PROPERTY] ?? '') ?? -1
+      return leadOrder > furthestOrder ? lead : furthest
+    }, primaryLead)
+    const furthestStage = furthestLead.properties?.[LEAD_STAGE_PROPERTY]
+    if (furthestStage && furthestStage !== primaryLead.properties?.[LEAD_STAGE_PROPERTY]) {
+      await hubSpotRequest(`/crm/v3/objects/leads/${primaryLead.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ properties: { [LEAD_STAGE_PROPERTY]: furthestStage } }),
+      })
+      promotedPrimaryLeads += 1
     }
+
+    await hubSpotRequest('/crm/v3/objects/leads/batch/archive', {
+      method: 'POST',
+      body: JSON.stringify({ inputs: duplicateBatch.map(lead => ({ id: lead.id })) }),
+    })
+    archivedLeads += duplicateBatch.length
+    if (archivedLeads >= maxArchivedLeads) break
   }
 
-  return { scannedContacts: contacts.length, duplicateGroups, mergedContacts, limitReached: false }
+  return {
+    scannedLeads: leads.length,
+    duplicateGroups,
+    archivedLeads,
+    promotedPrimaryLeads,
+    limitReached: archivedLeads >= maxArchivedLeads,
+  }
 }
 
 export async function syncHubSpotNewsletterSegment() {

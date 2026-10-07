@@ -5,7 +5,7 @@
       "schedule": "*/15 * * * *"
     },
     {
-      "path": "/api/cron/merge-duplicate-contacts",
+      "path": "/api/cron/merge-duplicate-leads",
       "schedule": "15 2 * * *"
     }
   ]

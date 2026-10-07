@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { mergeDuplicateHubSpotContacts } from '@/lib/hubspot-lead-stage'
+import { mergeDuplicateHubSpotLeads } from '@/lib/hubspot-lead-stage'
 
 export const maxDuration = 300
 
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await mergeDuplicateHubSpotContacts(50)
+    const result = await mergeDuplicateHubSpotLeads(50)
     return NextResponse.json({ ok: true, ...result })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error'
