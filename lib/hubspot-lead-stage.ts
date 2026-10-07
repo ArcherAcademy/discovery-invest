@@ -4,6 +4,8 @@ const LEAD_STAGE_PROPERTY = 'hs_pipeline_stage'
 const WAITLIST_DISCOVERY_STAGE_ID = '6147230967'
 const NEWSLETTER_STAGE_IDS = ['6161831098', '5709325549'] as const
 const NEWSLETTER_CONTACT_PROPERTY = 'nieuwsbrief_leads_nl_via_archer_invest'
+const REACTIVATION_SOURCE_STAGE_IDS = new Set(['5709325549', '5709325554'])
+const REACTIVATION_TARGET_STAGE_IDS = new Set(['5849884862', '5779412163'])
 
 const STAGE_BY_TRIGGER = {
   one_core_video: '6150881500',
@@ -186,7 +188,9 @@ export async function mergeDuplicateHubSpotLeads(maxArchivedLeads = 50) {
   let duplicateGroups = 0
   let archivedLeads = 0
   let promotedPrimaryLeads = 0
+  let reactivatedPrimaryLeads = 0
   let skippedUnsafeGroups = 0
+  let limitReached = false
   for (const group of leadsByContact.values()) {
     const uniqueGroup = [...new Map(group.map(lead => [lead.id, lead])).values()]
     if (uniqueGroup.length < 2) continue
@@ -204,38 +208,50 @@ export async function mergeDuplicateHubSpotLeads(maxArchivedLeads = 50) {
     }
 
     const [primaryLead, ...duplicates] = uniqueGroup
-    const duplicateBatch = duplicates.slice(0, Math.max(0, maxArchivedLeads - archivedLeads))
-    if (duplicateBatch.length === 0) break
+    const remainingArchiveCapacity = Math.max(0, maxArchivedLeads - archivedLeads)
+    if (duplicates.length > remainingArchiveCapacity) {
+      limitReached = true
+      break
+    }
+    const duplicateBatch = duplicates
 
     const primaryStage = primaryLead.properties?.[LEAD_STAGE_PROPERTY] ?? ''
+    const reactivationLead = REACTIVATION_SOURCE_STAGE_IDS.has(primaryStage)
+      ? duplicates.filter(lead =>
+          REACTIVATION_TARGET_STAGE_IDS.has(lead.properties?.[LEAD_STAGE_PROPERTY] ?? ''),
+        ).at(-1)
+      : undefined
     const furthestLead = uniqueGroup.reduce((furthest, lead) => {
       const furthestOrder = liveStageOrder.get(furthest.properties?.[LEAD_STAGE_PROPERTY] ?? '') ?? -1
       const leadOrder = liveStageOrder.get(lead.properties?.[LEAD_STAGE_PROPERTY] ?? '') ?? -1
       return leadOrder > furthestOrder ? lead : furthest
     }, primaryLead)
-    const furthestStage = furthestLead.properties?.[LEAD_STAGE_PROPERTY] ?? ''
+    const targetStage = reactivationLead?.properties?.[LEAD_STAGE_PROPERTY]
+      ?? furthestLead.properties?.[LEAD_STAGE_PROPERTY]
+      ?? ''
     const primaryOrder = liveStageOrder.get(primaryStage) ?? -1
-    const furthestOrder = liveStageOrder.get(furthestStage) ?? -1
+    const targetOrder = liveStageOrder.get(targetStage) ?? -1
+    const isReactivation = Boolean(reactivationLead)
 
-    if (furthestOrder < primaryOrder) {
+    if (!isReactivation && targetOrder < primaryOrder) {
       skippedUnsafeGroups += 1
       continue
     }
 
-    if (furthestOrder > primaryOrder) {
+    if (targetStage !== primaryStage) {
       await hubSpotRequest(`/crm/v3/objects/leads/${primaryLead.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ properties: { [LEAD_STAGE_PROPERTY]: furthestStage } }),
+        body: JSON.stringify({ properties: { [LEAD_STAGE_PROPERTY]: targetStage } }),
       })
       const verifiedPrimary = await hubSpotRequest<HubSpotLead>(
         `/crm/v3/objects/leads/${primaryLead.id}?properties=${LEAD_STAGE_PROPERTY}`,
       )
       const verifiedStage = verifiedPrimary.properties?.[LEAD_STAGE_PROPERTY] ?? ''
-      const verifiedOrder = liveStageOrder.get(verifiedStage) ?? -1
-      if (verifiedOrder < furthestOrder) {
-        throw new Error(`Lead ${primaryLead.id} kon niet veilig naar de verste stage worden gebracht`)
+      if (verifiedStage !== targetStage) {
+        throw new Error(`Lead ${primaryLead.id} kon niet veilig naar de doelstage worden gebracht`)
       }
-      promotedPrimaryLeads += 1
+      if (isReactivation) reactivatedPrimaryLeads += 1
+      else promotedPrimaryLeads += 1
     }
 
     await hubSpotRequest('/crm/v3/objects/leads/batch/archive', {
@@ -243,7 +259,10 @@ export async function mergeDuplicateHubSpotLeads(maxArchivedLeads = 50) {
       body: JSON.stringify({ inputs: duplicateBatch.map(lead => ({ id: lead.id })) }),
     })
     archivedLeads += duplicateBatch.length
-    if (archivedLeads >= maxArchivedLeads) break
+    if (archivedLeads >= maxArchivedLeads) {
+      limitReached = true
+      break
+    }
   }
 
   return {
@@ -251,8 +270,9 @@ export async function mergeDuplicateHubSpotLeads(maxArchivedLeads = 50) {
     duplicateGroups,
     archivedLeads,
     promotedPrimaryLeads,
+    reactivatedPrimaryLeads,
     skippedUnsafeGroups,
-    limitReached: archivedLeads >= maxArchivedLeads,
+    limitReached,
   }
 }
 
