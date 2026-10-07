@@ -146,6 +146,13 @@ function normalizeBelgianPhone(value?: string | null) {
   return digits
 }
 
+function contactMergeKey(contact: MergeableHubSpotContact) {
+  const firstName = normalizeContactName(contact.properties?.firstname)
+  const lastName = normalizeContactName(contact.properties?.lastname)
+  const phone = normalizeBelgianPhone(contact.properties?.phone || contact.properties?.mobilephone)
+  return firstName && lastName && phone.length >= 9 ? `${firstName}|${lastName}|${phone}` : null
+}
+
 export async function mergeDuplicateHubSpotContacts(maxMerges = 50) {
   const contacts: MergeableHubSpotContact[] = []
   let after: string | undefined
@@ -168,12 +175,9 @@ export async function mergeDuplicateHubSpotContacts(maxMerges = 50) {
 
   const groups = new Map<string, MergeableHubSpotContact[]>()
   for (const contact of contacts) {
-    const firstName = normalizeContactName(contact.properties?.firstname)
-    const lastName = normalizeContactName(contact.properties?.lastname)
-    const phone = normalizeBelgianPhone(contact.properties?.phone || contact.properties?.mobilephone)
-    if (!firstName || !lastName || phone.length < 9) continue
+    const key = contactMergeKey(contact)
+    if (!key) continue
 
-    const key = `${firstName}|${lastName}|${phone}`
     const group = groups.get(key) ?? []
     group.push(contact)
     groups.set(key, group)
@@ -183,14 +187,29 @@ export async function mergeDuplicateHubSpotContacts(maxMerges = 50) {
   let duplicateGroups = 0
   for (const group of groups.values()) {
     if (group.length < 2) continue
+
+    const canonicalContacts = new Map<string, MergeableHubSpotContact>()
+    for (const contact of group) {
+      const canonicalContact = await hubSpotRequest<MergeableHubSpotContact>(
+        `/crm/v3/objects/contacts/${contact.id}?properties=firstname,lastname,phone,mobilephone,createdate`,
+      )
+      canonicalContacts.set(canonicalContact.id, canonicalContact)
+    }
+
+    const expectedKey = contactMergeKey(group[0])
+    const canonicalGroup = [...canonicalContacts.values()].filter(
+      contact => contactMergeKey(contact) === expectedKey,
+    )
+    if (canonicalGroup.length < 2) continue
+
     duplicateGroups += 1
-    group.sort((first, second) => {
+    canonicalGroup.sort((first, second) => {
       const firstCreatedAt = first.properties?.createdate ?? first.createdAt ?? ''
       const secondCreatedAt = second.properties?.createdate ?? second.createdAt ?? ''
       return firstCreatedAt.localeCompare(secondCreatedAt) || Number(first.id) - Number(second.id)
     })
 
-    const [primaryContact, ...duplicates] = group
+    const [primaryContact, ...duplicates] = canonicalGroup
     for (const duplicate of duplicates) {
       if (mergedContacts >= maxMerges) {
         return { scannedContacts: contacts.length, duplicateGroups, mergedContacts, limitReached: true }
