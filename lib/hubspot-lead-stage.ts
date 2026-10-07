@@ -2,6 +2,8 @@ const HUBSPOT_API = 'https://api.hubapi.com'
 const LEAD_PIPELINE_ID = '3961435370'
 const LEAD_STAGE_PROPERTY = 'hs_pipeline_stage'
 const WAITLIST_DISCOVERY_STAGE_ID = '6147230967'
+const NEWSLETTER_STAGE_IDS = ['6161831098', '5709325549'] as const
+const NEWSLETTER_CONTACT_PROPERTY = 'nieuwsbrief_leads_nl_via_archer_invest'
 
 const STAGE_BY_TRIGGER = {
   one_core_video: '6150881500',
@@ -119,6 +121,88 @@ async function findLeadForEmail(email: string): Promise<HubSpotLead | null> {
   return (leads.results ?? [])
     .filter(lead => lead.properties?.hs_pipeline === LEAD_PIPELINE_ID)
     .sort((first, second) => (second.updatedAt ?? '').localeCompare(first.updatedAt ?? ''))[0] ?? null
+}
+
+function inChunks<T>(items: T[], size = 100) {
+  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
+    items.slice(index * size, (index + 1) * size),
+  )
+}
+
+export async function syncHubSpotNewsletterSegment() {
+  const leads: HubSpotLead[] = []
+  let after: string | undefined
+
+  do {
+    const page = await hubSpotRequest<{
+      results?: HubSpotLead[]
+      paging?: { next?: { after?: string } }
+    }>('/crm/v3/objects/leads/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        filterGroups: [{
+          filters: [
+            { propertyName: 'hs_pipeline', operator: 'EQ', value: LEAD_PIPELINE_ID },
+            { propertyName: LEAD_STAGE_PROPERTY, operator: 'IN', values: NEWSLETTER_STAGE_IDS },
+          ],
+        }],
+        properties: ['hs_pipeline', LEAD_STAGE_PROPERTY],
+        limit: 200,
+        ...(after ? { after } : {}),
+      }),
+    })
+    leads.push(...(page.results ?? []))
+    after = page.paging?.next?.after
+  } while (after)
+
+  const contactIds = new Set<string>()
+  for (const leadBatch of inChunks(leads)) {
+    const associations = await hubSpotRequest<{ results?: HubSpotAssociation[] }>(
+      '/crm/v4/associations/leads/contacts/batch/read',
+      { method: 'POST', body: JSON.stringify({ inputs: leadBatch.map(lead => ({ id: lead.id })) }) },
+    )
+    for (const association of associations.results ?? []) {
+      for (const contact of association.to ?? []) {
+        const contactId = String(contact.toObjectId ?? contact.id ?? '')
+        if (contactId) contactIds.add(contactId)
+      }
+    }
+  }
+
+  const contacts: Array<{ id: string; properties?: Record<string, string | null> }> = []
+  for (const contactBatch of inChunks([...contactIds])) {
+    const result = await hubSpotRequest<{
+      results?: Array<{ id: string; properties?: Record<string, string | null> }>
+    }>('/crm/v3/objects/contacts/batch/read', {
+      method: 'POST',
+      body: JSON.stringify({
+        properties: [NEWSLETTER_CONTACT_PROPERTY],
+        inputs: contactBatch.map(id => ({ id })),
+      }),
+    })
+    contacts.push(...(result.results ?? []))
+  }
+
+  const contactsToMark = contacts.filter(
+    contact => contact.properties?.[NEWSLETTER_CONTACT_PROPERTY] !== 'true',
+  )
+  for (const contactBatch of inChunks(contactsToMark)) {
+    await hubSpotRequest('/crm/v3/objects/contacts/batch/update', {
+      method: 'POST',
+      body: JSON.stringify({
+        inputs: contactBatch.map(contact => ({
+          id: contact.id,
+          properties: { [NEWSLETTER_CONTACT_PROPERTY]: 'true' },
+        })),
+      }),
+    })
+  }
+
+  return {
+    matchingLeads: leads.length,
+    associatedContacts: contactIds.size,
+    newlyMarkedContacts: contactsToMark.length,
+  }
 }
 
 export async function advanceHubSpotLeadStageById(leadId: string, trigger: LeadStageTrigger): Promise<{
