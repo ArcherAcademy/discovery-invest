@@ -61,7 +61,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'funnel_lookup_failed' }, { status: 500 })
   }
   if (existingFunnel?.invest_avond_geclaimd) {
-    return NextResponse.json({ ok: true, submitted: true, alreadySubmitted: true })
+    try {
+      await ensureHubSpotLeadStage(authUser.email, 'edition_selected')
+      return NextResponse.json({ ok: true, submitted: true, alreadySubmitted: true })
+    } catch (error) {
+      console.error('[invest-avond/unlock] Bestaande inzending naar Waitlist Discovery herstellen mislukt:', error)
+      return NextResponse.json({ error: 'hubspot_stage_update_failed' }, { status: 502 })
+    }
   }
 
   let snapshot: Awaited<ReturnType<typeof getHubSpotAccountOwnerSnapshot>>
