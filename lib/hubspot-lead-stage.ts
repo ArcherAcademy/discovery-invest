@@ -26,7 +26,7 @@ type HubSpotAssociation = {
   to?: Array<{ toObjectId?: string; id?: string }>
 }
 
-type StageDefinition = { id: string; label: string; displayOrder: number }
+type StageDefinition = { id: string; label: string; displayOrder: number; archived?: boolean }
 
 const stageDefinitions: StageDefinition[] = [
   { id: '5706792162', label: 'New Lead Ads', displayOrder: 0 },
@@ -134,6 +134,18 @@ function inChunks<T>(items: T[], size = 100) {
 }
 
 export async function mergeDuplicateHubSpotLeads(maxArchivedLeads = 50) {
+  const pipeline = await hubSpotRequest<{ stages?: StageDefinition[] }>(
+    `/crm/v3/pipelines/leads/${LEAD_PIPELINE_ID}`,
+  )
+  const liveStageOrder = new Map(
+    (pipeline.stages ?? [])
+      .filter(stage => !('archived' in stage) || !stage.archived)
+      .map(stage => [stage.id, stage.displayOrder]),
+  )
+  if (liveStageOrder.size === 0) {
+    throw new Error('HubSpot-pipeline heeft geen actieve stages')
+  }
+
   const leads: HubSpotLead[] = []
   let after: string | undefined
 
@@ -174,6 +186,7 @@ export async function mergeDuplicateHubSpotLeads(maxArchivedLeads = 50) {
   let duplicateGroups = 0
   let archivedLeads = 0
   let promotedPrimaryLeads = 0
+  let skippedUnsafeGroups = 0
   for (const group of leadsByContact.values()) {
     const uniqueGroup = [...new Map(group.map(lead => [lead.id, lead])).values()]
     if (uniqueGroup.length < 2) continue
@@ -184,21 +197,44 @@ export async function mergeDuplicateHubSpotLeads(maxArchivedLeads = 50) {
       return firstCreatedAt.localeCompare(secondCreatedAt) || Number(first.id) - Number(second.id)
     })
 
+    const stages = uniqueGroup.map(lead => lead.properties?.[LEAD_STAGE_PROPERTY] ?? '')
+    if (stages.some(stage => !stage || !liveStageOrder.has(stage))) {
+      skippedUnsafeGroups += 1
+      continue
+    }
+
     const [primaryLead, ...duplicates] = uniqueGroup
     const duplicateBatch = duplicates.slice(0, Math.max(0, maxArchivedLeads - archivedLeads))
     if (duplicateBatch.length === 0) break
 
+    const primaryStage = primaryLead.properties?.[LEAD_STAGE_PROPERTY] ?? ''
     const furthestLead = uniqueGroup.reduce((furthest, lead) => {
-      const furthestOrder = stageOrder.get(furthest.properties?.[LEAD_STAGE_PROPERTY] ?? '') ?? -1
-      const leadOrder = stageOrder.get(lead.properties?.[LEAD_STAGE_PROPERTY] ?? '') ?? -1
+      const furthestOrder = liveStageOrder.get(furthest.properties?.[LEAD_STAGE_PROPERTY] ?? '') ?? -1
+      const leadOrder = liveStageOrder.get(lead.properties?.[LEAD_STAGE_PROPERTY] ?? '') ?? -1
       return leadOrder > furthestOrder ? lead : furthest
     }, primaryLead)
-    const furthestStage = furthestLead.properties?.[LEAD_STAGE_PROPERTY]
-    if (furthestStage && furthestStage !== primaryLead.properties?.[LEAD_STAGE_PROPERTY]) {
+    const furthestStage = furthestLead.properties?.[LEAD_STAGE_PROPERTY] ?? ''
+    const primaryOrder = liveStageOrder.get(primaryStage) ?? -1
+    const furthestOrder = liveStageOrder.get(furthestStage) ?? -1
+
+    if (furthestOrder < primaryOrder) {
+      skippedUnsafeGroups += 1
+      continue
+    }
+
+    if (furthestOrder > primaryOrder) {
       await hubSpotRequest(`/crm/v3/objects/leads/${primaryLead.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ properties: { [LEAD_STAGE_PROPERTY]: furthestStage } }),
       })
+      const verifiedPrimary = await hubSpotRequest<HubSpotLead>(
+        `/crm/v3/objects/leads/${primaryLead.id}?properties=${LEAD_STAGE_PROPERTY}`,
+      )
+      const verifiedStage = verifiedPrimary.properties?.[LEAD_STAGE_PROPERTY] ?? ''
+      const verifiedOrder = liveStageOrder.get(verifiedStage) ?? -1
+      if (verifiedOrder < furthestOrder) {
+        throw new Error(`Lead ${primaryLead.id} kon niet veilig naar de verste stage worden gebracht`)
+      }
       promotedPrimaryLeads += 1
     }
 
@@ -215,6 +251,7 @@ export async function mergeDuplicateHubSpotLeads(maxArchivedLeads = 50) {
     duplicateGroups,
     archivedLeads,
     promotedPrimaryLeads,
+    skippedUnsafeGroups,
     limitReached: archivedLeads >= maxArchivedLeads,
   }
 }
