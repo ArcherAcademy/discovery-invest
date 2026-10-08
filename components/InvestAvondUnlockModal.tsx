@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowRight, Check, X } from 'lucide-react'
 
 type Edition = {
@@ -48,13 +48,26 @@ interface InvestAvondUnlockModalProps {
   onClose?: () => void
   onSubmitted?: () => void | Promise<void>
   onViewBonus: () => void
+  displayMode?: 'modal' | 'page'
+  alreadySubmitted?: boolean
 }
 
-export default function InvestAvondUnlockModal({ open, onClose, onSubmitted, onViewBonus }: InvestAvondUnlockModalProps) {
+export default function InvestAvondUnlockModal({
+  open,
+  onClose,
+  onSubmitted,
+  onViewBonus,
+  displayMode = 'modal',
+  alreadySubmitted = false,
+}: InvestAvondUnlockModalProps) {
   const [selectedEdition, setSelectedEdition] = useState<string | null>('februari-2027')
-  const [confirmed, setConfirmed] = useState(false)
+  const [confirmed, setConfirmed] = useState(alreadySubmitted)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (alreadySubmitted) setConfirmed(true)
+  }, [alreadySubmitted])
 
   if (!open) return null
 
@@ -89,23 +102,27 @@ export default function InvestAvondUnlockModal({ open, onClose, onSubmitted, onV
     }
   }
 
+  const isPage = displayMode === 'page'
+
   return (
     <div
-      className="fixed inset-0 z-[100] overflow-y-auto bg-foreground/65 p-3 backdrop-blur-[2px] sm:p-6"
-      role="dialog"
-      aria-modal="true"
+      className={isPage ? 'w-full' : 'fixed inset-0 z-[100] overflow-y-auto bg-foreground/65 p-3 backdrop-blur-[2px] sm:p-6'}
+      role={isPage ? undefined : 'dialog'}
+      aria-modal={isPage ? undefined : true}
       aria-labelledby="edition-choice-title"
     >
-      <div className="flex min-h-full items-center justify-center">
-        <main className="relative my-auto max-h-[min(92vh,680px)] w-full max-w-3xl overflow-y-auto rounded-[1.5rem] border border-border/80 bg-background px-6 py-8 shadow-[0_28px_90px_rgba(13,15,20,0.24)] sm:px-10 sm:py-10">
-          <button
-            type="button"
-            onClick={close}
-            aria-label="Popup sluiten"
-            className="absolute right-4 top-4 inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:right-6 sm:top-6"
-          >
-            <X size={20} />
-          </button>
+      <div className={isPage ? 'w-full' : 'flex min-h-full items-center justify-center'}>
+        <main className={isPage ? 'relative w-full rounded-[1.5rem] border border-border/80 bg-background px-6 py-8 shadow-sm sm:px-10 sm:py-10' : 'relative my-auto max-h-[min(92vh,680px)] w-full max-w-3xl overflow-y-auto rounded-[1.5rem] border border-border/80 bg-background px-6 py-8 shadow-[0_28px_90px_rgba(13,15,20,0.24)] sm:px-10 sm:py-10'}>
+          {!isPage ? (
+            <button
+              type="button"
+              onClick={close}
+              aria-label="Popup sluiten"
+              className="absolute right-4 top-4 inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:right-6 sm:top-6"
+            >
+              <X size={20} />
+            </button>
+          ) : null}
 
           {!confirmed ? (
             <>
@@ -168,7 +185,8 @@ export default function InvestAvondUnlockModal({ open, onClose, onSubmitted, onV
               <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-primary">Voorkeursdatum ontvangen</p>
               <h1 id="edition-choice-title" className="mt-3 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Proficiat met je keuze.</h1>
               <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-                Je koos voor {selected?.title}. <strong className="font-semibold text-foreground">Iemand van ons team neemt zo snel mogelijk contact met je op.</strong> Je betaalt nu niets en je keuze verplicht je tot niets.
+                {selected && !alreadySubmitted ? `Je koos voor ${selected.title}. ` : 'Je voorkeursdatum is goed ontvangen. '}
+                <strong className="font-semibold text-foreground">Iemand van ons team neemt zo snel mogelijk contact met je op.</strong> Je betaalt nu niets en je keuze verplicht je tot niets.
               </p>
               <div className="mx-auto mt-8 max-w-2xl rounded-2xl border border-primary/15 bg-primary/[0.06] p-5 text-left sm:p-6">
                 <p className="text-sm leading-6 text-foreground sm:text-base">In de tussentijd: geniet alvast van je bonusmateriaal, verdiend door de hele videoreeks uit te kijken.</p>
@@ -177,9 +195,11 @@ export default function InvestAvondUnlockModal({ open, onClose, onSubmitted, onV
                   <ArrowRight size={17} aria-hidden="true" />
                 </button>
               </div>
-              <button type="button" onClick={close} className="mt-5 inline-flex min-h-9 items-center justify-center px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                Sluiten
-              </button>
+              {!isPage ? (
+                <button type="button" onClick={close} className="mt-5 inline-flex min-h-9 items-center justify-center px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  Sluiten
+                </button>
+              ) : null}
             </div>
           )}
         </main>

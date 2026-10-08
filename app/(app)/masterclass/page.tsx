@@ -1,15 +1,24 @@
+'use client'
+
+import { useRouter } from 'next/navigation'
+import InvestAvondUnlockModal from '@/components/InvestAvondUnlockModal'
+import { useApp } from '@/components/app-context'
+
 export default function MasterclassPage() {
+  const router = useRouter()
+  const { investAvondGeclaimd, refresh } = useApp()
+
   return (
-    <section className="absolute inset-0 overflow-hidden bg-background" aria-labelledby="masterclass-page-title">
+    <section className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-12" aria-labelledby="masterclass-page-title">
       <h1 id="masterclass-page-title" className="sr-only">
-        Masterclass wachtlijst
+        Kies je Invest Masterclass-editie
       </h1>
-      <iframe
-        src="https://archerinvest.be/wachtlijst"
-        title="Masterclass wachtlijst van Archer Invest"
-        className="block h-[calc(100%+978px)] w-full -translate-y-32 border-0 bg-background md:h-[calc(100%+617px)]"
-        allow="payment"
-        referrerPolicy="strict-origin-when-cross-origin"
+      <InvestAvondUnlockModal
+        open
+        displayMode="page"
+        alreadySubmitted={investAvondGeclaimd}
+        onSubmitted={refresh}
+        onViewBonus={() => router.push('/traject#bonusmateriaal')}
       />
     </section>
   )
