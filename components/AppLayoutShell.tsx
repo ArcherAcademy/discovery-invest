@@ -36,7 +36,7 @@ export function AppLayoutShell({ children }: { children: React.ReactNode }) {
             hasArchitecturalBackground
               ? {
                   backgroundImage:
-                    'linear-gradient(to bottom, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.38)), url("/images/dashboard-background.png")',
+                    'linear-gradient(to bottom, rgb(255 255 255 / 0.34), rgb(255 255 255 / 0.58)), url("/images/dashboard-background.png")',
                   backgroundAttachment: 'scroll',
                 }
               : undefined
