@@ -434,7 +434,7 @@ export default function VimeoPlayer({
       {/* Player + end-screen overlay */}
       <div
         ref={wrapperRef}
-        className="relative w-full"
+        className="group relative w-full"
         style={{ aspectRatio: '16/9', background: '#000', borderRadius: '1rem', overflow: 'hidden' }}
       >
         {/* Vimeo rendert alleen de video. De bediening hieronder is volledig van Archer. */}
@@ -455,13 +455,15 @@ export default function VimeoPlayer({
         )}
 
         {!playerLoadError && !ended && (
-          <div className="absolute inset-x-3 bottom-3 z-30 flex items-center justify-between rounded-full border border-border/40 bg-background/85 p-1.5 text-foreground shadow-lg backdrop-blur-md sm:inset-x-4 sm:bottom-4">
+          <div
+            className={`pointer-events-none absolute inset-x-3 bottom-3 z-30 flex items-center justify-between text-foreground transition-opacity duration-300 group-hover:opacity-100 focus-within:opacity-100 sm:inset-x-4 sm:bottom-4 ${isPlaying ? 'opacity-0' : 'opacity-100'}`}
+          >
             <button
               type="button"
               onClick={togglePlayback}
               disabled={!playerReady}
               aria-label={isPlaying ? 'Video pauzeren' : 'Video afspelen'}
-              className="flex size-10 items-center justify-center rounded-full transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-50"
+              className="pointer-events-auto flex size-11 items-center justify-center rounded-full border border-border/40 bg-background/85 shadow-lg backdrop-blur-md transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-50"
             >
               {isPlaying ? <Pause className="size-5 fill-current" aria-hidden="true" /> : <Play className="ml-0.5 size-5 fill-current" aria-hidden="true" />}
             </button>
@@ -470,7 +472,7 @@ export default function VimeoPlayer({
               onClick={openFullscreen}
               disabled={!playerReady}
               aria-label="Video op volledig scherm bekijken"
-              className="flex size-10 items-center justify-center rounded-full transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-50"
+              className="pointer-events-auto flex size-11 items-center justify-center rounded-full border border-border/40 bg-background/85 shadow-lg backdrop-blur-md transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-50"
             >
               <Maximize2 className="size-5" aria-hidden="true" />
             </button>
