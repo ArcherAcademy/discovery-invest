@@ -60,7 +60,7 @@ export default function InvestAvondUnlockModal({
   displayMode = 'modal',
   alreadySubmitted = false,
 }: InvestAvondUnlockModalProps) {
-  const [selectedEdition, setSelectedEdition] = useState<string | null>('februari-2027')
+  const [selectedEdition, setSelectedEdition] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState(alreadySubmitted)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -74,7 +74,7 @@ export default function InvestAvondUnlockModal({
   const selected = EDITIONS.find(edition => edition.id === selectedEdition)
 
   function close() {
-    setSelectedEdition('februari-2027')
+    setSelectedEdition(null)
     setConfirmed(false)
     setSubmitting(false)
     setSubmitError(null)
@@ -112,7 +112,7 @@ export default function InvestAvondUnlockModal({
       aria-labelledby="edition-choice-title"
     >
       <div className={isPage ? 'w-full' : 'flex min-h-full items-center justify-center'}>
-        <main className={isPage ? 'relative w-full rounded-[1.5rem] border border-border/80 bg-background px-6 py-8 shadow-sm sm:px-10 sm:py-10' : 'relative my-auto max-h-[min(92vh,680px)] w-full max-w-3xl overflow-y-auto rounded-[1.5rem] border border-border/80 bg-background px-6 py-8 shadow-[0_28px_90px_rgba(13,15,20,0.24)] sm:px-10 sm:py-10'}>
+        <section className={isPage ? 'relative w-full rounded-[1.5rem] border border-border/80 bg-background px-6 py-8 shadow-sm sm:px-10 sm:py-10' : 'relative my-auto max-h-[min(92vh,680px)] w-full max-w-3xl overflow-y-auto rounded-[1.5rem] border border-border/80 bg-background px-6 py-8 shadow-[0_28px_90px_rgba(13,15,20,0.24)] sm:px-10 sm:py-10'}>
           {!isPage ? (
             <button
               type="button"
@@ -129,10 +129,10 @@ export default function InvestAvondUnlockModal({
               <div className="pr-10">
                 <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Invest Masterclass</p>
                 <h1 id="edition-choice-title" className="mt-3 max-w-lg text-pretty text-3xl font-semibold tracking-[-0.04em] text-foreground sm:text-4xl sm:leading-[1.08]">
-                  Kies je voorkeursdatum.
+                  Kies de editie waarop jij jouw vermogensplan bouwt.
                 </h1>
-                <p className="mt-4 max-w-xl text-pretty text-sm leading-6 text-muted-foreground sm:text-[15px]">
-                  We nemen daarna persoonlijk contact met je op. Geen betaling vooraf en geen verplichting.
+                <p className="mt-4 max-w-2xl text-pretty text-sm leading-6 text-muted-foreground sm:text-[15px]">
+                  Selecteer je voorkeursdatum. Daarna neemt iemand van ons team persoonlijk contact met je op om je situatie te bespreken en te bekijken of deze Masterclass bij je past. Je betaalt nu niets en je voorkeursdatum is nog geen definitieve inschrijving.
                 </p>
               </div>
 
@@ -172,7 +172,13 @@ export default function InvestAvondUnlockModal({
                 onClick={submitCandidate}
                 className="mt-7 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
-                {submitting ? 'Bezig met versturen…' : 'Kies je datum'}
+                {submitting
+                  ? 'Bezig met versturen…'
+                  : !selected
+                    ? 'Kies een editie'
+                    : selected.status === 'Op de wachtlijst'
+                      ? 'Op de wachtlijst plaatsen'
+                      : 'Mijn voorkeursdatum kiezen'}
                 <ArrowRight size={16} aria-hidden="true" />
               </button>
               {submitError ? <p role="alert" className="mt-3 text-center text-xs leading-5 text-destructive">{submitError}</p> : null}
@@ -202,7 +208,7 @@ export default function InvestAvondUnlockModal({
               ) : null}
             </div>
           )}
-        </main>
+        </section>
       </div>
     </div>
   )

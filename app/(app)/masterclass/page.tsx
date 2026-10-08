@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import InvestAvondUnlockModal from '@/components/InvestAvondUnlockModal'
+import MasterclassDecisionContent from '@/components/MasterclassDecisionContent'
 import { useApp } from '@/components/app-context'
 
 export default function MasterclassPage() {
@@ -9,10 +10,7 @@ export default function MasterclassPage() {
   const { investAvondGeclaimd, refresh } = useApp()
 
   return (
-    <section className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-12" aria-labelledby="masterclass-page-title">
-      <h1 id="masterclass-page-title" className="sr-only">
-        Kies je Invest Masterclass-editie
-      </h1>
+    <MasterclassDecisionContent>
       <InvestAvondUnlockModal
         open
         displayMode="page"
@@ -20,6 +18,6 @@ export default function MasterclassPage() {
         onSubmitted={refresh}
         onViewBonus={() => router.push('/traject#bonusmateriaal')}
       />
-    </section>
+    </MasterclassDecisionContent>
   )
 }
