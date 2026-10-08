@@ -21,6 +21,13 @@ function wait(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+function formatVideoTime(seconds: number) {
+  const safeSeconds = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0
+  const minutes = Math.floor(safeSeconds / 60)
+  const remainingSeconds = safeSeconds % 60
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+}
+
 function getPlayerErrorMessage(error: unknown) {
   const playerError = error as { name?: string; message?: string } | null
   if (playerError?.name === 'PrivacyError' || playerError?.message?.toLowerCase().includes('privacy')) {
@@ -487,18 +494,27 @@ export default function VimeoPlayer({
             >
               {isPlaying ? <Pause className="size-5 fill-current" aria-hidden="true" /> : <Play className="ml-0.5 size-5 fill-current" aria-hidden="true" />}
             </button>
-            {completed && duration > 0 && (
-              <input
-                type="range"
-                min={0}
-                max={duration}
-                step={0.1}
-                value={Math.min(currentTime, duration)}
-                onChange={(event) => void seekTo(Number(event.currentTarget.value))}
-                aria-label="Door de bekeken video spoelen"
-                aria-valuetext={`${Math.round(currentTime)} van ${Math.round(duration)} seconden`}
-                className="pointer-events-auto mx-3 h-1.5 min-w-0 flex-1 cursor-pointer accent-primary"
-              />
+            {duration > 0 && (
+              <div className="mx-3 flex min-w-0 flex-1 items-center gap-2">
+                <span className="min-w-10 text-right text-sm font-medium tabular-nums text-primary-foreground">
+                  {formatVideoTime(currentTime)}
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={duration}
+                  step={0.1}
+                  value={Math.min(currentTime, duration)}
+                  onChange={(event) => void seekTo(Number(event.currentTarget.value))}
+                  disabled={!completed}
+                  aria-label={completed ? 'Door de bekeken video spoelen' : 'Voortgang van de video'}
+                  aria-valuetext={`${formatVideoTime(currentTime)} van ${formatVideoTime(duration)}`}
+                  className="pointer-events-auto h-1.5 min-w-0 flex-1 accent-primary disabled:pointer-events-none disabled:cursor-default disabled:opacity-100"
+                />
+                <span className="min-w-10 text-sm font-medium tabular-nums text-primary-foreground">
+                  {formatVideoTime(duration)}
+                </span>
+              </div>
             )}
             <button
               type="button"
