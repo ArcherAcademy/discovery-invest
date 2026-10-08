@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { BarChart3, CheckCircle2, ChevronRight, Circle, Filter, Laptop, Loader2, Monitor, Search, Smartphone, Tablet, Users, X } from 'lucide-react'
+import { BarChart3, CheckCircle2, ChevronRight, Circle, Filter, Loader2, Monitor, Search, Smartphone, Tablet, Users, X } from 'lucide-react'
 
 type User = { id: string; email: string | null; last_activity_at: string | null; whatsapp_opt_in: boolean | null }
 type Video = { id: string; order_no: number; section: string; title: string }
@@ -13,7 +13,13 @@ type Trigger = { user_id: string | null; workflow_naam: string | null; status: s
 type Webhook = { user_id: string | null; event_type: string; created_at: string }
 type DeviceType = 'mobile' | 'tablet' | 'desktop'
 type DeviceVisit = { user_id: string | null; created_at: string; payload_json: { device_type?: string; viewport_width?: number } | null }
-type Payload = { users: User[]; videos: Video[]; progress: Progress[]; funnel: Funnel[]; bookings: Booking[]; events: Event[]; triggers: Trigger[]; webhooks: Webhook[]; devices: DeviceVisit[] }
+type HistoricalDevices = {
+  from: string
+  to: string
+  source: string
+  rows: Array<{ device_type: DeviceType; visitors: number; pageviews: number }>
+}
+type Payload = { users: User[]; videos: Video[]; progress: Progress[]; funnel: Funnel[]; bookings: Booking[]; events: Event[]; triggers: Trigger[]; webhooks: Webhook[]; devices: DeviceVisit[]; historicalDevices: HistoricalDevices }
 
 type Lead = User & { invest_avond_geclaimd: boolean | null; completed: number; progress: Progress[]; booked: boolean; triggers: Trigger[] }
 
@@ -32,7 +38,7 @@ function Metric({ label, value, detail, icon: Icon }: { label: string; value: st
   return <div className="rounded-2xl border border-border bg-card p-5 shadow-sm"><div className="flex items-center justify-between"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p><Icon className="size-4 text-primary" /></div><p className="mt-3 text-3xl font-semibold tracking-tight">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></div>
 }
 
-function DeviceOverview({ visits }: { visits: DeviceVisit[] }) {
+function DeviceOverview({ visits, historical }: { visits: DeviceVisit[]; historical: HistoricalDevices }) {
   const deviceConfig: Array<{ type: DeviceType; label: string; icon: typeof Smartphone }> = [
     { type: 'mobile', label: 'Mobiel', icon: Smartphone },
     { type: 'desktop', label: 'Desktop', icon: Monitor },
@@ -42,31 +48,58 @@ function DeviceOverview({ visits }: { visits: DeviceVisit[] }) {
     Boolean(visit.user_id && visit.payload_json && ['mobile', 'tablet', 'desktop'].includes(visit.payload_json.device_type ?? '')),
   )
   const uniqueUsers = new Set(validVisits.map(visit => visit.user_id))
-  const rows = deviceConfig.map(device => {
+  const liveRows = deviceConfig.map(device => {
     const matchingVisits = validVisits.filter(visit => visit.payload_json.device_type === device.type)
-    return {
-      ...device,
-      visits: matchingVisits.length,
-      users: new Set(matchingVisits.map(visit => visit.user_id)).size,
-    }
+    return { ...device, visits: matchingVisits.length, users: new Set(matchingVisits.map(visit => visit.user_id)).size }
   })
-  const primary = [...rows].sort((a, b) => b.visits - a.visits)[0]
+  const historicalVisitors = historical.rows.reduce((sum, row) => sum + row.visitors, 0)
+  const historicalPageviews = historical.rows.reduce((sum, row) => sum + row.pageviews, 0)
+  const historicalRows = deviceConfig.map(device => ({
+    ...device,
+    ...(historical.rows.find(row => row.device_type === device.type) ?? { visitors: 0, pageviews: 0 }),
+  }))
 
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <Metric label="Gemeten gebruikers" value={String(uniqueUsers.size)} detail="unieke accounts met toesteldata" icon={Users} />
-        <Metric label="Gemeten bezoeken" value={String(validVisits.length)} detail="één meting per browsersessie" icon={BarChart3} />
-        <Metric label="Meest gebruikt" value={primary?.visits ? primary.label : 'Nog geen data'} detail={primary?.visits ? `${primary.visits} gemeten bezoeken` : 'tracking start vanaf deze release'} icon={Laptop} />
+        <Metric label="Historische bezoekers" value={historicalVisitors.toLocaleString('nl-BE')} detail="8 juli tot 8 oktober 2026" icon={Users} />
+        <Metric label="Historische paginaweergaven" value={historicalPageviews.toLocaleString('nl-BE')} detail="bron: Vercel Web Analytics" icon={BarChart3} />
+        <Metric label="Mobiel aandeel" value={`${((historicalRows[0].visitors / historicalVisitors) * 100).toLocaleString('nl-BE', { maximumFractionDigits: 1 })}%`} detail="grootste toestelgroep" icon={Smartphone} />
       </div>
 
       <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <div className="mb-6">
-          <h2 className="text-lg font-semibold">Gebruik per toestel</h2>
-          <p className="text-sm text-muted-foreground">Unieke gebruikers kunnen op meerdere toestellen voorkomen. Percentages hieronder zijn gebaseerd op gemeten bezoeken.</p>
+          <h2 className="text-lg font-semibold">Historisch toestelgebruik</h2>
+          <p className="text-sm text-muted-foreground">Anonieme bezoekers uit {historical.source}, gemeten van 8 juli tot 8 oktober 2026.</p>
         </div>
         <div className="grid gap-4 md:grid-cols-3">
-          {rows.map(row => {
+          {historicalRows.map(row => {
+            const Icon = row.icon
+            const share = historicalVisitors > 0 ? (row.visitors / historicalVisitors) * 100 : 0
+            return (
+              <article key={row.type} className="rounded-xl border border-border bg-background p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary"><Icon className="size-5" aria-hidden="true" /></span>
+                    <div><h3 className="font-semibold">{row.label}</h3><p className="text-xs text-muted-foreground">{row.visitors.toLocaleString('nl-BE')} bezoekers</p></div>
+                  </div>
+                  <strong className="text-2xl tracking-tight">{share.toLocaleString('nl-BE', { maximumFractionDigits: 1 })}%</strong>
+                </div>
+                <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${share}%` }} /></div>
+                <p className="mt-2 text-xs text-muted-foreground">{row.pageviews.toLocaleString('nl-BE')} paginaweergaven</p>
+              </article>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold">Live tracking vanaf 8 oktober</h2>
+          <p className="text-sm text-muted-foreground">Ingelogde accounts uit Supabase. Eén gebruiker kan op meerdere toestellen voorkomen.</p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          {liveRows.map(row => {
             const Icon = row.icon
             const share = pct(row.visits, validVisits.length) ?? 0
             return (
@@ -79,12 +112,12 @@ function DeviceOverview({ visits }: { visits: DeviceVisit[] }) {
                   <strong className="text-2xl tracking-tight">{share}%</strong>
                 </div>
                 <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${share}%` }} /></div>
-                <p className="mt-2 text-xs text-muted-foreground">{row.visits} bezoeken</p>
+                <p className="mt-2 text-xs text-muted-foreground">{row.visits} browsersessies</p>
               </article>
             )
           })}
         </div>
-        {validVisits.length === 0 && <p className="mt-5 rounded-xl bg-muted p-4 text-sm text-muted-foreground">Nog geen toesteldata. De eerste metingen verschijnen zodra gebruikers na deze release opnieuw aanmelden of de app openen.</p>}
+        <p className="mt-5 text-sm text-muted-foreground">{uniqueUsers.size} unieke accounts en {validVisits.length} browsersessies gemeten sinds de tracking actief werd.</p>
       </section>
     </div>
   )
@@ -153,5 +186,5 @@ export function AnalyticsDashboard() {
 
   if (loading) return <div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="size-6 animate-spin text-primary" /></div>
   if (error || !data) return <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700"><p>{error ?? 'Geen analyticsdata beschikbaar.'}</p><button type="button" onClick={() => setReloadKey(value => value + 1)} className="mt-4 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800">Opnieuw proberen</button></div>
-  return <div className="mx-auto max-w-[1500px] space-y-6"><header className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end"><div><p className="text-sm font-medium text-primary">Discovery analytics</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Funnel & leads</h1><p className="mt-2 max-w-2xl text-sm text-muted-foreground">Server-side overzicht op basis van werkelijk gelogde Supabase-data. Niet gelogde data wordt niet ingevuld.</p></div><div className="flex flex-wrap items-center gap-2"><label className="text-xs text-muted-foreground">Van<input type="date" value={from} onChange={event => setFrom(event.target.value)} className="ml-2 rounded-lg border border-border bg-card px-3 py-2 text-sm" /></label><label className="text-xs text-muted-foreground">Tot<input type="date" value={to} onChange={event => setTo(event.target.value)} className="ml-2 rounded-lg border border-border bg-card px-3 py-2 text-sm" /></label></div></header><div className="flex gap-2 border-b border-border"><button onClick={() => setTab('overview')} className={`border-b-2 px-1 pb-3 text-sm font-semibold ${tab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Funneloverzicht</button><button onClick={() => setTab('devices')} className={`border-b-2 px-1 pb-3 text-sm font-semibold ${tab === 'devices' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Toestellen</button><button onClick={() => setTab('leads')} className={`border-b-2 px-1 pb-3 text-sm font-semibold ${tab === 'leads' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Per lead ({leads.length})</button></div>{tab === 'overview' ? <FunnelOverview data={data} onSelectLead={id => { setSelectedId(id); setTab('leads') }} /> : tab === 'devices' ? <DeviceOverview visits={data.devices ?? []} /> : <section className="rounded-2xl border border-border bg-card p-5 shadow-sm"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h2 className="text-lg font-semibold">Leads</h2><p className="text-sm text-muted-foreground">Zoek op e-mail en open een veilige detailweergave.</p></div><div className="relative w-full md:max-w-sm"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Zoek op e-mail..." className="w-full rounded-xl border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/20" /></div></div><div className="mt-5 overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead><tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground"><th className="pb-3 font-medium">E-mail</th><th className="pb-3 font-medium">Status</th><th className="pb-3 font-medium">Video’s</th><th className="pb-3 font-medium">Laatst actief</th><th className="pb-3 font-medium">Boeking</th><th className="pb-3" /></tr></thead><tbody className="divide-y divide-border">{leads.map(lead => <tr key={lead.id} className="group cursor-pointer hover:bg-muted/50" onClick={() => setSelectedId(lead.id)}><td className="py-4 font-medium">{lead.email ?? '—'}</td><td className="py-4"><StatusBadge completed={lead.completed} /></td><td className="py-4">{lead.completed}/6</td><td className="py-4 text-muted-foreground">{dateLabel(lead.last_activity_at)}</td><td className="py-4">{lead.booked ? 'Ja' : 'Nee'}</td><td className="py-4 text-right"><ChevronRight className="ml-auto size-4 text-muted-foreground transition-transform group-hover:translate-x-1" /></td></tr>)}</tbody></table>{!leads.length && <p className="py-10 text-center text-sm text-muted-foreground">Geen leads gevonden.</p>}</div></section>}{selected && <LeadDetail lead={selected} videos={data.videos} onClose={() => setSelectedId(null)} />}</div>
+  return <div className="mx-auto max-w-[1500px] space-y-6"><header className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end"><div><p className="text-sm font-medium text-primary">Discovery analytics</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Funnel & leads</h1><p className="mt-2 max-w-2xl text-sm text-muted-foreground">Server-side overzicht op basis van werkelijk gelogde Supabase-data. Niet gelogde data wordt niet ingevuld.</p></div><div className="flex flex-wrap items-center gap-2"><label className="text-xs text-muted-foreground">Van<input type="date" value={from} onChange={event => setFrom(event.target.value)} className="ml-2 rounded-lg border border-border bg-card px-3 py-2 text-sm" /></label><label className="text-xs text-muted-foreground">Tot<input type="date" value={to} onChange={event => setTo(event.target.value)} className="ml-2 rounded-lg border border-border bg-card px-3 py-2 text-sm" /></label></div></header><div className="flex gap-2 border-b border-border"><button onClick={() => setTab('overview')} className={`border-b-2 px-1 pb-3 text-sm font-semibold ${tab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Funneloverzicht</button><button onClick={() => setTab('devices')} className={`border-b-2 px-1 pb-3 text-sm font-semibold ${tab === 'devices' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Toestellen</button><button onClick={() => setTab('leads')} className={`border-b-2 px-1 pb-3 text-sm font-semibold ${tab === 'leads' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Per lead ({leads.length})</button></div>{tab === 'overview' ? <FunnelOverview data={data} onSelectLead={id => { setSelectedId(id); setTab('leads') }} /> : tab === 'devices' ? <DeviceOverview visits={data.devices ?? []} historical={data.historicalDevices} /> : <section className="rounded-2xl border border-border bg-card p-5 shadow-sm"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h2 className="text-lg font-semibold">Leads</h2><p className="text-sm text-muted-foreground">Zoek op e-mail en open een veilige detailweergave.</p></div><div className="relative w-full md:max-w-sm"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Zoek op e-mail..." className="w-full rounded-xl border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/20" /></div></div><div className="mt-5 overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead><tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground"><th className="pb-3 font-medium">E-mail</th><th className="pb-3 font-medium">Status</th><th className="pb-3 font-medium">Video’s</th><th className="pb-3 font-medium">Laatst actief</th><th className="pb-3 font-medium">Boeking</th><th className="pb-3" /></tr></thead><tbody className="divide-y divide-border">{leads.map(lead => <tr key={lead.id} className="group cursor-pointer hover:bg-muted/50" onClick={() => setSelectedId(lead.id)}><td className="py-4 font-medium">{lead.email ?? '—'}</td><td className="py-4"><StatusBadge completed={lead.completed} /></td><td className="py-4">{lead.completed}/6</td><td className="py-4 text-muted-foreground">{dateLabel(lead.last_activity_at)}</td><td className="py-4">{lead.booked ? 'Ja' : 'Nee'}</td><td className="py-4 text-right"><ChevronRight className="ml-auto size-4 text-muted-foreground transition-transform group-hover:translate-x-1" /></td></tr>)}</tbody></table>{!leads.length && <p className="py-10 text-center text-sm text-muted-foreground">Geen leads gevonden.</p>}</div></section>}{selected && <LeadDetail lead={selected} videos={data.videos} onClose={() => setSelectedId(null)} />}</div>
 }

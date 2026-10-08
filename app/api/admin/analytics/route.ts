@@ -11,6 +11,16 @@ const EVENT_COLUMNS = 'id,starts_at,location,capacity,price_eur'
 const TRIGGER_COLUMNS = 'user_id,workflow_naam,status,created_at'
 const WEBHOOK_COLUMNS = 'user_id,event_type,created_at'
 const DEVICE_COLUMNS = 'user_id,created_at,payload_json'
+const HISTORICAL_DEVICES = {
+  from: '2026-07-08T11:00:00.000Z',
+  to: '2026-10-08T11:59:59.999Z',
+  source: 'Vercel Web Analytics',
+  rows: [
+    { device_type: 'mobile', visitors: 1407, pageviews: 5360 },
+    { device_type: 'desktop', visitors: 937, pageviews: 5512 },
+    { device_type: 'tablet', visitors: 30, pageviews: 134 },
+  ],
+} as const
 
 async function fetchLimited<T>(query: any, limit: number): Promise<T[]> {
   const { data, error } = await query.limit(limit)
@@ -49,7 +59,7 @@ export async function GET(request: NextRequest) {
       fetchLimited(dateRange(supabase.from('demo_invest_webhook_log').select(DEVICE_COLUMNS).eq('event_type', 'analytics.device_visit').order('created_at', { ascending: false }), 'created_at'), 10000),
     ])
 
-    return NextResponse.json({ users, videos, progress, funnel, bookings, events, triggers, webhooks, devices })
+    return NextResponse.json({ users, videos, progress, funnel, bookings, events, triggers, webhooks, devices, historicalDevices: HISTORICAL_DEVICES })
   } catch (error) {
     console.error('[analytics] data ophalen mislukt:', error)
     return NextResponse.json({ error: 'Analyticsgegevens konden niet worden opgehaald.' }, { status: 500 })
