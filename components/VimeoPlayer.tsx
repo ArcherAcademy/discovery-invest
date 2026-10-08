@@ -115,6 +115,8 @@ export default function VimeoPlayer({
   const [ended, setEnded] = useState(false)
   const [hasStarted, setHasStarted] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
   const [playerReady, setPlayerReady] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [cancelled, setCancelled] = useState(false)
@@ -137,6 +139,8 @@ export default function VimeoPlayer({
     setEnded(false)
     setHasStarted(false)
     setIsPlaying(false)
+    setCurrentTime(0)
+    setDuration(0)
     setPlayerReady(false)
     setCountdown(null)
     setCancelled(false)
@@ -288,6 +292,8 @@ export default function VimeoPlayer({
 
         heartbeatFailuresRef.current = 0
         onRealDuration?.(duration)
+        setCurrentTime(currentTime)
+        setDuration(duration)
         registerPercent(currentTime / duration)
         setErrorMsg(current => current?.includes('laden van de video') ? null : current)
       } catch (error) {
@@ -307,6 +313,7 @@ export default function VimeoPlayer({
         const duration = await withTimeout(player.getDuration(), PLAYER_CALL_TIMEOUT_MS)
         if (disposed || !duration || duration <= 0) return
         onRealDuration?.(duration)
+        setDuration(duration)
         if (!completed && initialProgressPct > 0 && initialProgressPct < 90) {
           await withTimeout(player.setCurrentTime(duration * (initialProgressPct / 100)), PLAYER_CALL_TIMEOUT_MS)
         }
@@ -336,7 +343,11 @@ export default function VimeoPlayer({
       registerStarted()
     }
     const handlePause = () => setIsPlaying(false)
-    const handleTimeUpdate = ({ percent }: { percent: number }) => registerPercent(percent)
+    const handleTimeUpdate = ({ percent, seconds, duration: eventDuration }: { percent: number; seconds: number; duration: number }) => {
+      setCurrentTime(seconds)
+      setDuration(eventDuration)
+      registerPercent(percent)
+    }
     const handleEnded = () => {
       setIsPlaying(false)
       setEnded(true)
@@ -399,6 +410,17 @@ export default function VimeoPlayer({
     }
   }
 
+  const seekTo = async (seconds: number) => {
+    if (!completed || !playerRef.current) return
+    try {
+      setCurrentTime(seconds)
+      await playerRef.current.setCurrentTime(seconds)
+    } catch (error) {
+      console.error('[v0] Video doorspoelen mislukt:', error)
+      setErrorMsg('Doorspoelen lukte niet. Probeer opnieuw.')
+    }
+  }
+
   const openFullscreen = async () => {
     try {
       if (wrapperRef.current?.requestFullscreen) {
@@ -406,6 +428,8 @@ export default function VimeoPlayer({
       } else {
         await playerRef.current?.requestFullscreen()
       }
+      await playerRef.current?.play()
+      setHasStarted(true)
     } catch (error) {
       console.error('[v0] Volledig scherm openen mislukt:', error)
       setErrorMsg('Volledig scherm kon niet worden geopend. Probeer opnieuw.')
@@ -434,8 +458,7 @@ export default function VimeoPlayer({
       {/* Player + end-screen overlay */}
       <div
         ref={wrapperRef}
-        className="group relative w-full"
-        style={{ aspectRatio: '16/9', background: '#000', borderRadius: '1rem', overflow: 'hidden' }}
+        className="group relative aspect-video w-full overflow-hidden rounded-2xl bg-black fullscreen:h-screen fullscreen:aspect-auto fullscreen:rounded-none"
       >
         {/* Vimeo rendert alleen de video. De bediening hieronder is volledig van Archer. */}
         <div ref={containerRef} className="absolute inset-0 size-full" />
@@ -445,12 +468,9 @@ export default function VimeoPlayer({
             type="button"
             onClick={handlePosterPlay}
             aria-label="Video afspelen"
-            className="absolute inset-0 z-10 flex items-center justify-center overflow-hidden bg-background focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-primary"
+            className="absolute inset-0 z-10 overflow-hidden bg-background focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-primary"
           >
             <img src={thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" />
-            <span className="relative flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 sm:size-20">
-              <Play className="ml-1 size-7 fill-current sm:size-8" aria-hidden="true" />
-            </span>
           </button>
         )}
 
@@ -467,6 +487,19 @@ export default function VimeoPlayer({
             >
               {isPlaying ? <Pause className="size-5 fill-current" aria-hidden="true" /> : <Play className="ml-0.5 size-5 fill-current" aria-hidden="true" />}
             </button>
+            {completed && duration > 0 && (
+              <input
+                type="range"
+                min={0}
+                max={duration}
+                step={0.1}
+                value={Math.min(currentTime, duration)}
+                onChange={(event) => void seekTo(Number(event.currentTarget.value))}
+                aria-label="Door de bekeken video spoelen"
+                aria-valuetext={`${Math.round(currentTime)} van ${Math.round(duration)} seconden`}
+                className="pointer-events-auto mx-3 h-1.5 min-w-0 flex-1 cursor-pointer accent-primary"
+              />
+            )}
             <button
               type="button"
               onClick={openFullscreen}
