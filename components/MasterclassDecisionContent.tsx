@@ -1,81 +1,25 @@
 'use client'
 
-import Image from 'next/image'
-import Link from 'next/link'
 import Player from '@vimeo/player'
 import { track } from '@vercel/analytics'
-import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react'
+import { ArrowRight, ChartNoAxesCombined, GitBranch, Landmark, ListChecks } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 
 const outcomes = [
-  {
-    number: '01',
-    title: 'Je financiële realiteit',
-    text: 'Privé, vennootschap, vastgoed, kredieten, cashflow en beleggingen in één overzicht.',
-  },
-  {
-    number: '02',
-    title: 'Je toekomst',
-    text: 'Je GGR en levensprojectie tot jouw gekozen einddatum.',
-  },
-  {
-    number: '03',
-    title: 'Je mogelijkheden',
-    text: 'Scenario’s voor vastgoed, cash, beleggingen, pensioen en onderneming.',
-  },
-  {
-    number: '04',
-    title: 'Je volgorde',
-    text: 'Wat eerst moet gebeuren, wat kan wachten en wie je daarvoor nodig hebt.',
-  },
+  { number: '01', title: 'Financiële realiteit', text: 'Privé, vennootschap, vastgoed, kredieten, cashflow en beleggingen in één overzicht.', icon: Landmark },
+  { number: '02', title: 'Toekomstprojectie', text: 'Je GGR en levensprojectie tot jouw gekozen einddatum.', icon: ChartNoAxesCombined },
+  { number: '03', title: 'Scenario’s', text: 'De impact van keuzes rond vastgoed, cash, beleggingen, pensioen en onderneming.', icon: GitBranch },
+  { number: '04', title: 'Beslissingsvolgorde', text: 'Wat eerst moet gebeuren, wat kan wachten en wie je daarvoor nodig hebt.', icon: ListChecks },
 ]
 
 const testimonials = [
-  {
-    id: '1234030300',
-    title: 'Ik dacht dat ik een rendementsprobleem had.',
-    context: 'Van losse producten naar zicht op de echte financiële vraag.',
-  },
-  {
-    id: '1234030322',
-    title: 'Voor het eerst zag ik privé en vennootschap als één geheel.',
-    context: 'Eén overzicht maakte duidelijk welke beslissing ontbrak.',
-  },
-  {
-    id: '1234030337',
-    title: 'Ik wist eindelijk wat eerst moest gebeuren.',
-    context: 'Niet meer tegelijk optimaliseren, maar uitvoeren in de juiste volgorde.',
-  },
+  { id: '1234030300', title: 'Ik dacht dat ik een rendementsprobleem had.' },
+  { id: '1234030322', title: 'Voor het eerst zag ik privé en vennootschap als één geheel.' },
+  { id: '1234030337', title: 'Ik wist eindelijk wat eerst moest gebeuren.' },
 ]
 
-const reviews = [
-  ['/testimonials/delphine-van-loocke.png', 'Trustpilot-review van Delphine Van Loocke'],
-  ['/testimonials/thomas-driessen.png', 'Trustpilot-review van Thomas Driessen'],
-  ['/testimonials/yasmine-kustermans.png', 'Trustpilot-review van Yasmine Kustermans'],
-  ['/testimonials/sigurd-staelens.png', 'Trustpilot-review van Sigurd Staelens'],
-  ['/testimonials/wilmer-v.png', 'Trustpilot-review van Wilmer V'],
-  ['/testimonials/t-k.png', 'Trustpilot-review van T K'],
-]
-
-const fitItems = [
-  'Je vermogen verspreid zit over meerdere potjes',
-  'Je privévermogen en vennootschap niet als één totaalplan bekijkt',
-  'Je cash hebt maar niet weet wat er eerst mee moet gebeuren',
-  'Je niet afhankelijk wilt blijven van losse adviezen',
-  'Je met je eigen cijfers wilt werken',
-  'Je naar huis wilt gaan met een beslissingsvolgorde',
-]
-
-const noFitItems = [
-  'Snel rendement of een tradingtip zoekt',
-  'Een gegarandeerd rendement verwacht',
-  'Geen eigen cijfers wilt meebrengen',
-  'Alleen vrijblijvende informatie wilt',
-  'Niet bereid bent om beslissingen te nemen',
-]
-
-function TrackedTestimonial({ id, title, context, index }: (typeof testimonials)[number] & { index: number }) {
+function TrackedTestimonial({ id, title, index }: (typeof testimonials)[number] & { index: number }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
@@ -88,9 +32,7 @@ function TrackedTestimonial({ id, title, context, index }: (typeof testimonials)
       track(`Testimonial ${index + 1} bekeken`, { videoId: id })
     }
     player.on('play', onPlay)
-    return () => {
-      player.off('play', onPlay)
-    }
+    return () => { player.off('play', onPlay) }
   }, [id, index])
 
   return (
@@ -107,49 +49,38 @@ function TrackedTestimonial({ id, title, context, index }: (typeof testimonials)
           className="absolute inset-0 size-full border-0"
         />
       </div>
-      <h3 className="mt-5 text-balance text-lg font-semibold leading-snug text-foreground sm:text-xl">“{title}”</h3>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">{context}</p>
+      <h3 className="mt-3 text-balance text-sm font-semibold leading-6 text-foreground">“{title}”</h3>
     </article>
   )
 }
 
-export default function MasterclassDecisionContent({ signup }: { signup: React.ReactNode }) {
-  const dateSectionRef = useRef<HTMLElement>(null)
-  const trustpilotRef = useRef<HTMLElement>(null)
+interface MasterclassDecisionContentProps {
+  primarySignup: React.ReactNode
+  closingSignup: React.ReactNode
+}
+
+export default function MasterclassDecisionContent({ primarySignup, closingSignup }: MasterclassDecisionContentProps) {
+  const primarySelectorRef = useRef<HTMLDivElement>(null)
+  const closingSelectorRef = useRef<HTMLElement>(null)
   const trackedProgress = useRef(new Set<number>())
-  const [dateSectionVisible, setDateSectionVisible] = useState(false)
+  const [showStickyCta, setShowStickyCta] = useState(false)
+
+  useEffect(() => { track('Page viewed', { page: 'masterclass' }) }, [])
 
   useEffect(() => {
-    track('Page viewed', { page: 'masterclass' })
+    const selector = primarySelectorRef.current
+    if (!selector) return
+    const observer = new IntersectionObserver(([entry]) => {
+      setShowStickyCta(!entry.isIntersecting && entry.boundingClientRect.top < 0)
+    }, { threshold: 0.1 })
+    observer.observe(selector)
+    return () => observer.disconnect()
   }, [])
 
-  useEffect(() => {
-    const dateSection = dateSectionRef.current
-    const trustpilotSection = trustpilotRef.current
-    if (!dateSection || !trustpilotSection) return
-
-    const dateObserver = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting) return
-      setDateSectionVisible(true)
-      track('Datumsectie bekeken')
-      dateObserver.disconnect()
-    }, { threshold: 0.2 })
-
-    const trustpilotObserver = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting) return
-      track('Trustpilot bekeken')
-      trustpilotObserver.disconnect()
-    }, { threshold: 0.25 })
-
-    dateObserver.observe(dateSection)
-    trustpilotObserver.observe(trustpilotSection)
-    return () => {
-      dateObserver.disconnect()
-      trustpilotObserver.disconnect()
-    }
-  }, [])
-
-  const scrollToDate = () => dateSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const scrollToDate = () => {
+    closingSelectorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    track('Sticky CTA geklikt')
+  }
 
   const trackProofProgress = (event: React.SyntheticEvent<HTMLVideoElement>) => {
     const video = event.currentTarget
@@ -165,135 +96,93 @@ export default function MasterclassDecisionContent({ signup }: { signup: React.R
 
   return (
     <main className="min-h-screen bg-background font-sans text-foreground">
-      <header className="mx-auto flex max-w-7xl items-center justify-between px-4 py-5 sm:px-8">
+      <header className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Invest Masterclass</p>
-        <Link href="/traject" className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-          <ArrowLeft aria-hidden="true" />
-          Terug naar Discovery
-        </Link>
       </header>
 
-      <section className="px-4 pb-20 pt-12 sm:px-8 sm:pb-28 sm:pt-20" aria-labelledby="masterclass-title">
-        <div className="mx-auto flex max-w-5xl flex-col items-center text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Invest Masterclass</p>
-          <h1 id="masterclass-title" className="mt-5 max-w-4xl text-balance text-4xl font-semibold tracking-[-0.05em] sm:text-6xl sm:leading-[1.05]">
-            Je hebt gezien waarom je een plan nodig hebt. Nu zie je hoe we dat plan met jouw cijfers bouwen.
-          </h1>
-          <p className="mt-6 max-w-3xl text-pretty text-lg leading-8 text-muted-foreground">
-            Bekijk eerst deze korte video. Daarna kun je hieronder de editie kiezen waarop je jouw financiële realiteit omzet in concrete beslissingen.
-          </p>
-
-          <div className="mt-12 w-full overflow-hidden rounded-2xl border border-border bg-foreground shadow-lg">
-            <video
-              controls
-              playsInline
-              preload="metadata"
-              poster="/masterclass/mc-hero.png"
-              className="aspect-video w-full object-cover"
-              onPlay={() => track('Proof video started')}
-              onTimeUpdate={trackProofProgress}
-              onEnded={() => track('Proof video voltooid')}
-            >
-              <source src="/hero-intro.mp4" type="video/mp4" />
-              Je browser ondersteunt deze video niet.
-            </video>
-          </div>
-          <p className="mt-5 text-sm font-medium text-muted-foreground">Bekijk de video en kies daarna hieronder jouw editie.</p>
-        </div>
-      </section>
-
-      <section className="border-y border-border px-4 py-20 sm:px-8 sm:py-28" aria-labelledby="outcomes-title">
-        <div className="mx-auto max-w-6xl">
-          <h2 id="outcomes-title" className="max-w-4xl text-balance text-3xl font-semibold tracking-[-0.04em] sm:text-5xl">
-            Wat je na vier dagen niet alleen weet, maar kunt beslissen.
-          </h2>
-          <div className="mt-12 grid gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-2">
-            {outcomes.map(outcome => (
-              <article key={outcome.number} className="bg-card p-7 sm:p-10">
-                <p className="font-mono text-sm font-semibold text-primary">{outcome.number}</p>
-                <h3 className="mt-5 text-2xl font-semibold tracking-tight text-foreground">{outcome.title}</h3>
-                <p className="mt-3 max-w-md text-base leading-7 text-muted-foreground">{outcome.text}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="px-4 py-20 sm:px-8 sm:py-28" aria-labelledby="testimonials-title">
-        <div className="mx-auto max-w-6xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Deelnemers aan het woord</p>
-          <h2 id="testimonials-title" className="mt-4 max-w-4xl text-balance text-3xl font-semibold tracking-[-0.04em] sm:text-5xl">
-            Niet meer informatie. Een plan dat je kunt verdedigen.
-          </h2>
-          <div className="mt-12 grid grid-cols-1 gap-10 sm:grid-cols-3 sm:gap-6">
-            {testimonials.map((testimonial, index) => (
-              <TrackedTestimonial key={testimonial.id} {...testimonial} index={index} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section ref={trustpilotRef} className="border-y border-border px-4 py-16 sm:px-8 sm:py-20" aria-labelledby="trustpilot-title">
-        <div className="mx-auto max-w-6xl">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Trustpilot</p>
-              <h2 id="trustpilot-title" className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">Ook achteraf blijft het verschil voelbaar.</h2>
-            </div>
-            <p className="max-w-md text-sm leading-6 text-muted-foreground">Aanvullend bewijs van deelnemers die het volledige traject doorliepen.</p>
-          </div>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {reviews.map(([src, alt], index) => (
-              <figure key={src} className={index > 2 ? 'hidden sm:block' : undefined}>
-                <Image src={src} alt={alt} width={1920} height={1278} className="h-auto w-full rounded-xl border border-border" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" />
-              </figure>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="px-4 py-20 sm:px-8 sm:py-28" aria-labelledby="fit-title">
-        <div className="mx-auto max-w-6xl">
-          <h2 id="fit-title" className="text-balance text-3xl font-semibold tracking-[-0.04em] sm:text-5xl">Deze vier dagen zijn voor jou als je…</h2>
-          <div className="mt-10 grid gap-12 lg:grid-cols-[1.2fr_0.8fr] lg:gap-20">
-            <ul className="grid gap-5 sm:grid-cols-2">
-              {fitItems.map(item => (
-                <li key={item} className="flex items-start gap-3 text-base leading-7">
-                  <span className="mt-1 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"><Check aria-hidden="true" /></span>
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <div className="border-l-2 border-border pl-6 sm:pl-8">
-              <h3 className="text-lg font-semibold">Niet voor jou als je:</h3>
-              <ul className="mt-5 flex flex-col gap-4">
-                {noFitItems.map(item => (
-                  <li key={item} className="flex items-start gap-3 text-sm leading-6 text-muted-foreground">
-                    <X aria-hidden="true" className="mt-1 shrink-0 text-muted-foreground" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section ref={dateSectionRef} className="scroll-mt-4 border-t border-border px-4 py-20 sm:px-8 sm:py-28" aria-labelledby="date-title">
-        <div className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20">
+      <section className="border-y border-border px-4 py-6 sm:px-6 sm:py-8" aria-labelledby="masterclass-title">
+        <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)] lg:items-start">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Jouw volgende stap</p>
-            <h2 id="date-title" className="mt-4 text-balance text-3xl font-semibold tracking-[-0.04em] sm:text-5xl">Kies de editie waarop jij jouw vermogensplan bouwt.</h2>
-            <p className="mt-6 text-base leading-7 text-muted-foreground">Kies vrijblijvend een voorkeursdatum. Daarna bespreekt iemand van ons team persoonlijk of de Masterclass bij jouw situatie past.</p>
+            <h1 id="masterclass-title" className="max-w-3xl text-balance text-3xl font-semibold tracking-[-0.04em] sm:text-4xl lg:text-5xl lg:leading-[1.08]">
+              Je hebt gezien waarom je een plan nodig hebt. Nu kies je wanneer je het bouwt.
+            </h1>
+            <p className="mt-4 max-w-3xl text-pretty text-base leading-7 text-muted-foreground sm:text-lg">
+              Bekijk hoe we tijdens vier live dagen jouw privévermogen, vennootschap, vastgoed en beleggingen samenbrengen in één beslissingsplan.
+            </p>
+            <div className="mt-5 overflow-hidden rounded-xl border border-border bg-muted shadow-sm">
+              <video
+                controls
+                playsInline
+                preload="metadata"
+                poster="/masterclass/mc-hero.png"
+                className="aspect-video w-full object-cover"
+                onPlay={() => track('Proof video started')}
+                onTimeUpdate={trackProofProgress}
+                onEnded={() => track('Proof video voltooid')}
+              >
+                <source src="/hero-intro.mp4" type="video/mp4" />
+                Je browser ondersteunt deze video niet.
+              </video>
+            </div>
           </div>
-          <div>{signup}</div>
+          <div ref={primarySelectorRef}>{primarySignup}</div>
         </div>
       </section>
 
-      {dateSectionVisible ? (
-        <div className="fixed inset-x-0 bottom-0 border-t border-border bg-background/95 p-3 backdrop-blur sm:hidden">
-          <Button type="button" onClick={scrollToDate} className="min-h-12 w-full">
-            Kies jouw editie
+      <section className="px-4 py-10 sm:px-6 sm:py-12" aria-labelledby="outcomes-title">
+        <div className="mx-auto max-w-7xl">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <h2 id="outcomes-title" className="max-w-2xl text-balance text-2xl font-semibold tracking-[-0.03em] sm:text-3xl">
+              Vier outputs waarmee je kunt beslissen.
+            </h2>
+            <p className="max-w-md text-sm leading-6 text-muted-foreground">Geen losse adviezen, maar één financieel beslissingsplan met jouw cijfers.</p>
+          </div>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            {outcomes.map(outcome => {
+              const Icon = outcome.icon
+              return (
+                <article key={outcome.number} className="flex min-h-36 gap-4 rounded-xl border border-border bg-card p-5 shadow-sm">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Icon aria-hidden="true" /></span>
+                  <div>
+                    <p className="font-mono text-xs font-semibold text-primary">{outcome.number}</p>
+                    <h3 className="mt-1 text-lg font-semibold text-foreground">{outcome.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{outcome.text}</p>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-border bg-muted/30 px-4 py-10 sm:px-6 sm:py-12" aria-labelledby="testimonials-title">
+        <div className="mx-auto max-w-5xl">
+          <div className="text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Deelnemers aan het woord</p>
+            <h2 id="testimonials-title" className="mt-2 text-balance text-2xl font-semibold tracking-[-0.03em] sm:text-3xl">Van losse vragen naar één verdedigbaar plan.</h2>
+          </div>
+          <div className="mt-6 grid grid-cols-3 gap-3 sm:gap-5">
+            {testimonials.map((testimonial, index) => <TrackedTestimonial key={testimonial.id} {...testimonial} index={index} />)}
+          </div>
+        </div>
+      </section>
+
+      <section ref={closingSelectorRef} className="scroll-mt-4 px-4 py-10 sm:px-6 sm:py-12" aria-labelledby="closing-date-title">
+        <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Jouw volgende stap</p>
+            <h2 id="closing-date-title" className="mt-2 text-balance text-2xl font-semibold tracking-[-0.03em] sm:text-3xl">Kies de editie waarop jij jouw vermogensplan bouwt.</h2>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">Je kiest alleen je voorkeursdatum. Daarna bespreken we persoonlijk of de Masterclass bij je situatie past.</p>
+          </div>
+          {closingSignup}
+        </div>
+      </section>
+
+      {showStickyCta ? (
+        <div className="fixed inset-x-0 bottom-0 border-t border-border bg-background/95 p-3 shadow-lg backdrop-blur sm:inset-x-auto sm:bottom-auto sm:right-5 sm:top-5 sm:rounded-xl sm:border sm:p-2">
+          <Button type="button" onClick={scrollToDate} className="min-h-11 w-full sm:w-auto">
+            <span className="sm:hidden">Kies je voorkeursdatum</span>
+            <span className="hidden sm:inline">Kies je editie</span>
             <ArrowRight data-icon="inline-end" aria-hidden="true" />
           </Button>
         </div>

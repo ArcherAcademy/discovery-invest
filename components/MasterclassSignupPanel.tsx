@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-type Edition = {
+export type Edition = {
   id: string
   date: string
   place: string
@@ -23,10 +23,21 @@ interface MasterclassSignupPanelProps {
   alreadySubmitted: boolean
   onSubmitted: () => void | Promise<void>
   onViewBonus: () => void
+  selectedEdition: string | null
+  onSelectEdition: (editionId: string) => void
+  instanceId: string
+  compact?: boolean
 }
 
-export default function MasterclassSignupPanel({ alreadySubmitted, onSubmitted, onViewBonus }: MasterclassSignupPanelProps) {
-  const [selectedEdition, setSelectedEdition] = useState<string | null>(null)
+export default function MasterclassSignupPanel({
+  alreadySubmitted,
+  onSubmitted,
+  onViewBonus,
+  selectedEdition,
+  onSelectEdition,
+  instanceId,
+  compact = false,
+}: MasterclassSignupPanelProps) {
   const [confirmed, setConfirmed] = useState(alreadySubmitted)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -40,16 +51,16 @@ export default function MasterclassSignupPanel({ alreadySubmitted, onSubmitted, 
   const selected = editions.find(edition => edition.id === selectedEdition)
 
   const selectEdition = (edition: Edition) => {
-    setSelectedEdition(edition.id)
+    onSelectEdition(edition.id)
     setError(null)
-    track('Editie geselecteerd', { edition: edition.id, status: edition.status })
+    track('Editie geselecteerd', { edition: edition.id, status: edition.status, selector: instanceId })
   }
 
   async function submit() {
     if (!selectedEdition || submitting) return
     setSubmitting(true)
     setError(null)
-    track('Submit gestart', { edition: selectedEdition })
+    track('Submit gestart', { edition: selectedEdition, selector: instanceId })
 
     try {
       const response = await fetch('/api/invest-avond/unlock', {
@@ -72,11 +83,13 @@ export default function MasterclassSignupPanel({ alreadySubmitted, onSubmitted, 
 
   if (confirmed) {
     return (
-      <div className="rounded-2xl border border-border bg-card p-7 sm:p-10">
-        <span className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground"><Check aria-hidden="true" /></span>
-        <h3 className="mt-5 text-2xl font-semibold tracking-tight text-foreground">Je voorkeursdatum is ontvangen.</h3>
-        <p className="mt-3 max-w-lg text-sm leading-6 text-muted-foreground">Iemand van Archer neemt persoonlijk contact met je op. Je keuze is nog geen betaling en verplicht je tot niets.</p>
-        <Button type="button" variant="link" onClick={onViewBonus} className="mt-5 px-0">
+      <div className={cn('rounded-xl border border-border bg-card', compact ? 'p-5' : 'p-6')}>
+        <span className="flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <Check aria-hidden="true" />
+        </span>
+        <h3 className="mt-4 text-xl font-semibold tracking-tight text-foreground">Je voorkeursdatum is ontvangen.</h3>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">Iemand van Archer neemt persoonlijk contact met je op. Je keuze verplicht je tot niets.</p>
+        <Button type="button" variant="link" onClick={onViewBonus} className="mt-3 px-0">
           Bekijk je bonusmateriaal
           <ArrowRight data-icon="inline-end" aria-hidden="true" />
         </Button>
@@ -85,45 +98,47 @@ export default function MasterclassSignupPanel({ alreadySubmitted, onSubmitted, 
   }
 
   return (
-    <form onSubmit={event => { event.preventDefault(); void submit() }} className="rounded-2xl border border-border bg-card p-5 sm:p-8">
+    <form onSubmit={event => { event.preventDefault(); void submit() }} className={cn('rounded-xl border border-border bg-card shadow-sm', compact ? 'p-4' : 'p-5')}>
       <fieldset aria-label="Beschikbare Masterclass-edities">
-        <legend className="sr-only">Kies een Masterclass-editie</legend>
-        <div className="flex flex-col gap-3">
+        <legend className="mb-3 text-sm font-semibold text-foreground">Kies je editie</legend>
+        <div className="flex flex-col gap-2">
           {editions.map(edition => {
             const isSelected = selectedEdition === edition.id
             return (
               <label
                 key={edition.id}
                 className={cn(
-                  'flex cursor-pointer items-center gap-4 rounded-xl border p-4 transition-colors sm:p-5',
-                  isSelected ? 'border-primary bg-primary/5 ring-2 ring-primary/15' : 'border-border bg-background hover:border-primary/40',
+                  'flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 transition-colors',
+                  isSelected ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border bg-background/80 hover:border-primary/40',
                 )}
               >
                 <input
                   type="radio"
-                  name="masterclass-edition"
+                  name={`masterclass-edition-${instanceId}`}
                   value={edition.id}
                   checked={isSelected}
                   onChange={() => selectEdition(edition)}
-                  className="size-5 shrink-0 accent-primary"
+                  className="size-4 shrink-0 accent-primary"
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-base font-semibold text-foreground">{edition.date}</span>
-                  <span className="mt-1 block text-sm text-muted-foreground">{edition.place}</span>
+                  <span className="block text-sm font-semibold text-foreground">{edition.date}</span>
+                  <span className="block text-xs leading-5 text-muted-foreground">{edition.place}</span>
                 </span>
-                <span className={cn('shrink-0 text-right text-xs font-semibold', edition.status === 'Plaatsen beschikbaar' ? 'text-primary' : 'text-muted-foreground')}>{edition.status}</span>
+                <span className={cn('max-w-24 shrink-0 text-right text-[11px] font-semibold leading-4', edition.status === 'Plaatsen beschikbaar' ? 'text-primary' : 'text-muted-foreground')}>
+                  {edition.status}
+                </span>
               </label>
             )
           })}
         </div>
       </fieldset>
 
-      <Button type="submit" disabled={!selectedEdition || submitting} className="mt-6 min-h-12 w-full disabled:bg-secondary disabled:text-secondary-foreground disabled:opacity-100">
+      <Button type="submit" disabled={!selectedEdition || submitting} className="mt-4 min-h-11 w-full disabled:bg-secondary disabled:text-secondary-foreground disabled:opacity-100">
         {submitting ? 'Even geduld…' : !selectedEdition ? 'Kies een editie' : selected?.status === 'Wachtlijst' ? 'Op de wachtlijst plaatsen' : 'Mijn voorkeursdatum kiezen'}
         <ArrowRight data-icon="inline-end" aria-hidden="true" />
       </Button>
-      <p className="mt-4 text-center text-xs leading-5 text-muted-foreground">Je betaalt nu niets. Je kiest alleen je voorkeursdatum. Daarna nemen we persoonlijk contact met je op.</p>
-      {error ? <p role="alert" className="mt-3 text-center text-sm text-destructive">{error}</p> : null}
+      <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">Je betaalt nu niets. Daarna nemen we persoonlijk contact met je op.</p>
+      {error ? <p role="alert" className="mt-2 text-center text-sm text-destructive">{error}</p> : null}
     </form>
   )
 }
