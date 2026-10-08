@@ -10,6 +10,7 @@ const BOOKING_COLUMNS = 'user_id,event_id,booked_at,status'
 const EVENT_COLUMNS = 'id,starts_at,location,capacity,price_eur'
 const TRIGGER_COLUMNS = 'user_id,workflow_naam,status,created_at'
 const WEBHOOK_COLUMNS = 'user_id,event_type,created_at'
+const DEVICE_COLUMNS = 'user_id,created_at,payload_json'
 
 async function fetchLimited<T>(query: any, limit: number): Promise<T[]> {
   const { data, error } = await query.limit(limit)
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [users, videos, progress, funnel, bookings, events, triggers, webhooks] = await Promise.all([
+    const [users, videos, progress, funnel, bookings, events, triggers, webhooks, devices] = await Promise.all([
       fetchLimited(supabase.from('demo_invest_users').select(USER_COLUMNS).order('id'), 5000),
       fetchLimited(supabase.from('demo_invest_videos').select(VIDEO_COLUMNS).order('order_no'), 100),
       fetchLimited(dateRange(supabase.from('demo_invest_video_progress').select(PROGRESS_COLUMNS).order('started_at', { ascending: true }), 'started_at'), 10000),
@@ -45,9 +46,10 @@ export async function GET(request: NextRequest) {
       fetchLimited(supabase.from('demo_invest_events').select(EVENT_COLUMNS).order('starts_at'), 100),
       fetchLimited(dateRange(supabase.from('demo_invest_trigger_log').select(TRIGGER_COLUMNS).order('created_at', { ascending: false }), 'created_at'), 500),
       fetchLimited(dateRange(supabase.from('demo_invest_webhook_log').select(WEBHOOK_COLUMNS).eq('event_type', 'call.booked').order('created_at', { ascending: false }), 'created_at'), 5000),
+      fetchLimited(dateRange(supabase.from('demo_invest_webhook_log').select(DEVICE_COLUMNS).eq('event_type', 'analytics.device_visit').order('created_at', { ascending: false }), 'created_at'), 10000),
     ])
 
-    return NextResponse.json({ users, videos, progress, funnel, bookings, events, triggers, webhooks })
+    return NextResponse.json({ users, videos, progress, funnel, bookings, events, triggers, webhooks, devices })
   } catch (error) {
     console.error('[analytics] data ophalen mislukt:', error)
     return NextResponse.json({ error: 'Analyticsgegevens konden niet worden opgehaald.' }, { status: 500 })

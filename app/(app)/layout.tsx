@@ -4,6 +4,7 @@ import { AppProvider } from '@/components/app-context'
 import { Sidebar } from '@/components/sidebar'
 import { ExpiredTrialBanner } from '@/components/ExpiredTrialBanner'
 import { SignupBanner } from '@/components/SignupBanner'
+import { DeviceAnalyticsTracker } from '@/components/DeviceAnalyticsTracker'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser()
@@ -11,6 +12,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <AppProvider initialUser={user}>
+      <DeviceAnalyticsTracker />
       <div className="flex h-screen overflow-hidden bg-background">
         <Sidebar />
         {/* Op mobiel blijft onderaan ruimte vrij voor de vaste tabnavigatie. */}
