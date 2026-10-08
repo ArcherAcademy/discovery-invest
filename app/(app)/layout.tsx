@@ -1,9 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getSessionUser } from '@/lib/auth'
 import { AppProvider } from '@/components/app-context'
-import { Sidebar } from '@/components/sidebar'
-import { ExpiredTrialBanner } from '@/components/ExpiredTrialBanner'
-import { SignupBanner } from '@/components/SignupBanner'
+import { AppLayoutShell } from '@/components/AppLayoutShell'
 import { DeviceAnalyticsTracker } from '@/components/DeviceAnalyticsTracker'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -13,17 +11,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <AppProvider initialUser={user}>
       <DeviceAnalyticsTracker />
-      <div className="flex h-screen overflow-hidden bg-background">
-        <Sidebar />
-        {/* Op mobiel blijft onderaan ruimte vrij voor de vaste tabnavigatie. */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden pb-24 sm:pb-0">
-          <ExpiredTrialBanner />
-          <SignupBanner />
-          <main className="relative flex-1 overflow-y-auto p-4 sm:p-6">
-            {children}
-          </main>
-        </div>
-      </div>
+      <AppLayoutShell>{children}</AppLayoutShell>
     </AppProvider>
   )
 }
