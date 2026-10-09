@@ -30,24 +30,14 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createAdminClient()
-  const { data: existingFunnel, error: funnelLookupError } = await supabase
-    .from('demo_invest_user_funnel')
-    .select('invest_avond_geclaimd')
-    .eq('user_id', authUser.id)
-    .maybeSingle()
-
-  if (funnelLookupError) {
-    console.error('[invest-avond/unlock] bestaande formulierstatus ophalen mislukt:', funnelLookupError)
-    return NextResponse.json({ error: 'funnel_lookup_failed' }, { status: 500 })
-  }
-  if (existingFunnel?.invest_avond_geclaimd) {
-    try {
-      await ensureHubSpotLeadStage(authUser.email, 'edition_selected')
-      return NextResponse.json({ ok: true, submitted: true, alreadySubmitted: true })
-    } catch (error) {
-      console.error('[invest-avond/unlock] Bestaande inzending naar Waitlist Discovery herstellen mislukt:', error)
-      return NextResponse.json({ error: 'hubspot_stage_update_failed' }, { status: 502 })
-    }
+  const logWebhookResult = async (responseStatus: string, details: Record<string, unknown> = {}) => {
+    const { error } = await supabase.from('demo_invest_webhook_log').insert({
+      user_id: authUser.id,
+      event_type: 'masterclass.edition_selected',
+      payload_json: { edition: preferredEdition, ...details },
+      response_status: responseStatus,
+    })
+    if (error) console.error('[invest-avond/unlock] webhookresultaat loggen mislukt:', error)
   }
 
   let snapshot: Awaited<ReturnType<typeof getHubSpotAccountOwnerSnapshot>>
@@ -123,10 +113,13 @@ export async function POST(req: NextRequest) {
     })
     if (!n8nResponse.ok) {
       console.error('[invest-avond/unlock] n8n editie-melding mislukt:', n8nResponse.status)
+      await logWebhookResult('failed', { httpStatus: n8nResponse.status })
       return NextResponse.json({ error: 'telegram_notification_failed' }, { status: 502 })
     }
+    await logWebhookResult('delivered', { httpStatus: n8nResponse.status })
   } catch (error) {
     console.error('[invest-avond/unlock] n8n editie-melding niet bereikbaar:', error)
+    await logWebhookResult('unavailable')
     return NextResponse.json({ error: 'telegram_notification_unavailable' }, { status: 502 })
   }
 

@@ -64,9 +64,10 @@ export default function MasterclassEmbed({ onSubmitted }: MasterclassEmbedProps)
 
       if (!response.ok) throw new Error('submission_failed')
 
-      sendResult(true, 'Je inschrijving is succesvol doorgestuurd.')
+      sendResult(true, 'Je inschrijving is succesvol doorgestuurd. Je kunt indien nodig nog een andere editie kiezen.')
       track('Embedded masterclass submit voltooid', { edition: editionId, source })
       window.history.replaceState(window.history.state, '', '/masterclass')
+      submissionInProgress.current = false
       void Promise.resolve(onSubmitted()).catch(() => undefined)
     } catch {
       submissionInProgress.current = false
