@@ -2,7 +2,7 @@
 
 import { track } from '@vercel/analytics'
 import { LoaderCircle } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 const MASTERCLASS_ORIGIN = 'https://archerinvest.be'
 const MASTERCLASS_URL = `${MASTERCLASS_ORIGIN}/masterclass-beslissing-test?embed=1`
@@ -24,6 +24,9 @@ type MasterclassMessage = {
 
 function getEditionId(preferredEdition: string) {
   const normalizedEdition = preferredEdition.trim().toLocaleLowerCase('nl-BE')
+  const directEditionId = Object.values(EDITION_IDS).find(editionId => editionId === normalizedEdition)
+  if (directEditionId) return directEditionId
+
   const entry = Object.entries(EDITION_IDS).find(([label]) => normalizedEdition.includes(label))
   return entry?.[1] ?? null
 }
@@ -33,51 +36,69 @@ export default function MasterclassEmbed({ onSubmitted }: MasterclassEmbedProps)
   const submissionInProgress = useRef(false)
   const [loaded, setLoaded] = useState(false)
 
-  useEffect(() => {
-    const sendResult = (success: boolean, message: string) => {
-      iframeRef.current?.contentWindow?.postMessage(
-        { type: 'archer:masterclass-signup-result', success, message },
-        MASTERCLASS_ORIGIN,
-      )
+  const sendResult = useCallback((success: boolean, message: string) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'archer:masterclass-signup-result', success, message },
+      MASTERCLASS_ORIGIN,
+    )
+  }, [])
+
+  const submitEdition = useCallback(async (preferredEdition: string, source: 'embed' | 'redirect') => {
+    if (submissionInProgress.current) return
+
+    const editionId = getEditionId(preferredEdition)
+    if (!editionId) {
+      sendResult(false, 'Kies een geldige editie en probeer het opnieuw.')
+      return
     }
 
-    const handleMessage = async (event: MessageEvent<MasterclassMessage>) => {
-      if (event.origin !== MASTERCLASS_ORIGIN || event.source !== iframeRef.current?.contentWindow) return
+    submissionInProgress.current = true
+    track('Embedded masterclass submit gestart', { edition: editionId, source })
 
-      if (event.data?.type !== 'archer:masterclass-signup' || submissionInProgress.current) return
+    try {
+      const response = await fetch('/api/invest-avond/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ edition: editionId }),
+      })
+
+      if (!response.ok) throw new Error('submission_failed')
+
+      sendResult(true, 'Je inschrijving is succesvol doorgestuurd.')
+      track('Embedded masterclass submit voltooid', { edition: editionId, source })
+      window.history.replaceState(window.history.state, '', '/masterclass')
+      void Promise.resolve(onSubmitted()).catch(() => undefined)
+    } catch {
+      submissionInProgress.current = false
+      sendResult(false, 'Versturen is niet gelukt. Probeer het opnieuw.')
+      track('Embedded masterclass submit mislukt', { edition: editionId, source })
+    }
+  }, [onSubmitted, sendResult])
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent<MasterclassMessage>) => {
+      if (event.origin !== MASTERCLASS_ORIGIN || event.source !== iframeRef.current?.contentWindow) return
+      if (event.data?.type !== 'archer:masterclass-signup') return
 
       const preferredEdition = event.data.preferredEdition
-      const editionId = typeof preferredEdition === 'string' ? getEditionId(preferredEdition) : null
-      if (!editionId) {
+      if (typeof preferredEdition !== 'string') {
         sendResult(false, 'Kies een geldige editie en probeer het opnieuw.')
         return
       }
 
-      submissionInProgress.current = true
-      track('Embedded masterclass submit gestart', { edition: editionId })
-
-      try {
-        const response = await fetch('/api/invest-avond/unlock', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ edition: editionId }),
-        })
-
-        if (!response.ok) throw new Error('submission_failed')
-
-        sendResult(true, 'Je inschrijving is succesvol doorgestuurd.')
-        track('Embedded masterclass submit voltooid', { edition: editionId })
-        void Promise.resolve(onSubmitted()).catch(() => undefined)
-      } catch {
-        submissionInProgress.current = false
-        sendResult(false, 'Versturen is niet gelukt. Probeer het opnieuw.')
-        track('Embedded masterclass submit mislukt', { edition: editionId })
-      }
+      void submitEdition(preferredEdition, 'embed')
     }
 
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [onSubmitted])
+  }, [sendResult, submitEdition])
+
+  useEffect(() => {
+    if (!loaded) return
+
+    const preferredEdition = new URLSearchParams(window.location.search).get('editie')
+    if (preferredEdition) void submitEdition(preferredEdition, 'redirect')
+  }, [loaded, submitEdition])
 
   return (
     <section className="absolute inset-0 overflow-hidden rounded-2xl bg-background font-sans text-foreground" aria-labelledby="masterclass-page-title">

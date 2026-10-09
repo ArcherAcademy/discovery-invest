@@ -31,9 +31,12 @@ export function middleware(req: NextRequest) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    // App routes redirect to login
+    // App routes redirect to login and preserve the requested page.
     const url = req.nextUrl.clone()
+    const destination = `${req.nextUrl.pathname}${req.nextUrl.search}`
     url.pathname = '/login'
+    url.search = ''
+    url.searchParams.set('next', destination)
     return NextResponse.redirect(url)
   }
 

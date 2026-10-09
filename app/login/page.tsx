@@ -23,7 +23,11 @@ export default function LoginPage() {
     try { data = await res.json() } catch { /* ignore */ }
 
     if (res.ok && data.ok) {
-      window.location.assign('/home')
+      const requestedDestination = new URLSearchParams(window.location.search).get('next')
+      const destination = requestedDestination?.startsWith('/') && !requestedDestination.startsWith('//')
+        ? requestedDestination
+        : '/home'
+      window.location.assign(destination)
       return
     }
 
