@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { ExternalLink, Play, Star } from 'lucide-react'
+import { ExternalLink, Pause, Play, Star, Volume2, VolumeX } from 'lucide-react'
 
 const testimonials = [
   ['5efba97f-e2c7-4764-92e8-ed28998d1a2d/decision-testimonial-1-hq.jpg', 'c1b71664-3aad-4b92-ac36-69832d800000/testimonial-1.mp4'],
@@ -39,6 +39,7 @@ function Stars() {
 export function HomeParticipantExperiences() {
   const [selected, setSelected] = useState(0)
   const [playing, setPlaying] = useState(false)
+  const [muted, setMuted] = useState(true)
   const videoRef = useRef<HTMLVideoElement>(null)
   const active = testimonials[selected]
 
@@ -52,6 +53,21 @@ export function HomeParticipantExperiences() {
     await videoRef.current?.play()
   }
 
+  function togglePlayback() {
+    if (!videoRef.current) return
+    if (videoRef.current.paused) {
+      void videoRef.current.play()
+      setPlaying(true)
+    } else {
+      videoRef.current.pause()
+      setPlaying(false)
+    }
+  }
+
+  function toggleSound() {
+    setMuted(current => !current)
+  }
+
   return (
     <section aria-labelledby="participant-experiences-title" className="overflow-hidden rounded-2xl bg-white px-5 py-14 text-[#211334] sm:px-10 sm:py-20">
       <header className="mx-auto max-w-4xl text-center">
@@ -61,15 +77,40 @@ export function HomeParticipantExperiences() {
         </h2>
       </header>
 
-      <div className="mx-auto mt-8 w-[214px] overflow-hidden rounded-lg bg-[#e8e8e8] sm:w-[258px]">
+      <div className="mx-auto mt-8 w-[270px] overflow-hidden rounded-lg bg-[#e8e8e8] sm:w-[320px]">
         <div className="relative aspect-[9/16]">
-          <video key={active.video} ref={videoRef} src={active.video} poster={active.poster} controls={playing} playsInline preload="metadata" aria-label={`Ervaring van deelnemer ${selected + 1}`} className="size-full object-cover" />
-          {!playing ? <button type="button" onClick={playVideo} aria-label={`Afspelen: Ervaring van deelnemer ${selected + 1}`} className="absolute inset-0 flex items-center justify-center"><span className="flex size-14 items-center justify-center rounded-full bg-white text-[#211334] shadow-lg"><Play className="ml-1 size-5 fill-current" /></span></button> : null}
+          <video
+            key={active.video}
+            ref={videoRef}
+            src={active.video}
+            poster={active.poster}
+            muted={muted}
+            playsInline
+            preload="metadata"
+            onEnded={() => setPlaying(false)}
+            aria-label={`Ervaring van deelnemer ${selected + 1}`}
+            className="size-full object-cover"
+          />
+          {!playing ? (
+            <button type="button" onClick={playVideo} aria-label={`Afspelen: Ervaring van deelnemer ${selected + 1}`} className="absolute inset-0 flex items-center justify-center">
+              <span className="flex size-16 items-center justify-center rounded-full bg-white text-[#211334] shadow-lg"><Play className="ml-1 size-5 fill-current" /></span>
+            </button>
+          ) : (
+            <div className="absolute inset-x-4 bottom-4 flex justify-end gap-2 text-white">
+              <button type="button" onClick={toggleSound} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#11151c]/80 px-3 text-sm font-medium backdrop-blur-sm" aria-label={muted ? 'Geluid aan' : 'Geluid uit'}>
+                {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                <span>{muted ? 'Geluid aan' : 'Geluid uit'}</span>
+              </button>
+              <button type="button" onClick={togglePlayback} className="flex size-10 items-center justify-center rounded-xl bg-[#11151c]/80 backdrop-blur-sm" aria-label="Pauzeren">
+                <Pause className="size-4 fill-current" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      <div role="group" aria-label="Kies een testimonial" className="mx-auto mt-5 flex max-w-2xl gap-2 overflow-x-auto pb-2">
-        {testimonials.map((testimonial, index) => <button key={testimonial.poster} type="button" onClick={() => selectTestimonial(index)} aria-label={`Bekijk testimonial ${index + 1}`} aria-pressed={selected === index} className={`relative aspect-[3/4] min-w-8 overflow-hidden rounded-md transition ${selected === index ? 'ring-2 ring-[#1111ee] ring-offset-2' : 'opacity-75 hover:opacity-100'}`}><img src={testimonial.poster} alt="" className="size-full object-cover" /></button>)}
+      <div role="group" aria-label="Kies een testimonial" className="mx-auto mt-6 flex max-w-[580px] gap-2 overflow-x-auto pb-2">
+        {testimonials.map((testimonial, index) => <button key={testimonial.poster} type="button" onClick={() => selectTestimonial(index)} aria-label={`Bekijk testimonial ${index + 1}`} aria-pressed={selected === index} className={`relative h-12 w-[34px] shrink-0 overflow-hidden rounded-md transition ${selected === index ? 'ring-2 ring-[#1111ee] ring-offset-2' : 'opacity-75 hover:opacity-100'}`}><img src={testimonial.poster} alt="" className="size-full object-cover" /></button>)}
       </div>
 
       <div aria-label="Ervaringen van deelnemers" className="mx-auto mt-8 grid max-w-5xl gap-0 sm:grid-cols-3">
