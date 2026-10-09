@@ -23,9 +23,8 @@ export async function POST(req: NextRequest) {
   const authUser = await getSessionUser(req)
   if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json().catch(() => null) as { edition?: string; source?: string } | null
+  const body = await req.json().catch(() => null) as { edition?: string } | null
   const preferredEdition = body?.edition ? EDITION_VALUES[body.edition] : null
-  const submittedFromHomepage = body?.source === 'homepage'
   if (!preferredEdition) {
     return NextResponse.json({ error: 'invalid_edition' }, { status: 400 })
   }
@@ -47,7 +46,7 @@ export async function POST(req: NextRequest) {
     .eq('status', 'completed')
     .in('video_id', coreVideos.map(video => video.id))
 
-  if (progressError || ((completedRows?.length ?? 0) < 6 && !submittedFromHomepage)) {
+  if (progressError || (completedRows?.length ?? 0) < 6) {
     return NextResponse.json({ error: 'complete_core_videos_first' }, { status: 403 })
   }
 

@@ -15,7 +15,7 @@ interface BookingResponse {
 
 interface CallBookingBlockProps {
   unlocked: boolean
-  variant?: 'card' | 'milestone' | 'sidebar' | 'homepage'
+  variant?: 'card' | 'milestone' | 'sidebar'
   openRequest?: number
 }
 
@@ -38,8 +38,8 @@ interface BookingDetailsInput {
   organizer_name?: string | number
 }
 
-async function registerBookingAction(endpoint: string, action: BookingAction, booking?: BookingDetailsInput) {
-  const response = await fetch(endpoint, {
+async function registerBookingAction(action: BookingAction, booking?: BookingDetailsInput) {
+  const response = await fetch('/api/call-booking', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, booking }),
@@ -146,8 +146,7 @@ function getSuccessfulBookingDetails(event: MessageEvent): BookingDetailsInput |
 
 export default function CallBookingBlock({ unlocked, variant = 'card', openRequest = 0 }: CallBookingBlockProps) {
   const { user, refresh } = useApp()
-  const bookingEndpoint = variant === 'homepage' ? '/api/call-booking?source=homepage' : '/api/call-booking'
-  const { data, error, isLoading, mutate } = useSWR<BookingResponse>(unlocked ? bookingEndpoint : null, fetcher, {
+  const { data, error, isLoading, mutate } = useSWR<BookingResponse>(unlocked ? '/api/call-booking' : null, fetcher, {
     revalidateOnFocus: false,
     shouldRetryOnError: false,
   })
@@ -168,7 +167,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
       savingRef.current = true
       setStatus('saving')
       try {
-        await registerBookingAction(bookingEndpoint, 'booked', bookingDetails)
+        await registerBookingAction('booked', bookingDetails)
         await Promise.all([refresh(), mutate()])
         setStatus('booked')
       } catch {
@@ -188,7 +187,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
 
     setFrameLoaded(false)
     setStatus('booking')
-    void registerBookingAction(bookingEndpoint, 'opened').catch(() => {
+    void registerBookingAction('opened').catch(() => {
       setStatus('error')
     })
   }
@@ -206,7 +205,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
     setFrameKey(current => current + 1)
   }
 
-  if (!unlocked && variant !== 'homepage') {
+  if (!unlocked) {
     if (variant === 'milestone') {
       return <span className="text-xs text-muted-foreground">Persoonlijk met je adviseur</span>
     }
@@ -261,42 +260,7 @@ export default function CallBookingBlock({ unlocked, variant = 'card', openReque
   }
 
   const unavailable = !isLoading && (error || !data?.available || !data.booking_url)
-  const trigger = variant === 'homepage' ? (
-    <section className="flex min-h-[490px] min-w-0 flex-col overflow-hidden rounded-3xl border-2 border-primary bg-card p-6 text-card-foreground shadow-sm sm:p-8">
-      <div>
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">Gratis · Strategy-call</p>
-        <h3 className="mt-4 text-balance text-3xl font-bold tracking-[-0.04em] text-foreground">Leg je situatie één keer voor.</h3>
-        <p className="mt-3 max-w-lg text-base leading-7 text-muted-foreground">
-          Je vertelt waar je vandaag staat en wat je wil bereiken.<br />
-          Wij zeggen je eerlijk of de vierdaagse bij je past.<br />
-          Zo niet, dan zeggen we dat ook.
-        </p>
-        <ul className="mt-6 flex flex-col gap-3 text-sm font-medium text-foreground sm:text-base">
-          {[
-            'Geen verkooppraatje, een eerlijk gesprek',
-            'Je krijgt een concreet vervolg, ook als je nee zegt',
-            'Je bent daarna nergens toe verplicht',
-          ].map(item => (
-            <li key={item} className="flex items-center gap-3">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/[0.07] text-primary">
-                <CheckCircle2 aria-hidden="true" className="size-4" />
-              </span>
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <Button
-        type="button"
-        onClick={() => handleOpenChange(true)}
-        disabled={!unlocked || isLoading || unavailable}
-        className="mt-auto min-h-14 w-full rounded-xl text-base font-bold"
-      >
-        {isLoading ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : null}
-        {isLoading ? 'Agenda laden' : !unlocked ? 'Bekijk eerst alle kernvideo’s' : unavailable ? 'Agenda niet beschikbaar' : 'Plan mijn gesprek'}
-      </Button>
-    </section>
-  ) : variant === 'sidebar' ? (
+  const trigger = variant === 'sidebar' ? (
     <button
       type="button"
       onClick={() => handleOpenChange(true)}

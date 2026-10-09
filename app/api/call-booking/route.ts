@@ -42,8 +42,7 @@ async function getAvailableBooking(req: NextRequest) {
   const completedCoreCount = new Set(
     (completedProgress ?? []).map(progress => progress.video_id).filter(videoId => coreVideoIds.has(videoId)),
   ).size
-  const submittedFromHomepage = req.nextUrl.searchParams.get('source') === 'homepage'
-  if (completedCoreCount < 6 && !submittedFromHomepage) {
+  if (completedCoreCount < 6) {
     return { error: NextResponse.json({ available: false }, { status: 403 }) }
   }
 
