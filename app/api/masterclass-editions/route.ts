@@ -10,6 +10,12 @@ type SourceEdition = {
   baseFill: number
 }
 
+const FALLBACK_EDITIONS: SourceEdition[] = [
+  { title: '4–7 februari 2027', start: '2027-02-04', salesOpen: '2026-09-01', baseFill: 18 },
+  { title: '3–6 juni 2027', start: '2027-06-03', salesOpen: '2027-02-01', baseFill: 12 },
+  { title: '7–10 oktober 2027', start: '2027-10-07', salesOpen: '2027-06-01', baseFill: 10 },
+]
+
 function calculateFilledPercentage(edition: SourceEdition, now: Date) {
   const startsAt = new Date(`${edition.start}T00:00:00`)
   const reachesMaximumAt = new Date(startsAt.getTime() - 7 * DAY_IN_MS)
@@ -65,7 +71,23 @@ export async function GET() {
       source: WAITLIST_URL,
     })
   } catch (error) {
-    console.error('[masterclass-editions] Live wachtlijstdata laden mislukt:', error)
-    return NextResponse.json({ error: 'live_edition_unavailable' }, { status: 502 })
+    console.error('[masterclass-editions] Live wachtlijstdata laden mislukt, fallback wordt gebruikt:', error)
+    const now = new Date()
+    const nextEdition = FALLBACK_EDITIONS.find(edition => new Date(`${edition.start}T23:59:59`) >= now)
+
+    if (!nextEdition) {
+      return NextResponse.json({ error: 'live_edition_unavailable' }, { status: 502 })
+    }
+
+    const filledPercentage = calculateFilledPercentage(nextEdition, now)
+    return NextResponse.json({
+      edition: {
+        title: nextEdition.title,
+        startsAt: nextEdition.start,
+        filledPercentage,
+        availablePercentage: 100 - filledPercentage,
+      },
+      source: 'fallback',
+    })
   }
 }

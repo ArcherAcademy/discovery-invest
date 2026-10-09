@@ -23,8 +23,9 @@ export async function POST(req: NextRequest) {
   const authUser = await getSessionUser(req)
   if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json().catch(() => null) as { edition?: string } | null
+  const body = await req.json().catch(() => null) as { edition?: string; source?: string } | null
   const preferredEdition = body?.edition ? EDITION_VALUES[body.edition] : null
+  const submittedFromHomepage = body?.source === 'homepage'
   if (!preferredEdition) {
     return NextResponse.json({ error: 'invalid_edition' }, { status: 400 })
   }
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
     .eq('status', 'completed')
     .in('video_id', coreVideos.map(video => video.id))
 
-  if (progressError || (completedRows?.length ?? 0) < 6) {
+  if (progressError || ((completedRows?.length ?? 0) < 6 && !submittedFromHomepage)) {
     return NextResponse.json({ error: 'complete_core_videos_first' }, { status: 403 })
   }
 
@@ -143,9 +144,11 @@ export async function POST(req: NextRequest) {
     })
     if (!n8nResponse.ok) {
       console.error('[invest-avond/unlock] n8n editie-melding mislukt:', n8nResponse.status)
+      return NextResponse.json({ error: 'telegram_notification_failed' }, { status: 502 })
     }
   } catch (error) {
     console.error('[invest-avond/unlock] n8n editie-melding niet bereikbaar:', error)
+    return NextResponse.json({ error: 'telegram_notification_unavailable' }, { status: 502 })
   }
 
   const { error } = await supabase

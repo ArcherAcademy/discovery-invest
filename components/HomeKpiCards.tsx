@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { CalendarDays, Clock } from 'lucide-react'
 import useSWR from 'swr'
 import { useApp } from '@/components/app-context'
@@ -19,21 +20,21 @@ async function fetchMasterclassEdition(url: string): Promise<MasterclassEditionR
 }
 
 function ProgressRing({ percentage }: { percentage: number }) {
-  const size = 48
-  const radius = (size - 8) / 2
+  const size = 34
+  const radius = (size - 6) / 2
   const circumference = 2 * Math.PI * radius
   const completed = (percentage / 100) * circumference
 
   return (
     <div className="relative shrink-0" aria-hidden="true">
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius} className="fill-none stroke-border" strokeWidth={5} />
+        <circle cx={size / 2} cy={size / 2} r={radius} className="fill-none stroke-border" strokeWidth={4} />
         <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
           className="fill-none stroke-primary"
-          strokeWidth={5}
+          strokeWidth={4}
           strokeDasharray={`${completed} ${circumference - completed}`}
           strokeLinecap="round"
         />
@@ -61,36 +62,39 @@ export function HomeKpiCards() {
   const accessDetail = hasLimitedAccess ? 'tot je toegang sluit' : 'voor jouw account'
 
   return (
-    <section aria-label="Trajectstatus" className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3">
-      <article className="flex min-h-20 min-w-0 items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5 text-card-foreground">
+    <section aria-label="Trajectstatus" className="flex flex-col gap-2">
+      <article className="flex min-w-0 items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2.5 text-card-foreground">
         <ProgressRing percentage={progressPercentage} />
         <div className="min-w-0">
           <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Voortgang</p>
-          <p className="text-xl font-bold leading-tight">{progressPercentage}%</p>
+          <p className="text-sm font-bold leading-tight">{progressPercentage}%</p>
         </div>
       </article>
 
-      <article className="flex min-h-20 min-w-0 items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5 text-card-foreground">
-        <Clock className="size-5 shrink-0 text-primary" aria-hidden="true" />
+      <article className="flex min-w-0 items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2.5 text-card-foreground">
+        <Clock className="size-4 shrink-0 text-primary" aria-hidden="true" />
         <div className="min-w-0">
           <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Toegang</p>
-          <p className="truncate text-xl font-bold leading-tight">{accessValue}</p>
-          <p className="truncate text-[11px] text-muted-foreground">{accessDetail}</p>
+          <p className="truncate text-sm font-bold leading-tight">{accessValue}</p>
+          <p className="truncate text-[10px] text-muted-foreground">{accessDetail}</p>
         </div>
       </article>
 
-      <article className="flex min-h-20 min-w-0 items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5 text-card-foreground">
-        <CalendarDays className="size-5 shrink-0 text-primary" aria-hidden="true" />
+      <Link
+        href="/masterclass"
+        className="flex min-w-0 items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2.5 text-card-foreground transition-colors hover:border-primary/35 hover:bg-primary/[0.03] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      >
+        <CalendarDays className="size-4 shrink-0 text-primary" aria-hidden="true" />
         <div className="min-w-0">
           <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Volgende editie</p>
-          <p className="truncate text-xl font-bold leading-tight">
-            {nextEdition ? `al ${nextEdition.filledPercentage}% vol` : '—'}
+          <p className="truncate text-sm font-bold leading-tight">
+            {nextEdition ? `${nextEdition.filledPercentage}% vol` : 'Wordt geladen'}
           </p>
-          <p className="truncate text-[11px] text-muted-foreground">
-            {nextEdition?.title ?? 'Live editie niet beschikbaar'}
+          <p className="truncate text-[10px] text-muted-foreground">
+            {nextEdition?.title ?? 'Actuele editie ophalen'}
           </p>
         </div>
-      </article>
+      </Link>
     </section>
   )
 }
