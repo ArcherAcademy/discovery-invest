@@ -7,7 +7,6 @@ import { Clock, Settings, LogOut, Home, PlaySquare, CalendarDays, GraduationCap,
 import { cn } from '@/lib/utils'
 import { useApp } from './app-context'
 import { SidebarCallStatus } from './SidebarCallStatus'
-import { HomeKpiCards } from './HomeKpiCards'
 import { t } from '@/lib/i18n'
 
 interface NavItem {
@@ -121,8 +120,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             </div>
           )
         })}
-
-        <HomeKpiCards />
       </nav>
 
       {/* Trial countdown + profile */}

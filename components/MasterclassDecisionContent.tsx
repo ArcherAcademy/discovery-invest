@@ -2,6 +2,8 @@
 
 import Player from '@vimeo/player'
 import { track } from '@vercel/analytics'
+import Image from 'next/image'
+import Link from 'next/link'
 import { ArrowRight, ChartNoAxesCombined, GitBranch, Landmark, ListChecks } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -36,7 +38,7 @@ function TrackedTestimonial({ id, title, index }: (typeof testimonials)[number] 
   }, [id, index])
 
   return (
-    <article className="min-w-0">
+    <article className="w-[72vw] max-w-72 shrink-0 snap-start sm:w-auto sm:max-w-none sm:min-w-0">
       <div className="relative aspect-[9/16] overflow-hidden rounded-xl bg-foreground shadow-sm">
         <iframe
           ref={iframeRef}
@@ -161,7 +163,7 @@ export default function MasterclassDecisionContent({ primarySignup, closingSignu
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Deelnemers aan het woord</p>
             <h2 id="testimonials-title" className="mt-2 text-balance text-2xl font-semibold tracking-[-0.03em] sm:text-3xl">Van losse vragen naar één verdedigbaar plan.</h2>
           </div>
-          <div className="mt-6 grid grid-cols-3 gap-3 sm:gap-5">
+          <div className="mt-6 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-3 sm:grid sm:grid-cols-3 sm:gap-5 sm:overflow-visible sm:pb-0">
             {testimonials.map((testimonial, index) => <TrackedTestimonial key={testimonial.id} {...testimonial} index={index} />)}
           </div>
         </div>
@@ -175,6 +177,38 @@ export default function MasterclassDecisionContent({ primarySignup, closingSignu
             <p className="mt-3 text-sm leading-6 text-muted-foreground">Je kiest alleen je voorkeursdatum. Daarna bespreken we persoonlijk of de Masterclass bij je situatie past.</p>
           </div>
           {closingSignup}
+        </div>
+      </section>
+
+      <section className="px-4 pb-12 sm:px-6 sm:pb-16" aria-labelledby="kennismaking-title">
+        <div className="mx-auto grid max-w-5xl overflow-hidden rounded-2xl bg-primary text-primary-foreground shadow-sm md:grid-cols-[1.15fr_0.85fr]">
+          <div className="flex flex-col items-start justify-center gap-4 p-6 sm:p-8 lg:p-10">
+            <div className="flex flex-col gap-2">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary-foreground/70">Nog niet klaar voor vier dagen?</p>
+              <h2 id="kennismaking-title" className="max-w-xl text-balance text-2xl font-semibold tracking-[-0.03em] sm:text-3xl">
+                Kom eerst een avond kennismaken.
+              </h2>
+              <p className="max-w-xl text-pretty text-sm leading-6 text-primary-foreground/80 sm:text-base">
+                Volg een live sessie met Anthony en het Archer-team, met walking dinner en ruimte om je persoonlijke vragen te stellen.
+              </p>
+            </div>
+            <Link
+              href="https://workshops.archerinvest.be"
+              className="group inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary-foreground px-5 py-3 text-sm font-bold text-primary transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-foreground"
+            >
+              Reserveer mijn plaats
+              <ArrowRight size={17} aria-hidden="true" className="transition-transform group-hover:translate-x-0.5" />
+            </Link>
+          </div>
+          <div className="relative min-h-64 md:min-h-[320px]">
+            <Image
+              src="/masterclass/kennismakingsdiner.jpeg"
+              alt="Deelnemers tijdens het walking dinner van een Archer-kennismakingsavond"
+              fill
+              sizes="(min-width: 768px) 40vw, 100vw"
+              className="object-cover"
+            />
+          </div>
         </div>
       </section>
 
