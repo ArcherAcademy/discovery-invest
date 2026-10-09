@@ -13,6 +13,7 @@ export default function HomePage() {
   const { user, videos, progress, coreCompleted } = useApp()
 
   const coreVideos = [...videos].filter(video => video.section === 'core').sort((a, b) => a.order_no - b.order_no)
+  const bonusVideos = [...videos].filter(video => video.section === 'bonus').sort((a, b) => a.order_no - b.order_no)
   const isLoading = videos.length === 0
   const firstName = user?.name?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'Investeerder'
   const videoProgressMap = new Map(progress.map(item => [item.video_id, item]))
@@ -38,6 +39,16 @@ export default function HomePage() {
     thumbnailUrl: index === 0 ? '/images/video-1-thumbnail.png' : `/video-${index + 1}-thumbnail.png`,
   }))
 
+  const displayBonusVideos = bonusVideos.map((video, index) => ({
+    id: video.id,
+    title: video.title || 'Bonusmateriaal',
+    durationSeconds: video.duration_seconds ?? 0,
+    progressPct: videoProgressMap.get(video.id)?.progress_pct ?? 0,
+    status: getStatus(video.id),
+    index,
+    thumbnailUrl: '/video-thumbnail.jpg',
+  }))
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
       <PlatformIntroModal
@@ -49,6 +60,7 @@ export default function HomePage() {
       <HomeJourneyShowcase
         firstName={firstName}
         videos={displayVideos}
+        bonusVideos={displayBonusVideos}
         completedCount={coreCompleted}
         loading={isLoading}
       />

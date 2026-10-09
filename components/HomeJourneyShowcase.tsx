@@ -18,6 +18,7 @@ export interface HomeJourneyVideo {
 interface HomeJourneyShowcaseProps {
   firstName: string
   videos: HomeJourneyVideo[]
+  bonusVideos: HomeJourneyVideo[]
   completedCount: number
   loading: boolean
 }
@@ -31,6 +32,7 @@ function formatDuration(totalSeconds: number) {
 export function HomeJourneyShowcase({
   firstName,
   videos,
+  bonusVideos,
   completedCount,
   loading,
 }: HomeJourneyShowcaseProps) {
@@ -39,20 +41,29 @@ export function HomeJourneyShowcase({
     ?? videos.find(video => video.status !== 'completed')
     ?? videos.at(-1)
     ?? null
-  const heroVideo = isCompleted ? videos.at(-1) ?? activeVideo : activeVideo
+  const activeBonus = bonusVideos.find(video => video.status === 'in_progress')
+    ?? bonusVideos.find(video => video.status !== 'completed')
+    ?? bonusVideos[0]
+    ?? null
+  const isShowingBonus = isCompleted && activeBonus !== null
+  const heroVideo = isShowingBonus ? activeBonus : activeVideo
   const heroHref = heroVideo ? `/video/${heroVideo.id}` : '/traject'
-  const primaryHref = isCompleted ? '/kennismakingsevent' : heroHref
-  const primaryLabel = isCompleted ? 'Plan je gratis rekengesprek' : completedCount === 0 ? 'Start de discovery' : 'Ga verder met je discovery'
-  const heroTitle = isCompleted
-    ? `Je hebt de volledige reeks gezien, ${firstName}.`
-    : completedCount === 0
-      ? `Je discovery start hier, ${firstName}.`
-      : `Goed bezig, ${firstName}. Je bent al goed op weg.`
-  const heroSubtitle = isCompleted
-    ? 'Nu vul je het in met je eigen cijfers.'
-    : completedCount === 0
-      ? 'Zes korte video’s geven je zicht op een doordachte vermogensaanpak.'
-      : `Je hebt ${completedCount} van de ${videos.length || 6} video’s bekeken.`
+  const primaryHref = isCompleted ? '/masterclass' : heroHref
+  const primaryLabel = isCompleted ? 'Schrijf je in' : completedCount === 0 ? 'Start de discovery' : 'Ga verder met je discovery'
+  const heroTitle = isShowingBonus
+    ? `Je bonusmateriaal staat voor je klaar, ${firstName}.`
+    : isCompleted
+      ? `Je hebt de volledige reeks gezien, ${firstName}.`
+      : completedCount === 0
+        ? `Je discovery start hier, ${firstName}.`
+        : `Goed bezig, ${firstName}. Je bent al goed op weg.`
+  const heroSubtitle = isShowingBonus
+    ? `Bekijk nu ${activeBonus.title}.`
+    : isCompleted
+      ? 'Je hebt de volledige discovery afgerond.'
+      : completedCount === 0
+        ? 'Zes korte video’s geven je zicht op een doordachte vermogensaanpak.'
+        : `Je hebt ${completedCount} van de ${videos.length || 6} video’s bekeken.`
 
   if (loading || !heroVideo) {
     return (
@@ -79,7 +90,7 @@ export function HomeJourneyShowcase({
             <span className="flex size-4 items-center justify-center rounded-full bg-emerald-500 text-primary-foreground">
               {isCompleted ? <Check className="size-3" strokeWidth={3} /> : <Play className="ml-px size-2.5" fill="currentColor" />}
             </span>
-            <span>{isCompleted ? 'Discovery afgerond' : 'Invest Discovery'}</span>
+            <span>{isShowingBonus ? 'Bonusmateriaal' : isCompleted ? 'Discovery afgerond' : 'Invest Discovery'}</span>
             <span aria-hidden="true" className="text-background/45">·</span>
             <span>{completedCount} van {videos.length || 6}</span>
           </div>
@@ -93,18 +104,13 @@ export function HomeJourneyShowcase({
             </p>
           </div>
 
-          <div className="mt-auto flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="mt-auto flex">
             <Link
               href={primaryHref}
               className="inline-flex min-h-12 items-center justify-center rounded-xl bg-background px-5 text-sm font-bold text-primary shadow-lg transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background focus-visible:ring-offset-2 focus-visible:ring-offset-foreground"
             >
               {primaryLabel}
             </Link>
-            <div className="hidden items-center gap-3 text-xs text-background/65 sm:flex sm:px-1">
-              <span>30 minuten</span>
-              <span aria-hidden="true">·</span>
-              <span>je partner is welkom</span>
-            </div>
           </div>
         </div>
 
@@ -113,7 +119,7 @@ export function HomeJourneyShowcase({
           className="absolute bottom-5 right-5 inline-flex min-h-10 items-center gap-2 rounded-xl bg-foreground/70 px-3 text-xs font-semibold text-background backdrop-blur-md transition-colors hover:bg-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background"
         >
           <Play className="size-3" fill="currentColor" />
-          <span>{isCompleted ? 'Bekijk opnieuw' : 'Bekijk video'}</span>
+          <span>{isShowingBonus ? 'Bekijk bonus' : isCompleted ? 'Bekijk opnieuw' : 'Bekijk video'}</span>
           <span aria-hidden="true">·</span>
           <span>{formatDuration(heroVideo.durationSeconds)}</span>
         </Link>
