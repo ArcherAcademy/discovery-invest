@@ -8,28 +8,23 @@ import { cn } from '@/lib/utils'
 
 export function AppLayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const isMasterclass = pathname === '/masterclass'
   const hasArchitecturalBackground =
     pathname === '/home' ||
     pathname === '/traject' ||
     pathname === '/kennismakingsevent' ||
+    pathname === '/masterclass' ||
     pathname === '/events' ||
     pathname.startsWith('/video/')
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {!isMasterclass ? <Sidebar /> : null}
-      <div className={cn('flex min-w-0 flex-1 flex-col overflow-hidden', !isMasterclass && 'pb-24 sm:pb-0')}>
-        {!isMasterclass ? (
-          <>
-            <ExpiredTrialBanner />
-            <SignupBanner />
-          </>
-        ) : null}
+      <Sidebar />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden pb-24 sm:pb-0">
+        <ExpiredTrialBanner />
+        <SignupBanner />
         <main
           className={cn(
-            'relative flex-1 overflow-y-auto bg-background',
-            !isMasterclass && 'p-4 sm:p-6',
+            'relative flex-1 overflow-y-auto bg-background p-4 sm:p-6',
             hasArchitecturalBackground && 'bg-cover bg-top bg-no-repeat',
           )}
           style={
