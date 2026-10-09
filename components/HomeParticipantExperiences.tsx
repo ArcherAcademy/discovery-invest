@@ -109,8 +109,19 @@ export function HomeParticipantExperiences() {
         </div>
       </div>
 
-      <div role="group" aria-label="Kies een testimonial" className="mx-auto mt-6 flex max-w-[580px] gap-2 overflow-x-auto pb-2">
-        {testimonials.map((testimonial, index) => <button key={testimonial.poster} type="button" onClick={() => selectTestimonial(index)} aria-label={`Bekijk testimonial ${index + 1}`} aria-pressed={selected === index} className={`relative h-12 w-[34px] shrink-0 overflow-hidden rounded-md transition ${selected === index ? 'ring-2 ring-[#1111ee] ring-offset-2' : 'opacity-75 hover:opacity-100'}`}><img src={testimonial.poster} alt="" className="size-full object-cover" /></button>)}
+      <div role="group" aria-label="Kies een testimonial" className="mx-auto mt-6 flex max-w-[588px] gap-2 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {testimonials.map((testimonial, index) => (
+          <button
+            key={testimonial.poster}
+            type="button"
+            onClick={() => selectTestimonial(index)}
+            aria-label={`Bekijk testimonial ${index + 1}`}
+            aria-pressed={selected === index}
+            className={`relative h-12 w-[34px] shrink-0 rounded-md transition focus-visible:outline-none ${selected === index ? 'z-10 shadow-[0_0_0_2px_#ffffff,0_0_0_4px_#1111ee]' : 'opacity-75 hover:opacity-100'}`}
+          >
+            <img src={testimonial.poster} alt="" className="size-full rounded-md object-cover" />
+          </button>
+        ))}
       </div>
 
       <div aria-label="Ervaringen van deelnemers" className="mx-auto mt-8 grid max-w-5xl gap-0 sm:grid-cols-3">
