@@ -8,6 +8,7 @@ const PUBLIC_PREFIXES = [
   '/api/auth/',
   '/api/activeren',
   '/api/account-aanmaken',
+  '/api/hubspot/hot-lead',
   '/api/cron/',
   '/api/setup-db',
   '/_next',
