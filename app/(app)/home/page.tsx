@@ -3,7 +3,6 @@
 import PlatformIntroModal from '@/components/PlatformIntroModal'
 import { HomeJourneyShowcase } from '@/components/HomeJourneyShowcase'
 import { HomeParticipantExperiences } from '@/components/HomeParticipantExperiences'
-import { HomeStrategySection } from '@/components/HomeStrategySection'
 import { VermogensavondCta } from '@/components/VermogensavondCta'
 import { useApp } from '@/components/app-context'
 
@@ -67,8 +66,6 @@ export default function HomePage() {
       />
 
       <HomeParticipantExperiences />
-
-      <HomeStrategySection />
 
       <VermogensavondCta />
 
