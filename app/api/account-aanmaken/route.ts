@@ -207,16 +207,25 @@ async function logWebhookCall(opts: {
 }) {
   try {
     const { webhook_secret: _webhookSecret, ...veiligePayload } = opts.payload_json
-    await opts.supabase.from('demo_invest_account_webhook_log').insert({
+    const basisLog = {
       email: opts.email,
       payload_json: veiligePayload,
       outcome: opts.outcome,
       reden: opts.reden,
       activatielink: opts.activatielink,
       http_status: opts.http_status,
+    }
+    const { error } = await opts.supabase.from('demo_invest_account_webhook_log').insert({
+      ...basisLog,
       ...(opts.user_id ? { user_id: opts.user_id } : {}),
       ...(opts.submission_id && UUID_PATTERN.test(opts.submission_id) ? { submission_id: opts.submission_id } : {}),
     })
+
+    if (error?.code === 'PGRST204') {
+      await opts.supabase.from('demo_invest_account_webhook_log').insert(basisLog)
+    } else if (error) {
+      throw error
+    }
   } catch (err) {
     // Log fout mag de flow NOOIT breken
     console.error('[v0] account-aanmaken: loggen mislukt (non-fatal):', err)
@@ -566,19 +575,21 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
       .eq('id', userId)
       .single()
 
-    if (phoneLookupError) {
+    const phoneColumnMissing = phoneLookupError?.code === 'PGRST204'
+      || phoneLookupError?.message?.toLowerCase().includes('phone')
+    if (phoneLookupError && !phoneColumnMissing) {
       console.error('[v0] account-aanmaken: telefoonveld ophalen mislukt:', phoneLookupError.message)
       await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `Telefoon opslaan: ${phoneLookupError.message}`, activatielink: null, http_status: 500, user_id: userId, submission_id: submissionId })
       return jsonError('Inzending kon niet worden opgeslagen', 500)
     }
 
-    if (!scalarText(phoneState.phone)) {
+    if (!phoneColumnMissing && !scalarText(phoneState?.phone)) {
       const { error: phoneUpdateError } = await supabase
         .from('demo_invest_users')
         .update({ phone })
         .eq('id', userId)
 
-      if (phoneUpdateError) {
+      if (phoneUpdateError && phoneUpdateError.code !== 'PGRST204') {
         console.error('[v0] account-aanmaken: telefoon opslaan mislukt:', phoneUpdateError.message)
         await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `Telefoon opslaan: ${phoneUpdateError.message}`, activatielink: null, http_status: 500, user_id: userId, submission_id: submissionId })
         return jsonError('Inzending kon niet worden opgeslagen', 500)
@@ -621,7 +632,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
         return jsonError('submission_id is al in gebruik', 409)
       }
       outcome = 'reused'
-    } else if (submissionError) {
+    } else if (submissionError && submissionError.code !== 'PGRST205' && submissionError.code !== '42P01') {
       console.error('[v0] account-aanmaken: inzending opslaan mislukt:', submissionError.message)
       await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `Inzending opslaan: ${submissionError.message}`, activatielink: null, http_status: 500, user_id: userId, submission_id: submissionId })
       return jsonError('Inzending kon niet worden opgeslagen', 500)
