@@ -16,6 +16,33 @@ import type { DemoUser, DemoUserFunnel, DemoWebhookLog, DemoTriggerLog, DemoWebh
 import { QUIZ_QUESTIONS } from '@/lib/quiz-data'
 import { hasPermanentAccess, isTrialExpired, trialDaysRemaining } from '@/lib/access'
 
+interface InflatietestSubmission {
+  id: string
+  user_id: string
+  submission_id: string
+  source: string
+  submitted_at: string
+  assigned_advisor: string
+  answers: {
+    guess: string
+    situation: string
+    age: number
+    noHome: boolean
+    homeValue?: number | null
+    loan?: number | null
+    assets: number
+    blocks: Record<string, number>
+  }
+  result: string
+  result_details: {
+    verdict?: { word?: string }
+    nominalReturn?: number
+    realReturn?: number
+    years?: number
+    segment?: string
+  }
+}
+
 interface AdminUser extends DemoUser {
   funnel?: DemoUserFunnel
   /** Numerieke HubSpot owner-ID — wordt via bookingOwners naar een naam vertaald. */
@@ -23,7 +50,7 @@ interface AdminUser extends DemoUser {
   /** Actueel telefoonnummer uit HubSpot; mobiel krijgt voorrang. */
   phone?: string | null
   /** Herkomst van het account, server-side bepaald uit de eerste bekende instroom. */
-  instroom?: 'vermogenstest' | 'discovery' | 'onbekend'
+  instroom?: 'inflatietest' | 'vermogenstest' | 'discovery' | 'onbekend'
   // Live afgeleide call-status en opvolgvlag — server-side samengevoegd in /api/admin/data.
   call_clicked_at?: string | null
   call_opened_at?: string | null
@@ -37,6 +64,31 @@ type HistoryChannel = 'hubspot' | 'form' | 'funnel'
 type Tab = 'overview' | 'accounts' | 'users' | 'mentors' | 'webhooks' | 'workflows' | 'history' | 'account_logs' | 'voortgang'
 
 const ACCOUNTS_PER_PAGE = 50
+const INFLATIETEST_BLOCK_LABELS: Record<string, string> = {
+  cash: 'Spaarrekening & zichtrekening',
+  oblig: 'Termijnrekening, staatsbon, obligaties',
+  pensioen: 'Pensioensparen & groepsverzekering',
+  fonds: 'Fondsen via je bank',
+  vastgoed: 'Vastgoed dat je verhuurt',
+  etf: "ETF's of zelfgekozen aandelen",
+  crypto: 'Crypto',
+}
+const INFLATIETEST_GUESS_LABELS: Record<string, string> = {
+  ja: 'Ja',
+  'denk-ja': 'Ik denk van wel',
+  'geen-idee': 'Geen idee',
+  'denk-nee': 'Ik denk van niet',
+}
+const INFLATIETEST_SITUATION_LABELS: Record<string, string> = {
+  werknemer: 'Werknemer',
+  bv: 'Ondernemer met BV',
+  zelfst: 'Zelfstandige',
+  gepens: 'Gepensioneerd',
+}
+
+function formatEuro(value: number): string {
+  return new Intl.NumberFormat('nl-BE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value)
+}
 
 function getVisibleAccountPages(currentPage: number, pageCount: number): Array<number | 'ellipsis-start' | 'ellipsis-end'> {
   if (pageCount <= 7) return Array.from({ length: pageCount }, (_, index) => index + 1)
@@ -66,11 +118,12 @@ export default function AdminPage() {
   const [triggerLog, setTriggerLog] = useState<DemoTriggerLog[]>([])
   const [webhookConfig, setWebhookConfig] = useState<DemoWebhookConfig[]>([])
   const [accountsFilter, setAccountsFilter] = useState<{ query: string; status: '' | AccountStatus }>({ query: '', status: '' })
-  const [instroomFilter, setInstroomFilter] = useState<'' | 'vermogenstest' | 'discovery' | 'onbekend'>('')
+  const [instroomFilter, setInstroomFilter] = useState<'' | 'inflatietest' | 'vermogenstest' | 'discovery' | 'onbekend'>('')
   const [accountManagerFilter, setAccountManagerFilter] = useState<string>('')
   const [accountLogs, setAccountLogs] = useState<AccountWebhookLog[]>([])
   const [accountLogsFilter, setAccountLogsFilter] = useState<{ email: string; outcome: '' | 'created' | 'reused' | 'error' }>({ email: '', outcome: '' })
   const [quizSubmissions, setQuizSubmissions] = useState<DemoQuizSubmission[]>([])
+  const [inflatietestSubmissions, setInflatietestSubmissions] = useState<InflatietestSubmission[]>([])
   const [bookingOwners, setBookingOwners] = useState<Record<string, string>>({})
   const [copiedLink, setCopiedLink] = useState<string | null>(null)
   const [expandedUser, setExpandedUser] = useState<string | null>(null)
@@ -278,6 +331,7 @@ export default function AdminPage() {
       if (d.webhookConfig) setWebhookConfig(d.webhookConfig as DemoWebhookConfig[])
       if (d.accountLogs) setAccountLogs(d.accountLogs as AccountWebhookLog[])
       if (d.quizSubmissions) setQuizSubmissions(d.quizSubmissions as DemoQuizSubmission[])
+      if (d.inflatietestSubmissions) setInflatietestSubmissions(d.inflatietestSubmissions as InflatietestSubmission[])
       if (d.bookingOwners) setBookingOwners(d.bookingOwners as Record<string, string>)
     }
     load()
@@ -367,6 +421,7 @@ export default function AdminPage() {
   //   - "website" / "HubSpot": _bron uit de account-aanmaken webhook-log, gematcht op e-mail
   const userTags = (u: DemoUser): string[] => {
     const tags: string[] = []
+    if (inflatietestSubmissions.some(submission => submission.user_id === u.id)) tags.push('inflatietest')
     if (quizSubmissions.some(q => q.user_id === u.id)) tags.push('vermogenstest')
     const email = (u.email ?? '').toLowerCase()
     if (email) {
@@ -873,15 +928,16 @@ export default function AdminPage() {
               <select
                 value={instroomFilter}
                 onChange={e => {
-                  setInstroomFilter(e.target.value as '' | 'vermogenstest' | 'discovery' | 'onbekend')
+                  setInstroomFilter(e.target.value as '' | 'inflatietest' | 'vermogenstest' | 'discovery' | 'onbekend')
                   setAccountPage(1)
                 }}
                 className="rounded-xl px-3 py-2 text-xs border outline-none"
                 style={{ background: '#fff', borderColor: instroomFilter ? '#2500F5' : '#e8ecf4', color: instroomFilter ? '#2500F5' : 'rgba(13,15,20,0.55)' }}
                 aria-label="Filter op instroom"
               >
-                <option value="">Alle instroom ({scopedUsers.length})</option>
-                <option value="vermogenstest">Vermogenstest ({vermogenstestCount})</option>
+  <option value="">Alle instroom ({scopedUsers.length})</option>
+  <option value="inflatietest">Inflatietest ({scopedUsers.filter(u => u.instroom === 'inflatietest').length})</option>
+  <option value="vermogenstest">Vermogenstest ({vermogenstestCount})</option>
                 <option value="discovery">Discovery ({discoveryCount})</option>
                 <option value="onbekend">Onbekend ({onbekendCount})</option>
               </select>
@@ -1015,7 +1071,7 @@ export default function AdminPage() {
                                     ? { background: 'rgba(37,0,245,0.1)', color: '#2500F5' }
                                     : { background: '#f0f3fb', color: 'rgba(13,15,20,0.55)' }}
                                 >
-                                  {instroom === 'vermogenstest' ? 'Vermogenstest' : instroom === 'discovery' ? 'Discovery' : 'Onbekend'}
+                                  {instroom === 'inflatietest' ? 'Inflatietest' : instroom === 'vermogenstest' ? 'Vermogenstest' : instroom === 'discovery' ? 'Discovery' : 'Onbekend'}
                                 </span>
                               )
                             })()}
@@ -1294,6 +1350,7 @@ export default function AdminPage() {
                     const isExpanded = expandedUser === u.id
                     const logs = userLogs(u.id)
                     const quizSub = quizSubmissions.find(q => q.user_id === u.id)
+                    const inflatietests = inflatietestSubmissions.filter(submission => submission.user_id === u.id)
 
                     return (
                       <>
@@ -1441,6 +1498,67 @@ export default function AdminPage() {
                                     </>
                                   )}
                                 </div>
+
+                                {inflatietests.length > 0 && (
+                                  <section className="grid gap-3 border-t pt-4" style={{ borderColor: '#e8ecf4' }} aria-label="Inflatietest">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <h3 className="text-sm font-bold" style={{ color: '#0d0f14' }}>Inflatietest</h3>
+                                      <span className="rounded-full px-2 py-1 text-[10px] font-semibold" style={{ background: 'rgba(37,0,245,0.1)', color: '#2500F5' }}>
+                                        {inflatietests.length} {inflatietests.length === 1 ? 'inzending' : 'inzendingen'}
+                                      </span>
+                                    </div>
+                                    {inflatietests.map(submission => {
+                                      const { answers, result_details: details } = submission
+                                      const nominalReturn = Number(details.nominalReturn ?? 0)
+                                      const realReturn = Number.isFinite(Number(details.realReturn)) ? Number(details.realReturn) : nominalReturn - 4.5
+                                      const ageLabel: Record<number, string> = { 27: '18–34 jaar', 35: '35–44 jaar', 45: '45–54 jaar', 55: '55–64 jaar', 65: '65 jaar of ouder' }
+
+                                      return (
+                                        <article key={submission.id} className="grid gap-4 rounded-xl border p-4" style={{ background: '#ffffff', borderColor: '#e8ecf4' }}>
+                                          <div className="flex flex-wrap items-start justify-between gap-3">
+                                            <div>
+                                              <p className="text-base font-bold" style={{ color: '#2500F5' }}>{details.verdict?.word ?? submission.result}</p>
+                                              <p className="text-[11px]" style={{ color: 'rgba(13,15,20,0.45)' }}>
+                                                {formatDateTime(submission.submitted_at)} · {submission.assigned_advisor}
+                                              </p>
+                                            </div>
+                                            <code className="break-all text-[10px]" style={{ color: 'rgba(13,15,20,0.45)' }}>{submission.submission_id}</code>
+                                          </div>
+
+                                          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                            {[
+                                              ['Eigen inschatting', INFLATIETEST_GUESS_LABELS[answers.guess] ?? answers.guess],
+                                              ['Situatie', INFLATIETEST_SITUATION_LABELS[answers.situation] ?? answers.situation],
+                                              ['Leeftijdsgroep', ageLabel[answers.age] ?? String(answers.age)],
+                                              ['Woning', answers.noHome ? 'Geen eigen woning' : `${formatEuro(Number(answers.homeValue ?? 0))} · ${Math.round(Number(answers.loan ?? 0) * 100)}% af te betalen`],
+                                              ['Vermogen buiten woning', formatEuro(Number(answers.assets ?? 0))],
+                                              ['Projectie', `${Number(details.years ?? 0)} jaar · segment ${details.segment ?? '—'}`],
+                                              ['Nominaal rendement', `${nominalReturn.toLocaleString('nl-BE')}%`],
+                                              ['Reëel rendement', `${realReturn.toLocaleString('nl-BE')}%`],
+                                            ].map(([label, value]) => (
+                                              <div key={label}>
+                                                <dt className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'rgba(13,15,20,0.4)' }}>{label}</dt>
+                                                <dd className="text-xs font-medium" style={{ color: '#0d0f14' }}>{value}</dd>
+                                              </div>
+                                            ))}
+                                          </dl>
+
+                                          <div className="grid gap-2">
+                                            <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'rgba(13,15,20,0.4)' }}>Verdeling</p>
+                                            <ul className="grid gap-1.5">
+                                              {Object.entries(answers.blocks).filter(([, blocks]) => blocks > 0).map(([key, blocks]) => (
+                                                <li key={key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs" style={{ background: '#F5F8FF', color: '#0d0f14' }}>
+                                                  <span>{INFLATIETEST_BLOCK_LABELS[key] ?? key}</span>
+                                                  <span className="font-semibold">{blocks} {blocks === 1 ? 'blokje' : 'blokjes'} · {formatEuro(Number(answers.assets) * blocks / 10)} · {blocks * 10}%</span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        </article>
+                                      )
+                                    })}
+                                  </section>
+                                )}
 
                                 <p className="text-xs font-semibold mb-3" style={{ color: 'rgba(13,15,20,0.55)' }}>
                                   Timeline ({logs.length} events)

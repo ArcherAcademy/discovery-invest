@@ -73,6 +73,17 @@ export function getHubSpotOwner(ownerId: string | null | undefined): HubSpotOwne
   return normalizedId ? ownersById.get(normalizedId) ?? null : null
 }
 
+export function getHubSpotOwnerByAdvisorName(name: string | null | undefined): HubSpotOwner | null {
+  const normalizedName = typeof name === 'string' ? name.trim().toLocaleLowerCase('nl-BE') : ''
+  if (!normalizedName) return null
+
+  return HUBSPOT_OWNERS.find(owner => {
+    const ownerName = owner.name.toLocaleLowerCase('nl-BE')
+    const firstName = ownerName.split(/\s+/)[0]
+    return ownerName === normalizedName || firstName === normalizedName
+  }) ?? null
+}
+
 export function getHubSpotOwnerName(ownerId: string | null | undefined, fallback: string | null = null): string | null {
   return getHubSpotOwner(ownerId)?.name ?? fallback
 }

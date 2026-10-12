@@ -61,6 +61,7 @@ export async function GET(req: NextRequest) {
     { data: quizData },
     { data: followUpDisabledData },
     { data: bookingLinksData },
+    { data: inflatietestData, error: inflatietestError },
   ] = await Promise.all([
     supabase.from('demo_invest_user_funnel').select('*'),
     supabase.from('demo_invest_webhook_log').select('*').order('created_at', { ascending: false }).limit(200),
@@ -70,7 +71,15 @@ export async function GET(req: NextRequest) {
     supabase.from('demo_invest_quiz_submissions').select('*'),
     supabase.from('demo_invest_trigger_sent').select('user_id').eq('workflow_naam', '__automatische_opvolging_uit__'),
     supabase.from('demo_invest_boekingslinks').select('hubspot_owner_id, naam'),
+    supabase
+      .from('inflatietest_submissions')
+      .select('id, user_id, lead_flow, source, submission_id, submitted_at, assigned_advisor, answers, result, result_details, created_at')
+      .order('submitted_at', { ascending: false }),
   ])
+
+  if (inflatietestError && inflatietestError.code !== 'PGRST205') {
+    console.error('[admin/data] Inflatietest-inzendingen ophalen mislukt:', inflatietestError)
+  }
 
   const usersData = usersResult.rows
   const callStates = await getAllCallUserStates(supabase)
@@ -79,7 +88,7 @@ export async function GET(req: NextRequest) {
   // expliciete signalen; een ontbrekende bron als "Discovery" tonen zou de
   // marketingcijfers kunstmatig verbeteren. Oudere logs blijven bruikbaar doordat
   // we de volledige tabel chronologisch en in stabiele batches lezen.
-  type Instroom = 'vermogenstest' | 'discovery' | 'onbekend'
+  type Instroom = 'inflatietest' | 'vermogenstest' | 'discovery' | 'onbekend'
   type VermogenstestTracking = {
     lead_flow: string | null
     vermogenstest_variant: 'A' | 'B' | null
@@ -118,6 +127,7 @@ export async function GET(req: NextRequest) {
       payloadValue(payload, 'source', 'hs_lead_source', 'hs_source_form_submission'),
     ].join(' ').toLowerCase()
 
+    if (signal.includes('inflatie-test') || signal.includes('inflatietest')) return 'inflatietest'
     if (signal.includes('vermogens-test') || signal.includes('vermogenstest')) return 'vermogenstest'
     if (signal.includes('/demo') || signal.includes('discovery')) return 'discovery'
     return null
@@ -216,9 +226,11 @@ export async function GET(req: NextRequest) {
       hubspot_owner_id: ownerId,
       phone: livePhoneByEmail.get(email) ?? null,
       opvolging_actief: !followUpDisabledUserIds.has(user.id),
-      instroom: (user.lead_flow ?? tracking?.lead_flow) === 'vermogenstest'
-        ? 'vermogenstest'
-        : instroomByEmail.get(email) ?? 'onbekend',
+      instroom: (user.lead_flow ?? tracking?.lead_flow) === 'inflatietest'
+        ? 'inflatietest'
+        : (user.lead_flow ?? tracking?.lead_flow) === 'vermogenstest'
+          ? 'vermogenstest'
+          : instroomByEmail.get(email) ?? 'onbekend',
     }
   })
 
@@ -231,6 +243,7 @@ export async function GET(req: NextRequest) {
     webhookConfig: configData ?? [],
     accountLogs: accountLogsData ?? [],
     quizSubmissions: quizData ?? [],
+    inflatietestSubmissions: inflatietestData ?? [],
     bookingOwners: ownerNames,
   })
 }
