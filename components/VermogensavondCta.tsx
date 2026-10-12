@@ -2,7 +2,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowUpRight } from 'lucide-react'
 
-const WORKSHOPS_URL = 'https://workshops.archerinvest.be'
+const KENNISMAKINGSEVENT_URL = '/kennismakingsevent'
 
 export function VermogensavondCta() {
   return (
@@ -24,7 +24,7 @@ export function VermogensavondCta() {
         </div>
 
         <Link
-          href={WORKSHOPS_URL}
+          href={KENNISMAKINGSEVENT_URL}
           className="group inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary-foreground px-5 py-3 text-sm font-bold text-primary transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-primary"
         >
           Reserveer mijn plaats
