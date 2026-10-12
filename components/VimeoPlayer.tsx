@@ -116,6 +116,7 @@ export default function VimeoPlayer({
   const countdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const heartbeatRef = useRef<(() => Promise<void>) | null>(null)
   const heartbeatFailuresRef = useRef(0)
+  const maxWatchedTimeRef = useRef(0)
   const onAutoNextRef = useRef(onAutoNext)
   useEffect(() => { onAutoNextRef.current = onAutoNext }, [onAutoNext])
 
@@ -124,6 +125,7 @@ export default function VimeoPlayer({
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [maxWatchedTime, setMaxWatchedTime] = useState(0)
   const [playerReady, setPlayerReady] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [cancelled, setCancelled] = useState(false)
@@ -146,8 +148,10 @@ export default function VimeoPlayer({
     setEnded(false)
     setHasStarted(false)
     setIsPlaying(false)
+    maxWatchedTimeRef.current = 0
     setCurrentTime(0)
     setDuration(0)
+    setMaxWatchedTime(0)
     setPlayerReady(false)
     setCountdown(null)
     setCancelled(false)
@@ -276,6 +280,12 @@ export default function VimeoPlayer({
       trackProgress('started')
     }
 
+    const registerWatchedTime = (seconds: number) => {
+      if (!Number.isFinite(seconds) || seconds <= maxWatchedTimeRef.current) return
+      maxWatchedTimeRef.current = seconds
+      setMaxWatchedTime(seconds)
+    }
+
     const registerPercent = (percent: number) => {
       if (!Number.isFinite(percent) || percent < 0) return
       if (percent > 0) registerStarted()
@@ -305,6 +315,7 @@ export default function VimeoPlayer({
         onRealDuration?.(duration)
         setCurrentTime(currentTime)
         setDuration(duration)
+        registerWatchedTime(currentTime)
         registerPercent(currentTime / duration)
         setErrorMsg(current => current?.includes('laden van de video') ? null : current)
       } catch (error) {
@@ -325,8 +336,14 @@ export default function VimeoPlayer({
         if (disposed || !duration || duration <= 0) return
         onRealDuration?.(duration)
         setDuration(duration)
-        if (!completed && initialProgressPct > 0 && initialProgressPct < 90) {
-          await withTimeout(player.setCurrentTime(duration * (initialProgressPct / 100)), PLAYER_CALL_TIMEOUT_MS)
+        if (completed) {
+          maxWatchedTimeRef.current = duration
+          setMaxWatchedTime(duration)
+        } else if (initialProgressPct > 0 && initialProgressPct < 90) {
+          const resumedAt = duration * (initialProgressPct / 100)
+          maxWatchedTimeRef.current = resumedAt
+          setMaxWatchedTime(resumedAt)
+          await withTimeout(player.setCurrentTime(resumedAt), PLAYER_CALL_TIMEOUT_MS)
         }
         if (autoPlay) {
           try {
@@ -357,6 +374,7 @@ export default function VimeoPlayer({
     const handleTimeUpdate = ({ percent, seconds, duration: eventDuration }: { percent: number; seconds: number; duration: number }) => {
       setCurrentTime(seconds)
       setDuration(eventDuration)
+      registerWatchedTime(seconds)
       registerPercent(percent)
     }
     const handleEnded = () => {
@@ -422,13 +440,16 @@ export default function VimeoPlayer({
   }
 
   const seekTo = async (seconds: number) => {
-    if (!completed || !playerRef.current) return
+    if (!playerReady || !playerRef.current) return
+    const seekLimit = completed ? duration : maxWatchedTimeRef.current
+    const safeTime = Math.max(0, Math.min(seconds, seekLimit))
+
     try {
-      setCurrentTime(seconds)
-      await playerRef.current.setCurrentTime(seconds)
+      setCurrentTime(safeTime)
+      await playerRef.current.setCurrentTime(safeTime)
     } catch (error) {
-      console.error('[v0] Video doorspoelen mislukt:', error)
-      setErrorMsg('Doorspoelen lukte niet. Probeer opnieuw.')
+      console.error('[v0] Video terugspoelen mislukt:', error)
+      setErrorMsg('Terugspoelen lukte niet. Probeer opnieuw.')
     }
   }
 
@@ -487,7 +508,7 @@ export default function VimeoPlayer({
 
         {!playerLoadError && !ended && (
           <div
-            className={`pointer-events-none absolute inset-x-3 bottom-3 z-30 flex items-center justify-between text-foreground transition-opacity duration-300 group-hover:opacity-100 focus-within:opacity-100 sm:inset-x-4 sm:bottom-4 ${isPlaying ? 'opacity-0' : 'opacity-100'}`}
+            className="pointer-events-none absolute inset-x-3 bottom-3 z-30 flex items-center justify-between text-foreground sm:inset-x-4 sm:bottom-4"
           >
             <button
               type="button"
@@ -510,10 +531,10 @@ export default function VimeoPlayer({
                   step={0.1}
                   value={Math.min(currentTime, duration)}
                   onChange={(event) => void seekTo(Number(event.currentTarget.value))}
-                  disabled={!completed}
-                  aria-label={completed ? 'Door de bekeken video spoelen' : 'Voortgang van de video'}
-                  aria-valuetext={`${formatVideoTime(currentTime)} van ${formatVideoTime(duration)}`}
-                  className="pointer-events-auto h-1.5 min-w-0 flex-1 accent-primary disabled:pointer-events-none disabled:cursor-default disabled:opacity-100"
+                  disabled={!playerReady || maxWatchedTime <= 0}
+                  aria-label="Video terugspoelen"
+                  aria-valuetext={`${formatVideoTime(currentTime)} van ${formatVideoTime(duration)} bekeken`}
+                  className="pointer-events-auto h-2 min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-wait disabled:opacity-60"
                 />
                 <span className="min-w-10 text-sm font-medium tabular-nums text-primary-foreground">
                   {formatVideoTime(duration)}
