@@ -122,6 +122,7 @@ export async function GET(req: NextRequest) {
   const trackingByEmail = new Map<string, VermogenstestTracking>()
   const historicalOwnerByEmail = new Map<string, string>()
   const fallbackSubmissionsById = new Map<string, LeadSubmissionRow>()
+  const phoneFromSubmissionByEmail = new Map<string, string>()
   const userByEmail = new Map(usersResult.rows.map(user => [(user.email ?? '').trim().toLowerCase(), user]))
 
   const scalarText = (value: unknown): string => {
@@ -192,6 +193,9 @@ export async function GET(req: NextRequest) {
         const payload = row.payload_json ?? {}
         const email = (row.email ?? payloadValue(payload, 'email', 'contact_email', 'hs_associated_contact_email')).trim().toLowerCase()
         if (!email) continue
+
+        const submissionPhone = payloadValue(payload, 'phone', 'telefoon', 'hs_phone')
+        if (submissionPhone && !phoneFromSubmissionByEmail.has(email)) phoneFromSubmissionByEmail.set(email, submissionPhone)
 
         if (row.outcome === 'created' || row.outcome === 'reused') {
           const submissionId = payloadValue(payload, 'submission_id')
@@ -308,7 +312,7 @@ export async function GET(req: NextRequest) {
       vermogenstest_variant: latestSubmission?.variant ?? user.vermogenstest_variant ?? tracking?.vermogenstest_variant ?? null,
       vermogenstest_vragenset: latestSubmission?.vragenset ?? user.vermogenstest_vragenset ?? tracking?.vermogenstest_vragenset ?? null,
       hubspot_owner_id: ownerId,
-      phone: livePhoneByEmail.get(email) ?? user.phone ?? null,
+      phone: livePhoneByEmail.get(email) ?? user.phone ?? phoneFromSubmissionByEmail.get(email) ?? null,
       opvolging_actief: !followUpDisabledUserIds.has(user.id),
       instroom: latestSubmission
         ? (latestSubmission.lead_flow === 'demo' ? 'discovery' : latestSubmission.lead_flow as Instroom)
