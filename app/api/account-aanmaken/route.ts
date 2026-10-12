@@ -117,6 +117,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
+function isJsonCollection(value: unknown): value is Record<string, unknown> | unknown[] {
+  return isRecord(value) || Array.isArray(value)
+}
+
+type LabeledAnswer = {
+  question_id: string
+  question: string
+  answer: string
+  value: unknown
+}
+
+function normalizeLabeledAnswers(value: unknown): LabeledAnswer[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter(isRecord)
+    .map((answer, index) => ({
+      question_id: scalarText(answer.question_id) || `vraag-${index + 1}`,
+      question: scalarText(answer.question) || scalarText(answer.question_id) || `Vraag ${index + 1}`,
+      answer: scalarText(answer.answer),
+      value: answer.value ?? answer.answer ?? null,
+    }))
+}
+
+function normalizeDiscoveryAnswers(value: unknown): LabeledAnswer[] {
+  if (!isRecord(value)) return []
+  return Object.entries(value)
+    .filter((entry): entry is [string, Record<string, unknown>] => isRecord(entry[1]))
+    .map(([questionId, answer]) => ({
+      question_id: questionId,
+      question: scalarText(answer.question) || questionId,
+      answer: scalarText(answer.answer),
+      value: answer.answer_value ?? answer.value ?? answer.answer ?? null,
+    }))
+}
+
 function validateInflatietestAnswers(value: unknown): value is InflatietestAnswers {
   if (!isRecord(value) || !isRecord(value.blocks)) return false
   const answerKeys = Object.keys(value).sort()
@@ -264,61 +299,31 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   }
 
   const name = [voornaam, achternaam].filter(Boolean).join(' ') || email.split('@')[0]
-  const source = pick(body, 'source')
-  const leadFlow = pick(body, 'lead_flow') || (source === 'inflatietest' ? 'inflatietest' : null)
-  const geldigeLeadFlows = new Set(['demo', 'vermogenstest', 'inflatietest'])
-  if (leadFlow && !geldigeLeadFlows.has(leadFlow)) {
-    await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: `onbekende lead_flow: ${leadFlow}`, activatielink: null, http_status: 400 })
-    return jsonError(`Onbekende lead_flow: ${leadFlow}`, 400)
-  }
-
+  const sourceRaw = pick(body, 'source').toLowerCase()
+  const leadFlowRaw = pick(body, 'lead_flow').toLowerCase()
+  const fallbackFlow = sourceRaw === 'discovery' ? 'demo' : sourceRaw
+  const leadFlow = ['demo', 'vermogenstest', 'inflatietest'].includes(leadFlowRaw || fallbackFlow)
+    ? leadFlowRaw || fallbackFlow
+    : 'onbekend'
+  const source = leadFlow === 'vermogenstest'
+    ? 'Vermogenstest'
+    : leadFlow === 'demo'
+      ? 'Discovery-aanvraag'
+      : leadFlow === 'inflatietest'
+        ? 'Inflatietest'
+        : 'onbekend'
   const isInflatietest = leadFlow === 'inflatietest'
   const submissionId = pick(body, 'submission_id')
   const submittedAt = pick(body, 'submitted_at')
   const phone = pick(body, 'phone')
   const assignedAdvisor = pick(body, 'assigned_advisor')
   const answers = body.answers
+  const answersLabeled = body.answers_labeled
+  const discoveryAnswers = body.discovery_answers
   const result = pick(body, 'result')
   const resultDetails = body.result_details
+  const scoreRaw = body.score
   const advisorOwner = getHubSpotOwnerByAdvisorName(assignedAdvisor)
-
-  if (source === 'inflatietest' && !isInflatietest) {
-    await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: 'lead_flow inflatietest ontbreekt', activatielink: null, http_status: 400 })
-    return jsonError('lead_flow moet inflatietest zijn', 400)
-  }
-
-  if (isInflatietest) {
-    const missingFields = [
-      !voornaam && 'firstname',
-      !achternaam && 'lastname',
-      !phone && 'phone',
-      !submissionId && 'submission_id',
-      !source && 'source',
-      !submittedAt && 'submitted_at',
-      !assignedAdvisor && 'assigned_advisor',
-      !result && 'result',
-    ].filter(Boolean)
-
-    let validationError = ''
-    if (missingFields.length > 0) validationError = `Ontbrekende verplichte velden: ${missingFields.join(', ')}`
-    else if (!UUID_PATTERN.test(submissionId)) validationError = 'submission_id moet een geldige UUID zijn'
-    else if (pick(body, 'lead_id') && pick(body, 'lead_id') !== submissionId) validationError = 'lead_id moet gelijk zijn aan submission_id'
-    else if (Number.isNaN(Date.parse(submittedAt))) validationError = 'submitted_at moet een geldige ISO-datum zijn'
-    else if (source !== 'inflatietest') validationError = 'source moet inflatietest zijn'
-    else if (!validateInflatietestAnswers(answers)) validationError = 'answers bevat ongeldige of onvolledige Inflatietest-antwoorden'
-    else if (!isRecord(resultDetails)) validationError = 'result_details moet een JSON-object zijn'
-    else if (body.consent !== true) validationError = 'consent moet true zijn'
-    else if (body.vermogenstest_variant != null || body.vermogenstest_vragenset != null) validationError = 'Vermogenstest-velden moeten leeg zijn voor de Inflatietest'
-
-    if (validationError) {
-      await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: validationError, activatielink: null, http_status: 400, submission_id: submissionId })
-      return jsonError(validationError, 400)
-    }
-
-    if (!advisorOwner) {
-      console.warn(`[v0] account-aanmaken: onbekende Inflatietest-adviseur "${assignedAdvisor}"; account wordt zonder ownerkoppeling verwerkt`)
-    }
-  }
 
   const variantRaw = pick(body, 'vermogenstest_variant')
   const vragensetRaw = pick(body, 'vermogenstest_vragenset')
@@ -326,25 +331,45 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   const vermogenstestVragenset = vragensetRaw === 'oude_vragen' || vragensetRaw === 'nieuwe_vragen'
     ? vragensetRaw
     : null
-  const geldigeVermogenstestKoppeling =
-    (!vermogenstestVariant && !vermogenstestVragenset)
-    || (vermogenstestVariant === 'A' && vermogenstestVragenset === 'oude_vragen')
-    || (vermogenstestVariant === 'B' && vermogenstestVragenset === 'nieuwe_vragen')
+  const geldigeVermogenstestKoppeling = leadFlow !== 'vermogenstest'
+    ? !vermogenstestVariant && !vermogenstestVragenset
+    : (vermogenstestVariant === 'A' && vermogenstestVragenset === 'oude_vragen')
+      || (vermogenstestVariant === 'B' && vermogenstestVragenset === 'nieuwe_vragen')
 
-  if (variantRaw && !vermogenstestVariant || vragensetRaw && !vermogenstestVragenset || !geldigeVermogenstestKoppeling) {
-    await logWebhookCall({
-      supabase,
-      email,
-      payload_json: { ...body, _bron: bron, _origin: origin },
-      outcome: 'error',
-      reden: 'ongeldige combinatie vermogenstest_variant en vermogenstest_vragenset',
-      activatielink: null,
-      http_status: 422,
-    })
-    return acceptsJson
-      ? jsonError('Ongeldige combinatie vermogenstest_variant en vermogenstest_vragenset', 422)
-      : new Response('Invalid vermogenstest tracking', { status: 422, headers: CORS_HEADERS })
+  const validatesSubmission = acceptsJson || Boolean(submissionId)
+  let validationError = ''
+  if (answers !== undefined && !isJsonCollection(answers)) validationError = 'answers moet een JSON-object of lijst zijn'
+  else if (answersLabeled !== undefined && !isJsonCollection(answersLabeled)) validationError = 'answers_labeled moet een JSON-object of lijst zijn'
+  else if (resultDetails !== undefined && !isRecord(resultDetails)) validationError = 'result_details moet een JSON-object zijn'
+  else if (acceptsJson && !submissionId) validationError = 'Ontbrekend verplicht veld: submission_id'
+  else if (submissionId && !UUID_PATTERN.test(submissionId)) validationError = 'submission_id moet een geldige UUID zijn'
+  else if (acceptsJson && !submittedAt) validationError = 'Ontbrekend verplicht veld: submitted_at'
+  else if (submittedAt && Number.isNaN(Date.parse(submittedAt))) validationError = 'submitted_at moet een geldige ISO-datum zijn'
+  else if (pick(body, 'lead_id') && pick(body, 'lead_id') !== submissionId) validationError = 'lead_id moet gelijk zijn aan submission_id'
+  else if (variantRaw && !vermogenstestVariant || vragensetRaw && !vermogenstestVragenset || !geldigeVermogenstestKoppeling) validationError = 'ongeldige combinatie vermogenstest_variant en vermogenstest_vragenset'
+  else if (validatesSubmission && isInflatietest && !validateInflatietestAnswers(answers)) validationError = 'answers bevat ongeldige of onvolledige Inflatietest-antwoorden'
+  else if (validatesSubmission && isInflatietest && !Array.isArray(answersLabeled)) validationError = 'answers_labeled moet voor de Inflatietest een lijst zijn'
+  else if (validatesSubmission && leadFlow === 'vermogenstest' && !Array.isArray(answers)) validationError = 'answers moet voor de Vermogenstest een lijst zijn'
+  else if (validatesSubmission && leadFlow === 'demo' && !isRecord(discoveryAnswers)) validationError = 'discovery_answers moet voor de Discovery-aanvraag een object zijn'
+  else if (validatesSubmission && isInflatietest && body.consent !== true) validationError = 'consent moet true zijn'
+  else if (validatesSubmission && isInflatietest && (body.vermogenstest_variant != null || body.vermogenstest_vragenset != null)) validationError = 'Vermogenstest-velden moeten leeg zijn voor de Inflatietest'
+
+  if (validationError) {
+    await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: validationError, activatielink: null, http_status: 400, submission_id: submissionId })
+    return jsonError(validationError, 400)
   }
+
+  if (isInflatietest && !advisorOwner && assignedAdvisor) {
+    console.warn(`[v0] account-aanmaken: onbekende Inflatietest-adviseur "${assignedAdvisor}"; account wordt zonder ownerkoppeling verwerkt`)
+  }
+
+  const normalizedAnswers = leadFlow === 'inflatietest'
+    ? normalizeLabeledAnswers(answersLabeled)
+    : leadFlow === 'demo'
+      ? normalizeDiscoveryAnswers(discoveryAnswers)
+      : normalizeLabeledAnswers(answers)
+  const answersRaw = leadFlow === 'demo' ? discoveryAnswers : answers
+  const score = typeof scoreRaw === 'number' && Number.isFinite(scoreRaw) ? scoreRaw : null
 
   let contactOwnerId = advisorOwner?.id ?? extractHubSpotOwnerId(body)
 
@@ -534,7 +559,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     console.log(`[v0] account-aanmaken: owner al aanwezig (${existingOwnerId}) voor ${email}, niet overschreven`)
   }
 
-  if (isInflatietest) {
+  if (phone) {
     const { data: phoneState, error: phoneLookupError } = await supabase
       .from('demo_invest_users')
       .select('phone')
@@ -544,10 +569,10 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     if (phoneLookupError) {
       console.error('[v0] account-aanmaken: telefoonveld ophalen mislukt:', phoneLookupError.message)
       await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `Telefoon opslaan: ${phoneLookupError.message}`, activatielink: null, http_status: 500, user_id: userId, submission_id: submissionId })
-      return jsonError('Inflatietest-inzending kon niet worden opgeslagen', 500)
+      return jsonError('Inzending kon niet worden opgeslagen', 500)
     }
 
-    if (!scalarText(phoneState.phone) && phone) {
+    if (!scalarText(phoneState.phone)) {
       const { error: phoneUpdateError } = await supabase
         .from('demo_invest_users')
         .update({ phone })
@@ -556,28 +581,36 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
       if (phoneUpdateError) {
         console.error('[v0] account-aanmaken: telefoon opslaan mislukt:', phoneUpdateError.message)
         await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `Telefoon opslaan: ${phoneUpdateError.message}`, activatielink: null, http_status: 500, user_id: userId, submission_id: submissionId })
-        return jsonError('Inflatietest-inzending kon niet worden opgeslagen', 500)
+        return jsonError('Inzending kon niet worden opgeslagen', 500)
       }
     }
+  }
 
+  if (submissionId) {
     const submission = {
       user_id: userId,
-      lead_flow: 'inflatietest',
-      source: 'inflatietest',
       submission_id: submissionId,
+      lead_flow: leadFlow,
+      source,
+      variant: vermogenstestVariant,
+      vragenset: vermogenstestVragenset,
+      assigned_advisor: assignedAdvisor || null,
+      answers_labeled: normalizedAnswers,
+      answers_raw: answersRaw ?? {},
+      result: result || null,
+      result_details: resultDetails ?? {},
+      score,
+      utm_source: pick(body, 'utm_source') || null,
+      utm_campaign: pick(body, 'utm_campaign') || null,
       submitted_at: new Date(submittedAt).toISOString(),
-      assigned_advisor: assignedAdvisor,
-      answers,
-      result,
-      result_details: resultDetails,
     }
     const { error: submissionError } = await supabase
-      .from('inflatietest_submissions')
+      .from('lead_submissions')
       .insert(submission)
 
     if (submissionError?.code === '23505') {
       const { data: existingSubmission, error: existingSubmissionError } = await supabase
-        .from('inflatietest_submissions')
+        .from('lead_submissions')
         .select('user_id')
         .eq('submission_id', submissionId)
         .single()
@@ -589,9 +622,9 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
       }
       outcome = 'reused'
     } else if (submissionError) {
-      console.error('[v0] account-aanmaken: Inflatietest-inzending opslaan mislukt:', submissionError.message)
-      await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `Inflatietest opslaan: ${submissionError.message}`, activatielink: null, http_status: 500, user_id: userId, submission_id: submissionId })
-      return jsonError('Inflatietest-inzending kon niet worden opgeslagen', 500)
+      console.error('[v0] account-aanmaken: inzending opslaan mislukt:', submissionError.message)
+      await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `Inzending opslaan: ${submissionError.message}`, activatielink: null, http_status: 500, user_id: userId, submission_id: submissionId })
+      return jsonError('Inzending kon niet worden opgeslagen', 500)
     }
   }
 
@@ -689,8 +722,8 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     reden: null,
     activatielink: activatieLink,
     http_status: 200,
-    user_id: isInflatietest ? userId : null,
-    submission_id: isInflatietest ? submissionId : null,
+    user_id: userId,
+    submission_id: submissionId || null,
   })
   console.log('[v0] account-aanmaken: succes', { email, userId, outcome, bron, activatieLink })
 
@@ -704,7 +737,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
         outcome,
         activatielink: activatieLink,
         user_id: userId,
-        ...(isInflatietest ? { submission_id: submissionId } : {}),
+        ...(submissionId ? { submission_id: submissionId } : {}),
         email,
       }),
       {

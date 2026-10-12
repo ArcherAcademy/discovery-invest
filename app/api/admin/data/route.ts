@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
     { data: quizData },
     { data: followUpDisabledData },
     { data: bookingLinksData },
-    { data: inflatietestSubmissionsData, error: inflatietestSubmissionsError },
+    { data: leadSubmissionsData, error: leadSubmissionsError },
   ] = await Promise.all([
     supabase.from('demo_invest_user_funnel').select('*'),
     supabase.from('demo_invest_webhook_log').select('*').order('created_at', { ascending: false }).limit(200),
@@ -72,15 +72,16 @@ export async function GET(req: NextRequest) {
     supabase.from('demo_invest_trigger_sent').select('user_id').eq('workflow_naam', '__automatische_opvolging_uit__'),
     supabase.from('demo_invest_boekingslinks').select('hubspot_owner_id, naam'),
     supabase
-      .from('inflatietest_submissions')
-      .select('id, user_id, lead_flow, source, submission_id, submitted_at, assigned_advisor, answers, result, result_details, created_at')
+      .from('lead_submissions')
+      .select('id, user_id, submission_id, lead_flow, source, variant, vragenset, assigned_advisor, answers_labeled, answers_raw, result, result_details, score, utm_source, utm_campaign, submitted_at, created_at')
       .order('submitted_at', { ascending: false })
-      .limit(1000),
+      .order('created_at', { ascending: false })
+      .limit(5000),
   ])
 
-  if (inflatietestSubmissionsError) {
-    console.error('[admin/data] Inflatietest-inzendingen ophalen mislukt:', inflatietestSubmissionsError)
-    return NextResponse.json({ error: 'De Inflatietest-inzendingen konden niet worden opgehaald.' }, { status: 500 })
+  if (leadSubmissionsError) {
+    console.error('[admin/data] Leadinzendingen ophalen mislukt:', leadSubmissionsError)
+    return NextResponse.json({ error: 'De leadinzendingen konden niet worden opgehaald.' }, { status: 500 })
   }
 
   const usersData = usersResult.rows
@@ -211,6 +212,10 @@ export async function GET(req: NextRequest) {
   for (const [id, owner] of liveOwnersById) ownerNames[id] = owner.name
 
   const followUpDisabledUserIds = new Set((followUpDisabledData ?? []).map(row => row.user_id))
+  const latestSubmissionByUser = new Map<string, NonNullable<typeof leadSubmissionsData>[number]>()
+  for (const submission of leadSubmissionsData ?? []) {
+    if (!latestSubmissionByUser.has(submission.user_id)) latestSubmissionByUser.set(submission.user_id, submission)
+  }
   const users = (usersData ?? []).map(user => {
     const callState = callStates.get(user.id)
     const email = (user.email ?? '').trim().toLowerCase()
@@ -218,21 +223,24 @@ export async function GET(req: NextRequest) {
     const fallbackOwnerId = storedOwnerId || historicalOwnerByEmail.get(email) || null
     const ownerId = liveOwnerIdByEmail.has(email) ? liveOwnerIdByEmail.get(email) ?? null : fallbackOwnerId
     const tracking = trackingByEmail.get(email)
+    const latestSubmission = latestSubmissionByUser.get(user.id)
 
     return {
       ...user,
       ...callState,
-      lead_flow: user.lead_flow ?? tracking?.lead_flow ?? null,
-      vermogenstest_variant: user.vermogenstest_variant ?? tracking?.vermogenstest_variant ?? null,
-      vermogenstest_vragenset: user.vermogenstest_vragenset ?? tracking?.vermogenstest_vragenset ?? null,
+      lead_flow: latestSubmission?.lead_flow ?? user.lead_flow ?? tracking?.lead_flow ?? null,
+      vermogenstest_variant: latestSubmission?.variant ?? user.vermogenstest_variant ?? tracking?.vermogenstest_variant ?? null,
+      vermogenstest_vragenset: latestSubmission?.vragenset ?? user.vermogenstest_vragenset ?? tracking?.vermogenstest_vragenset ?? null,
       hubspot_owner_id: ownerId,
-      phone: livePhoneByEmail.get(email) ?? null,
+      phone: livePhoneByEmail.get(email) ?? user.phone ?? null,
       opvolging_actief: !followUpDisabledUserIds.has(user.id),
-      instroom: (user.lead_flow ?? tracking?.lead_flow) === 'inflatietest'
-        ? 'inflatietest'
-        : (user.lead_flow ?? tracking?.lead_flow) === 'vermogenstest'
-          ? 'vermogenstest'
-          : instroomByEmail.get(email) ?? 'onbekend',
+      instroom: latestSubmission
+        ? (latestSubmission.lead_flow === 'demo' ? 'discovery' : latestSubmission.lead_flow as Instroom)
+        : ((user.lead_flow ?? tracking?.lead_flow) === 'inflatietest'
+          ? 'inflatietest'
+          : (user.lead_flow ?? tracking?.lead_flow) === 'vermogenstest'
+            ? 'vermogenstest'
+            : instroomByEmail.get(email) ?? 'onbekend'),
     }
   })
 
@@ -245,7 +253,7 @@ export async function GET(req: NextRequest) {
     webhookConfig: configData ?? [],
     accountLogs: accountLogsData ?? [],
     quizSubmissions: quizData ?? [],
-    inflatietestSubmissions: inflatietestSubmissionsData ?? [],
+    leadSubmissions: leadSubmissionsData ?? [],
     bookingOwners: ownerNames,
   })
 }
