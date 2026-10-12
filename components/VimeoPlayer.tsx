@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Player from '@vimeo/player'
-import { CheckCircle2, ExternalLink, FileText, Maximize2, Pause, Play, RefreshCw, SkipForward, Trophy, X } from 'lucide-react'
+import { CheckCircle2, ExternalLink, FileText, Maximize2, Minimize2, Pause, Play, RefreshCw, SkipForward, Trophy, Volume2, VolumeX, X } from 'lucide-react'
 
 function parseVimeoId(src: string): number | null {
   const m = src.match(/(?:vimeo\.com\/|video\/)(\d+)/)
@@ -134,6 +134,8 @@ export default function VimeoPlayer({
   const [retrying, setRetrying] = useState(false)
   const [playerRetryKey, setPlayerRetryKey] = useState(0)
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(fallbackThumbnailUrl)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
 
   const vimeoId = parseVimeoId(src)
   const vimeoUrl = (src.startsWith('https://') ? src : `https://vimeo.com/${vimeoId}`) as VimeoUrl
@@ -165,6 +167,12 @@ export default function VimeoPlayer({
   useEffect(() => {
     if (completed) marked.current = true
   }, [completed])
+
+  useEffect(() => {
+    const syncFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement))
+    document.addEventListener('fullscreenchange', syncFullscreen)
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen)
+  }, [])
 
   // ── Countdown logic — fully imperative, immune to React batching races ────
   // Declared BEFORE doComplete because doComplete's deps array references it.
@@ -453,8 +461,12 @@ export default function VimeoPlayer({
     }
   }
 
-  const openFullscreen = async () => {
+  const toggleFullscreen = async () => {
     try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+        return
+      }
       if (wrapperRef.current?.requestFullscreen) {
         await wrapperRef.current.requestFullscreen()
       } else {
@@ -463,8 +475,19 @@ export default function VimeoPlayer({
       await playerRef.current?.play()
       setHasStarted(true)
     } catch (error) {
-      console.error('[v0] Volledig scherm openen mislukt:', error)
-      setErrorMsg('Volledig scherm kon niet worden geopend. Probeer opnieuw.')
+      console.error('[v0] Volledig scherm wisselen mislukt:', error)
+      setErrorMsg('Volledig scherm kon niet worden gewisseld. Probeer opnieuw.')
+    }
+  }
+
+  const toggleMute = async () => {
+    if (!playerReady || !playerRef.current) return
+    try {
+      const nextMuted = !isMuted
+      await playerRef.current.setVolume(nextMuted ? 0 : 1)
+      setIsMuted(nextMuted)
+    } catch (error) {
+      console.error('[v0] Geluid wisselen mislukt:', error)
     }
   }
 
@@ -543,13 +566,24 @@ export default function VimeoPlayer({
             )}
             <button
               type="button"
-              onClick={openFullscreen}
+              onClick={toggleMute}
               disabled={!playerReady}
-              aria-label="Video op volledig scherm bekijken"
-              className="pointer-events-auto flex size-11 items-center justify-center rounded-full border border-border/40 bg-background/85 shadow-lg backdrop-blur-md transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-50"
+              aria-label={isMuted ? 'Geluid aanzetten' : 'Geluid uitzetten'}
+              aria-pressed={isMuted}
+              className="pointer-events-auto mr-2 flex size-11 items-center justify-center rounded-full border border-border/40 bg-background/85 shadow-lg backdrop-blur-md transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-50"
             >
-              <Maximize2 className="size-5" aria-hidden="true" />
+              {isMuted ? <VolumeX className="size-5" aria-hidden="true" /> : <Volume2 className="size-5" aria-hidden="true" />}
             </button>
+            <button
+              type="button"
+            onClick={toggleFullscreen}
+            disabled={!playerReady}
+            aria-label={isFullscreen ? 'Volledig scherm sluiten' : 'Video op volledig scherm bekijken'}
+            aria-pressed={isFullscreen}
+            className="pointer-events-auto flex size-11 items-center justify-center rounded-full border border-border/40 bg-background/85 shadow-lg backdrop-blur-md transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-50"
+          >
+            {isFullscreen ? <Minimize2 className="size-5" aria-hidden="true" /> : <Maximize2 className="size-5" aria-hidden="true" />}
+          </button>
           </div>
         )}
 

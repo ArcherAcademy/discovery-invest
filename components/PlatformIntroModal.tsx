@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Maximize2, Pause, Play, X } from 'lucide-react'
+import { Maximize2, Minimize2, Pause, Play, Volume2, VolumeX, X } from 'lucide-react'
 
 const INTRO_COOKIE_PREFIX = 'archer_platform_intro_seen'
 
@@ -18,6 +18,8 @@ export default function PlatformIntroModal({ accountKey, isNewAccount, firstVide
   const playerRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [isMuted, setIsMuted] = useState(true)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const [progress, setProgress] = useState(0)
   const hasContinuedRef = useRef(false)
   const cookieName = accountKey
@@ -49,6 +51,17 @@ export default function PlatformIntroModal({ accountKey, isNewAccount, firstVide
     animationFrame = window.requestAnimationFrame(syncProgress)
     return () => window.cancelAnimationFrame(animationFrame)
   }, [open, isPlaying])
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (video) video.muted = isMuted
+  }, [isMuted, open])
+
+  useEffect(() => {
+    const syncFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement))
+    document.addEventListener('fullscreenchange', syncFullscreen)
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen)
+  }, [])
 
   function markAsSeen() {
     if (cookieName) {
@@ -89,15 +102,25 @@ export default function PlatformIntroModal({ accountKey, isNewAccount, firstVide
     }
   }
 
-  async function openFullscreen() {
+  function toggleMute() {
+    const video = videoRef.current
+    if (!video) return
+    const nextMuted = !video.muted
+    video.muted = nextMuted
+    setIsMuted(nextMuted)
+  }
+
+  async function toggleFullscreen() {
+    const target = playerRef.current
+    if (!target) return
     try {
-      if (playerRef.current?.requestFullscreen) {
-        await playerRef.current.requestFullscreen()
-      } else if (videoRef.current?.requestFullscreen) {
-        await videoRef.current.requestFullscreen()
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+      } else if (target.requestFullscreen) {
+        await target.requestFullscreen()
       }
     } catch (error) {
-      console.error('[v0] Introductievideo op volledig scherm openen mislukt:', error)
+      console.error('[v0] Introductievideo volledig scherm wisselen mislukt:', error)
     }
   }
 
@@ -126,6 +149,7 @@ export default function PlatformIntroModal({ accountKey, isNewAccount, firstVide
             src="/platform-intro-subtitles.mp4"
             aria-label="Introductievideo met ondertitels"
             autoPlay
+            muted
             playsInline
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
@@ -138,38 +162,47 @@ export default function PlatformIntroModal({ accountKey, isNewAccount, firstVide
             className="absolute inset-0 size-full object-contain"
           />
 
-          <div className="absolute inset-x-3 bottom-3 z-10 overflow-hidden rounded-2xl border border-border/40 bg-background/85 text-foreground shadow-lg backdrop-blur-md sm:inset-x-4 sm:bottom-4">
+          <div
+            role="progressbar"
+            aria-label="Voortgang van de introductievideo"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress)}
+            className="absolute inset-x-0 bottom-0 z-10 h-1 bg-background/25"
+          >
             <div
-              role="progressbar"
-              aria-label="Voortgang van de introductievideo"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(progress)}
-              className="h-1.5 w-full bg-secondary"
+              className="h-full w-full origin-left bg-primary will-change-transform"
+              style={{ transform: `scaleX(${progress / 100})` }}
+            />
+          </div>
+
+          <div className="absolute bottom-3 right-3 z-10 flex items-center gap-0.5 rounded-full bg-background/70 p-1 text-foreground shadow-sm backdrop-blur-md sm:bottom-4 sm:right-4">
+            <button
+              type="button"
+              onClick={togglePlayback}
+              aria-label={isPlaying ? 'Introductievideo pauzeren' : 'Introductievideo afspelen'}
+              className="flex size-8 items-center justify-center rounded-full transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
-              <div
-                className="h-full w-full origin-left bg-primary will-change-transform"
-                style={{ transform: `scaleX(${progress / 100})` }}
-              />
-            </div>
-            <div className="flex items-center justify-between p-1.5">
-              <button
-                type="button"
-                onClick={togglePlayback}
-                aria-label={isPlaying ? 'Introductievideo pauzeren' : 'Introductievideo afspelen'}
-                className="flex size-10 items-center justify-center rounded-full transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-              >
-                {isPlaying ? <Pause className="size-5 fill-current" aria-hidden="true" /> : <Play className="ml-0.5 size-5 fill-current" aria-hidden="true" />}
-              </button>
-              <button
-                type="button"
-                onClick={openFullscreen}
-                aria-label="Introductievideo op volledig scherm bekijken"
-                className="flex size-10 items-center justify-center rounded-full transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-              >
-                <Maximize2 className="size-5" aria-hidden="true" />
-              </button>
-            </div>
+              {isPlaying ? <Pause className="size-4 fill-current" aria-hidden="true" /> : <Play className="ml-0.5 size-4 fill-current" aria-hidden="true" />}
+            </button>
+            <button
+              type="button"
+              onClick={toggleMute}
+              aria-label={isMuted ? 'Geluid aanzetten' : 'Geluid uitzetten'}
+              aria-pressed={!isMuted}
+              className="flex size-8 items-center justify-center rounded-full transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              {isMuted ? <VolumeX className="size-4" aria-hidden="true" /> : <Volume2 className="size-4" aria-hidden="true" />}
+            </button>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              aria-label={isFullscreen ? 'Volledig scherm sluiten' : 'Introductievideo op volledig scherm bekijken'}
+              aria-pressed={isFullscreen}
+              className="flex size-8 items-center justify-center rounded-full transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              {isFullscreen ? <Minimize2 className="size-4" aria-hidden="true" /> : <Maximize2 className="size-4" aria-hidden="true" />}
+            </button>
           </div>
         </div>
       </div>
