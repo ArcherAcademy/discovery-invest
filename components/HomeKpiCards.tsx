@@ -20,27 +20,27 @@ async function fetchMasterclassEdition(url: string): Promise<MasterclassEditionR
 }
 
 function ProgressRing({ percentage }: { percentage: number }) {
-  const size = 34
-  const radius = (size - 6) / 2
+  const size = 28
+  const radius = (size - 5) / 2
   const circumference = 2 * Math.PI * radius
   const completed = (percentage / 100) * circumference
 
   return (
     <div className="relative shrink-0" aria-hidden="true">
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius} className="fill-none stroke-border" strokeWidth={4} />
+        <circle cx={size / 2} cy={size / 2} r={radius} className="fill-none stroke-border" strokeWidth={3} />
         <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
           className="fill-none stroke-primary"
-          strokeWidth={4}
+          strokeWidth={3}
           strokeDasharray={`${completed} ${circumference - completed}`}
           strokeLinecap="round"
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-primary">
-        {percentage}%
+      <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-primary">
+        {percentage}
       </span>
     </div>
   )
@@ -62,39 +62,46 @@ export function HomeKpiCards() {
   const accessDetail = hasLimitedAccess ? 'tot je toegang sluit' : 'voor jouw account'
 
   return (
-    <section aria-label="Trajectstatus" className="flex flex-col gap-2">
-      <article className="flex min-w-0 items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2.5 text-card-foreground">
-        <ProgressRing percentage={progressPercentage} />
-        <div className="min-w-0">
-          <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Voortgang</p>
-          <p className="text-sm font-bold leading-tight">{progressPercentage}%</p>
-        </div>
-      </article>
+    <section aria-label="Trajectstatus" className="overflow-hidden rounded-xl border border-border bg-card text-card-foreground">
+      <h2 className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        Jouw traject
+      </h2>
 
-      <article className="flex min-w-0 items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2.5 text-card-foreground">
-        <Clock className="size-4 shrink-0 text-primary" aria-hidden="true" />
-        <div className="min-w-0">
-          <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Toegang</p>
-          <p className="truncate text-sm font-bold leading-tight">{accessValue}</p>
-          <p className="truncate text-[10px] text-muted-foreground">{accessDetail}</p>
-        </div>
-      </article>
+      <div className="divide-y divide-border">
+        <article className="flex min-w-0 items-center gap-2.5 px-3 py-2">
+          <ProgressRing percentage={progressPercentage} />
+          <div className="flex min-w-0 flex-1 items-baseline justify-between gap-2">
+            <p className="truncate text-xs text-muted-foreground">Voortgang</p>
+            <p className="shrink-0 text-xs font-bold">{progressPercentage}%</p>
+          </div>
+        </article>
 
-      <Link
-        href="/masterclass"
-        className="flex min-w-0 items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2.5 text-card-foreground transition-colors hover:border-primary/35 hover:bg-primary/[0.03] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-      >
-        <CalendarDays className="size-4 shrink-0 text-primary" aria-hidden="true" />
-        <div className="min-w-0">
-          <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Volgende editie</p>
-          <p className="truncate text-sm font-bold leading-tight">
-            {nextEdition ? `${nextEdition.filledPercentage}% vol` : 'Wordt geladen'}
-          </p>
-          <p className="truncate text-[10px] text-muted-foreground">
-            {nextEdition?.title ?? 'Actuele editie ophalen'}
-          </p>
-        </div>
-      </Link>
+        <article className="flex min-w-0 items-center gap-2.5 px-3 py-2">
+          <Clock className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+          <div className="flex min-w-0 flex-1 items-baseline justify-between gap-2">
+            <p className="truncate text-xs text-muted-foreground">Toegang</p>
+            <p className="shrink-0 text-xs font-bold" title={accessDetail}>{accessValue}</p>
+          </div>
+        </article>
+
+        <Link
+          href="/masterclass"
+          className="flex min-w-0 items-center gap-2.5 px-3 py-2 transition-colors hover:bg-primary/[0.04] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
+        >
+          <CalendarDays className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="truncate text-xs text-muted-foreground">Volgende editie</p>
+              <p className="shrink-0 text-xs font-bold">
+                {nextEdition ? `${nextEdition.filledPercentage}% vol` : 'Laden'}
+              </p>
+            </div>
+            <p className="truncate text-[10px] leading-4 text-muted-foreground">
+              {nextEdition?.title ?? 'Actuele editie ophalen'}
+            </p>
+          </div>
+        </Link>
+      </div>
     </section>
   )
 }
