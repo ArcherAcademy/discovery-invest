@@ -252,7 +252,8 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   }
 
   const name = [voornaam, achternaam].filter(Boolean).join(' ') || email.split('@')[0]
-  const leadFlow = pick(body, 'lead_flow') || null
+  const source = pick(body, 'source')
+  const leadFlow = pick(body, 'lead_flow') || (source === 'inflatietest' ? 'inflatietest' : null)
   const geldigeLeadFlows = new Set(['demo', 'vermogenstest', 'inflatietest'])
   if (leadFlow && !geldigeLeadFlows.has(leadFlow)) {
     await logWebhookCall({ supabase, email, payload_json: { ...body, _bron: bron, _origin: origin }, outcome: 'error', reden: `onbekende lead_flow: ${leadFlow}`, activatielink: null, http_status: 400 })
@@ -262,7 +263,6 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   const isInflatietest = leadFlow === 'inflatietest'
   const submissionId = pick(body, 'submission_id')
   const submittedAt = pick(body, 'submitted_at')
-  const source = pick(body, 'source')
   const phone = pick(body, 'phone')
   const assignedAdvisor = pick(body, 'assigned_advisor')
   const answers = body.answers
@@ -367,50 +367,6 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
       : {}),
     _bron: bron,
     _origin: origin,
-  }
-
-  if (isInflatietest) {
-    const { data: previousSubmission, error: submissionLookupError } = await supabase
-      .from('inflatietest_submissions')
-      .select('user_id, submission_id')
-      .eq('submission_id', submissionId)
-      .maybeSingle()
-
-    if (submissionLookupError) {
-      const schemaMissing = submissionLookupError.code === 'PGRST205' || submissionLookupError.code === '42P01'
-      const error = schemaMissing
-        ? 'Inflatietest-opslag is nog niet gemigreerd'
-        : 'Inflatietest-inzending kon niet worden gecontroleerd'
-      console.error('[v0] account-aanmaken: inflatietest-idempotentie mislukt:', submissionLookupError)
-      await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: error, activatielink: null, http_status: 500 })
-      return jsonError(error, 500)
-    }
-
-    if (previousSubmission) {
-      const { data: invite } = await supabase
-        .from('demo_invest_invites')
-        .select('raw_token')
-        .eq('user_id', previousSubmission.user_id)
-        .not('raw_token', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (!invite?.raw_token) return jsonError('Bestaande inzending heeft geen geldige activatielink', 500)
-
-      const activatielink = activationLink(invite.raw_token)
-      await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'reused', reden: null, activatielink, http_status: 200 })
-      return new Response(JSON.stringify({
-        ok: true,
-        outcome: 'reused',
-        activatielink,
-        user_id: previousSubmission.user_id,
-        submission_id: previousSubmission.submission_id,
-      }), {
-        status: 200,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' },
-      })
-    }
   }
 
   // ── 4. Account aanmaken of bestaand bijwerken ─────────────────────────────
@@ -626,30 +582,6 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     console.log(`[v0] account-aanmaken: nieuwe invite aangemaakt voor ${email}`)
   }
 
-  if (isInflatietest) {
-    const { error: submissionError } = await supabase
-      .from('inflatietest_submissions')
-      .insert({
-        user_id: userId,
-        lead_flow: 'inflatietest',
-        source,
-        submission_id: submissionId,
-        submitted_at: new Date(submittedAt).toISOString(),
-        assigned_advisor: assignedAdvisor,
-        answers,
-        result,
-        result_details: resultDetails,
-      })
-
-    if (submissionError?.code === '23505') {
-      outcome = 'reused'
-    } else if (submissionError) {
-      console.error('[v0] account-aanmaken: Inflatietest opslaan mislukt:', submissionError)
-      await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `Inflatietest opslaan: ${submissionError.message}`, activatielink: null, http_status: 500 })
-      return jsonError('Inflatietest-inzending kon niet worden opgeslagen', 500)
-    }
-  }
-
   if (outcome === 'created') {
     const { data: createdUser } = await supabase
       .from('demo_invest_users')
@@ -661,7 +593,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
       await emitEvent({
         type: 'trial.account_created',
         user: createdUser as DemoUser,
-        data: { stage: 'account_created', source: bron },
+        data: { stage: 'account_created', source: source || bron },
       })
     }
   }

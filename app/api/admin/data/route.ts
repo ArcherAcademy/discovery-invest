@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
     { data: quizData },
     { data: followUpDisabledData },
     { data: bookingLinksData },
-    { data: inflatietestData, error: inflatietestError },
+    { data: inflatietestLogsData, error: inflatietestLogsError },
   ] = await Promise.all([
     supabase.from('demo_invest_user_funnel').select('*'),
     supabase.from('demo_invest_webhook_log').select('*').order('created_at', { ascending: false }).limit(200),
@@ -72,13 +72,16 @@ export async function GET(req: NextRequest) {
     supabase.from('demo_invest_trigger_sent').select('user_id').eq('workflow_naam', '__automatische_opvolging_uit__'),
     supabase.from('demo_invest_boekingslinks').select('hubspot_owner_id, naam'),
     supabase
-      .from('inflatietest_submissions')
-      .select('id, user_id, lead_flow, source, submission_id, submitted_at, assigned_advisor, answers, result, result_details, created_at')
-      .order('submitted_at', { ascending: false }),
+      .from('demo_invest_account_webhook_log')
+      .select('id, email, payload_json, outcome, created_at')
+      .contains('payload_json', { source: 'inflatietest' })
+      .in('outcome', ['created', 'reused'])
+      .order('created_at', { ascending: false })
+      .limit(1000),
   ])
 
-  if (inflatietestError && inflatietestError.code !== 'PGRST205') {
-    console.error('[admin/data] Inflatietest-inzendingen ophalen mislukt:', inflatietestError)
+  if (inflatietestLogsError) {
+    console.error('[admin/data] Inflatietest-webhooklogs ophalen mislukt:', inflatietestLogsError)
   }
 
   const usersData = usersResult.rows
@@ -234,6 +237,40 @@ export async function GET(req: NextRequest) {
     }
   })
 
+  const userIdByEmail = new Map(
+    users.map(user => [(user.email ?? '').trim().toLowerCase(), user.id] as const),
+  )
+  const bekendeSubmissionIds = new Set<string>()
+  const inflatietestSubmissions = (inflatietestLogsData ?? []).flatMap(log => {
+    const payload = log.payload_json && typeof log.payload_json === 'object' && !Array.isArray(log.payload_json)
+      ? log.payload_json as Record<string, unknown>
+      : {}
+    const submissionId = payloadValue(payload, 'submission_id')
+    const email = (log.email ?? payloadValue(payload, 'email')).trim().toLowerCase()
+    const userId = userIdByEmail.get(email)
+    const answers = payload.answers
+    const resultDetails = payload.result_details
+
+    if (!submissionId || bekendeSubmissionIds.has(submissionId) || !userId) return []
+    if (!answers || typeof answers !== 'object' || Array.isArray(answers)) return []
+    if (!resultDetails || typeof resultDetails !== 'object' || Array.isArray(resultDetails)) return []
+    bekendeSubmissionIds.add(submissionId)
+
+    return [{
+      id: log.id,
+      user_id: userId,
+      lead_flow: payloadValue(payload, 'lead_flow') || 'inflatietest',
+      source: payloadValue(payload, 'source') || 'inflatietest',
+      submission_id: submissionId,
+      submitted_at: payloadValue(payload, 'submitted_at') || log.created_at,
+      assigned_advisor: payloadValue(payload, 'assigned_advisor'),
+      answers,
+      result: payloadValue(payload, 'result'),
+      result_details: resultDetails,
+      created_at: log.created_at,
+    }]
+  })
+
   return NextResponse.json({
     users,
     accountTotal: usersResult.count,
@@ -243,7 +280,7 @@ export async function GET(req: NextRequest) {
     webhookConfig: configData ?? [],
     accountLogs: accountLogsData ?? [],
     quizSubmissions: quizData ?? [],
-    inflatietestSubmissions: inflatietestData ?? [],
+    inflatietestSubmissions,
     bookingOwners: ownerNames,
   })
 }
