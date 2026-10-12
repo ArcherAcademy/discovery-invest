@@ -148,9 +148,18 @@ export async function GET(req: NextRequest) {
     return ''
   }
 
+  const toInstroom = (flow: string | null | undefined): Exclude<Instroom, 'onbekend'> | null => {
+  const value = (flow ?? '').trim().toLowerCase()
+  if (value === 'inflatietest' || value === 'inflatie-test') return 'inflatietest'
+  if (value === 'vermogenstest' || value === 'vermogens-test') return 'vermogenstest'
+  if (value === 'demo' || value === 'discovery') return 'discovery'
+  return null
+  }
+
   const classifyInstroom = (payload: Record<string, unknown>): Exclude<Instroom, 'onbekend'> | null => {
-    const signal = [
-      payloadValue(payload, 'page_uri'),
+  const signal = [
+  payloadValue(payload, 'lead_flow'),
+  payloadValue(payload, 'page_uri'),
       payloadValue(payload, 'source', 'hs_lead_source', 'hs_source_form_submission'),
     ].join(' ').toLowerCase()
 
@@ -314,13 +323,13 @@ export async function GET(req: NextRequest) {
       hubspot_owner_id: ownerId,
       phone: livePhoneByEmail.get(email) ?? user.phone ?? phoneFromSubmissionByEmail.get(email) ?? null,
       opvolging_actief: !followUpDisabledUserIds.has(user.id),
-      instroom: latestSubmission
-        ? (latestSubmission.lead_flow === 'demo' ? 'discovery' : latestSubmission.lead_flow as Instroom)
-        : ((user.lead_flow ?? tracking?.lead_flow) === 'inflatietest'
-          ? 'inflatietest'
-          : (user.lead_flow ?? tracking?.lead_flow) === 'vermogenstest'
-            ? 'vermogenstest'
-            : instroomByEmail.get(email) ?? 'onbekend'),
+      // Een onherkenbare lead_flow (bv. "onbekend" of "evergreen") mag een
+      // expliciet inflatietest-, vermogenstest- of discoverysignaal niet overschrijven.
+      instroom: toInstroom(latestSubmission?.lead_flow)
+        ?? toInstroom(user.lead_flow)
+        ?? toInstroom(tracking?.lead_flow)
+        ?? instroomByEmail.get(email)
+        ?? 'onbekend',
     }
   })
 
