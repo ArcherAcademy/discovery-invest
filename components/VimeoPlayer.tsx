@@ -117,6 +117,9 @@ export default function VimeoPlayer({
   const heartbeatRef = useRef<(() => Promise<void>) | null>(null)
   const heartbeatFailuresRef = useRef(0)
   const maxWatchedTimeRef = useRef(0)
+  // Video 6: al stil opgeslagen bij 90%, de afsluitende UI wacht nog op het echte einde.
+  const pendingCompletionUiRef = useRef(false)
+  const endedRef = useRef(false)
   const onAutoNextRef = useRef(onAutoNext)
   useEffect(() => { onAutoNextRef.current = onAutoNext }, [onAutoNext])
 
@@ -143,6 +146,8 @@ export default function VimeoPlayer({
   // Reset all state when video changes
   useEffect(() => {
     marked.current = completed
+    pendingCompletionUiRef.current = false
+    endedRef.current = false
     startedTrackedRef.current = false
     lastTrackedProgressRef.current = Math.floor(initialProgressPct / 10) * 10
     progressRequestRef.current = Promise.resolve()
@@ -217,8 +222,32 @@ export default function VimeoPlayer({
   }, [videoDbId])
 
   // ── doComplete — called at 90%, by 'ended' and by the manual fallback ─────
-  const doComplete = useCallback(async (source: 'threshold' | 'ended' | 'manual') => {
+  const doComplete = useCallback(async (source: 'threshold' | 'ended' | 'manual' | 'silent') => {
+    if (source === 'silent') {
+      // Laatste kernvideo bij 90%: sla de voltooiing op zodat wie de laatste seconden
+      // overslaat of het tabblad sluit toch op 6/6 komt. De editiekeuze blijft wachten op 'ended'.
+      if (marked.current) return
+      marked.current = true
+      try {
+        await postWithRetry('/api/video-complete', { videoId: videoDbId })
+        if (endedRef.current) {
+          onCompleted?.()
+          onUnlockNext?.()
+        } else {
+          pendingCompletionUiRef.current = true
+        }
+      } catch (error) {
+        console.error('[v0] stille voltooiing video 6 mislukt, einde probeert opnieuw:', error)
+        marked.current = false
+      }
+      return
+    }
     if (marked.current) {
+      if (source === 'ended' && pendingCompletionUiRef.current) {
+        pendingCompletionUiRef.current = false
+        onCompleted?.()
+        onUnlockNext?.()
+      }
       if (source === 'ended' && isLastVideo) onAutoNextRef.current?.()
       if (source === 'ended' && !isLastVideo && onAutoNextRef.current) startCountdown(5)
       return
@@ -298,9 +327,10 @@ export default function VimeoPlayer({
       if (!Number.isFinite(percent) || percent < 0) return
       if (percent > 0) registerStarted()
 
-      // De laatste kernvideo telt pas wanneer Vimeo daadwerkelijk het einde meldt.
-      if (percent >= 0.9 && !requireEndedForCompletion) {
-        void doComplete('threshold')
+      // Elke video telt vanaf 90%. Bij de laatste kernvideo gebeurt dat stil;
+      // de editiekeuze verschijnt pas wanneer Vimeo daadwerkelijk het einde meldt.
+      if (percent >= 0.9) {
+        void doComplete(requireEndedForCompletion ? 'silent' : 'threshold')
         return
       }
       if (marked.current) return
@@ -388,6 +418,7 @@ export default function VimeoPlayer({
     const handleEnded = () => {
       setIsPlaying(false)
       setEnded(true)
+      endedRef.current = true
       void doComplete('ended')
     }
 
