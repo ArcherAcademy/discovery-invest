@@ -16,6 +16,37 @@ import type { DemoUser, DemoUserFunnel, DemoWebhookLog, DemoTriggerLog, DemoWebh
 import { QUIZ_QUESTIONS } from '@/lib/quiz-data'
 import { hasPermanentAccess, isTrialExpired, trialDaysRemaining } from '@/lib/access'
 
+interface LeadSubmission {
+  id: string
+  user_id: string
+  submission_id: string
+  lead_flow: string
+  source: string
+  variant: 'A' | 'B' | null
+  vragenset: 'oude_vragen' | 'nieuwe_vragen' | null
+  assigned_advisor: string | null
+  answers_labeled: Array<{
+    question_id: string
+    question: string
+    answer: string
+    value: unknown
+  }>
+  answers_raw: unknown[] | Record<string, unknown>
+  result: string | null
+  result_details: {
+    verdict?: { word?: string }
+    nominalReturn?: number
+    realReturn?: number
+    years?: number
+    segment?: string
+  }
+  score: number | null
+  utm_source: string | null
+  utm_campaign: string | null
+  submitted_at: string
+  created_at: string
+}
+
 interface AdminUser extends DemoUser {
   funnel?: DemoUserFunnel
   /** Numerieke HubSpot owner-ID — wordt via bookingOwners naar een naam vertaald. */
@@ -23,7 +54,7 @@ interface AdminUser extends DemoUser {
   /** Actueel telefoonnummer uit HubSpot; mobiel krijgt voorrang. */
   phone?: string | null
   /** Herkomst van het account, server-side bepaald uit de eerste bekende instroom. */
-  instroom?: 'vermogenstest' | 'discovery' | 'onbekend'
+  instroom?: 'inflatietest' | 'vermogenstest' | 'discovery' | 'onbekend'
   // Live afgeleide call-status en opvolgvlag — server-side samengevoegd in /api/admin/data.
   call_clicked_at?: string | null
   call_opened_at?: string | null
@@ -37,6 +68,18 @@ type HistoryChannel = 'hubspot' | 'form' | 'funnel'
 type Tab = 'overview' | 'accounts' | 'users' | 'mentors' | 'webhooks' | 'workflows' | 'history' | 'account_logs' | 'voortgang'
 
 const ACCOUNTS_PER_PAGE = 50
+const INFLATIETEST_BLOCK_LABELS: Record<string, string> = {
+  cash: 'Spaarrekening & zichtrekening',
+  oblig: 'Termijnrekening, staatsbon, obligaties',
+  pensioen: 'Pensioensparen & groepsverzekering',
+  fonds: 'Fondsen via je bank',
+  vastgoed: 'Vastgoed dat je verhuurt',
+  etf: "ETF's of zelfgekozen aandelen",
+  crypto: 'Crypto',
+}
+function formatEuro(value: number): string {
+  return new Intl.NumberFormat('nl-BE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value)
+}
 
 function getVisibleAccountPages(currentPage: number, pageCount: number): Array<number | 'ellipsis-start' | 'ellipsis-end'> {
   if (pageCount <= 7) return Array.from({ length: pageCount }, (_, index) => index + 1)
@@ -66,11 +109,12 @@ export default function AdminPage() {
   const [triggerLog, setTriggerLog] = useState<DemoTriggerLog[]>([])
   const [webhookConfig, setWebhookConfig] = useState<DemoWebhookConfig[]>([])
   const [accountsFilter, setAccountsFilter] = useState<{ query: string; status: '' | AccountStatus }>({ query: '', status: '' })
-  const [instroomFilter, setInstroomFilter] = useState<'' | 'vermogenstest' | 'discovery' | 'onbekend'>('')
+  const [instroomFilter, setInstroomFilter] = useState<'' | 'inflatietest' | 'vermogenstest' | 'discovery' | 'onbekend'>('')
   const [accountManagerFilter, setAccountManagerFilter] = useState<string>('')
   const [accountLogs, setAccountLogs] = useState<AccountWebhookLog[]>([])
   const [accountLogsFilter, setAccountLogsFilter] = useState<{ email: string; outcome: '' | 'created' | 'reused' | 'error' }>({ email: '', outcome: '' })
   const [quizSubmissions, setQuizSubmissions] = useState<DemoQuizSubmission[]>([])
+  const [leadSubmissions, setLeadSubmissions] = useState<LeadSubmission[]>([])
   const [bookingOwners, setBookingOwners] = useState<Record<string, string>>({})
   const [copiedLink, setCopiedLink] = useState<string | null>(null)
   const [expandedUser, setExpandedUser] = useState<string | null>(null)
@@ -278,6 +322,7 @@ export default function AdminPage() {
       if (d.webhookConfig) setWebhookConfig(d.webhookConfig as DemoWebhookConfig[])
       if (d.accountLogs) setAccountLogs(d.accountLogs as AccountWebhookLog[])
       if (d.quizSubmissions) setQuizSubmissions(d.quizSubmissions as DemoQuizSubmission[])
+      if (d.leadSubmissions) setLeadSubmissions(d.leadSubmissions as LeadSubmission[])
       if (d.bookingOwners) setBookingOwners(d.bookingOwners as Record<string, string>)
     }
     load()
@@ -367,7 +412,10 @@ export default function AdminPage() {
   //   - "website" / "HubSpot": _bron uit de account-aanmaken webhook-log, gematcht op e-mail
   const userTags = (u: DemoUser): string[] => {
     const tags: string[] = []
-    if (quizSubmissions.some(q => q.user_id === u.id)) tags.push('vermogenstest')
+    const submissionFlows = new Set(leadSubmissions.filter(submission => submission.user_id === u.id).map(submission => submission.lead_flow))
+    if (submissionFlows.has('inflatietest')) tags.push('inflatietest')
+    if (submissionFlows.has('vermogenstest') || quizSubmissions.some(q => q.user_id === u.id)) tags.push('vermogenstest')
+    if (submissionFlows.has('demo')) tags.push('discovery')
     const email = (u.email ?? '').toLowerCase()
     if (email) {
       const log = accountLogs.find(l => (l.email ?? '').toLowerCase() === email)
@@ -873,16 +921,17 @@ export default function AdminPage() {
               <select
                 value={instroomFilter}
                 onChange={e => {
-                  setInstroomFilter(e.target.value as '' | 'vermogenstest' | 'discovery' | 'onbekend')
+                  setInstroomFilter(e.target.value as '' | 'inflatietest' | 'vermogenstest' | 'discovery' | 'onbekend')
                   setAccountPage(1)
                 }}
                 className="rounded-xl px-3 py-2 text-xs border outline-none"
                 style={{ background: '#fff', borderColor: instroomFilter ? '#2500F5' : '#e8ecf4', color: instroomFilter ? '#2500F5' : 'rgba(13,15,20,0.55)' }}
-                aria-label="Filter op instroom"
+                aria-label="Filter op bron"
               >
-                <option value="">Alle instroom ({scopedUsers.length})</option>
+                <option value="">Alle bronnen ({scopedUsers.length})</option>
+                <option value="inflatietest">Inflatietest ({scopedUsers.filter(u => u.instroom === 'inflatietest').length})</option>
                 <option value="vermogenstest">Vermogenstest ({vermogenstestCount})</option>
-                <option value="discovery">Discovery ({discoveryCount})</option>
+                <option value="discovery">Discovery-aanvraag ({discoveryCount})</option>
                 <option value="onbekend">Onbekend ({onbekendCount})</option>
               </select>
               <select
@@ -973,7 +1022,7 @@ export default function AdminPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e8ecf4', background: '#F5F8FF' }}>
-                      {['Naam', 'E-mail', 'Telefoon', 'Instroom', 'Vragenset', 'Lead owner', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
+                      {['Naam', 'E-mail', 'Telefoon', 'Bron', 'Vragenset', 'Lead owner', 'Status', 'Aangemaakt', 'Geactiveerd', 'Trial resterend', "Video's", 'Event', 'Adviescall', 'Opvolging', 'Verleng trial', ''].map(h => (
                         <th key={h} className="px-4 py-3 text-left font-semibold" style={{ color: 'rgba(13,15,20,0.45)' }}>{h}</th>
                       ))}
                     </tr>
@@ -991,7 +1040,17 @@ export default function AdminPage() {
                         <tr key={u.id} style={{ borderBottom: '1px solid #f0f3fb' }} className="hover:bg-[#F5F8FF] transition-colors">
                           {/* Naam */}
                           <td className="px-4 py-3 font-medium whitespace-nowrap" style={{ color: '#0d0f14' }}>
-                            {u.name || <span style={{ color: 'rgba(13,15,20,0.3)' }}>—</span>}
+                            <button
+                              type="button"
+                              className="text-left font-semibold hover:underline"
+                              onClick={() => {
+                                setFilterEmail(u.email ?? '')
+                                setExpandedUser(u.id)
+                                setTab('users')
+                              }}
+                            >
+                              {u.name || u.email || 'Naamloos account'}
+                            </button>
                           </td>
 
   {/* E-mail */}
@@ -1015,7 +1074,13 @@ export default function AdminPage() {
                                     ? { background: 'rgba(37,0,245,0.1)', color: '#2500F5' }
                                     : { background: '#f0f3fb', color: 'rgba(13,15,20,0.55)' }}
                                 >
-                                  {instroom === 'vermogenstest' ? 'Vermogenstest' : instroom === 'discovery' ? 'Discovery' : 'Onbekend'}
+                                  {instroom === 'inflatietest'
+                                    ? 'Inflatietest'
+                                    : instroom === 'vermogenstest'
+                                      ? `Vermogenstest${u.vermogenstest_variant ? ` ${u.vermogenstest_variant}` : ''}`
+                                      : instroom === 'discovery'
+                                        ? 'Discovery-aanvraag'
+                                        : 'Onbekend'}
                                 </span>
                               )
                             })()}
@@ -1294,6 +1359,7 @@ export default function AdminPage() {
                     const isExpanded = expandedUser === u.id
                     const logs = userLogs(u.id)
                     const quizSub = quizSubmissions.find(q => q.user_id === u.id)
+                    const submissions = leadSubmissions.filter(submission => submission.user_id === u.id)
 
                     return (
                       <>
@@ -1401,6 +1467,29 @@ export default function AdminPage() {
                                 className="rounded-xl p-4 space-y-2"
                                 style={{ background: '#F5F8FF', border: '1px solid #e8ecf4' }}
                               >
+                                <header className="flex flex-wrap items-start justify-between gap-3 pb-3" style={{ borderBottom: '1px solid #e8ecf4' }}>
+                                  <div>
+                                    <h3 className="text-base font-bold" style={{ color: '#0d0f14' }}>{u.name || u.email}</h3>
+                                    <p className="text-xs" style={{ color: 'rgba(13,15,20,0.55)' }}>{u.email}{u.phone ? ` · ${u.phone}` : ''}</p>
+                                  </div>
+                                  {submissions[0] && (
+                                    <div className="text-right">
+                                      <span className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold" style={{ background: 'rgba(37,0,245,0.1)', color: '#2500F5' }}>
+                                        {submissions[0].lead_flow === 'vermogenstest'
+                                          ? `Vermogenstest${submissions[0].variant ? ` ${submissions[0].variant}` : ''}`
+                                          : submissions[0].lead_flow === 'inflatietest'
+                                            ? 'Inflatietest'
+                                            : submissions[0].lead_flow === 'demo'
+                                              ? 'Discovery-aanvraag'
+                                              : 'Onbekend'}
+                                      </span>
+                                      <p className="mt-1 text-[10px]" style={{ color: 'rgba(13,15,20,0.45)' }}>
+                                        {formatDateTime(submissions[0].submitted_at)}{submissions[0].assigned_advisor ? ` · ${submissions[0].assigned_advisor}` : ''}
+                                      </p>
+                                    </div>
+                                  )}
+                                </header>
+
                                 {/* Toegang: verlengen of heractiveren */}
                                 <div className="flex flex-wrap items-center gap-2 pb-3 mb-3" style={{ borderBottom: '1px solid #e8ecf4' }}>
                                   <span className="text-xs font-semibold" style={{ color: 'rgba(13,15,20,0.55)' }}>Toegang</span>
@@ -1441,6 +1530,84 @@ export default function AdminPage() {
                                     </>
                                   )}
                                 </div>
+
+                                {submissions.length > 0 && (
+                                  <section className="grid gap-3 border-t pt-4" style={{ borderColor: '#e8ecf4' }} aria-label="Leadinzendingen">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <h3 className="text-sm font-bold" style={{ color: '#0d0f14' }}>Inzendingen</h3>
+                                      <span className="rounded-full px-2 py-1 text-[10px] font-semibold" style={{ background: 'rgba(37,0,245,0.1)', color: '#2500F5' }}>
+                                        {submissions.length} {submissions.length === 1 ? 'inzending' : 'inzendingen'}
+                                      </span>
+                                    </div>
+                                    {submissions.map(submission => {
+                                      const raw = !Array.isArray(submission.answers_raw) ? submission.answers_raw : {}
+                                      const blocks = raw.blocks && typeof raw.blocks === 'object' && !Array.isArray(raw.blocks)
+                                        ? raw.blocks as Record<string, unknown>
+                                        : null
+                                      const assets = Number(raw.assets ?? 0)
+                                      const details = submission.result_details
+                                      const nominalReturn = Number(details.nominalReturn)
+                                      const realReturn = Number(details.realReturn)
+                                      const flowLabel = submission.lead_flow === 'vermogenstest'
+                                        ? `Vermogenstest${submission.variant ? ` ${submission.variant}` : ''}`
+                                        : submission.lead_flow === 'inflatietest'
+                                          ? 'Inflatietest'
+                                          : submission.lead_flow === 'demo'
+                                            ? 'Discovery-aanvraag'
+                                            : 'Onbekend'
+
+                                      return (
+                                        <article key={submission.id} className="grid gap-4 rounded-xl border p-4" style={{ background: '#ffffff', borderColor: '#e8ecf4' }}>
+                                          <div className="flex flex-wrap items-start justify-between gap-3">
+                                            <div>
+                                              <p className="text-sm font-bold" style={{ color: '#2500F5' }}>{flowLabel}</p>
+                                              <p className="text-[11px]" style={{ color: 'rgba(13,15,20,0.45)' }}>
+                                                {formatDateTime(submission.submitted_at)}{submission.assigned_advisor ? ` · ${submission.assigned_advisor}` : ''}
+                                              </p>
+                                            </div>
+                                            <code className="break-all text-[10px]" style={{ color: 'rgba(13,15,20,0.45)' }}>{submission.submission_id}</code>
+                                          </div>
+
+                                          <dl className="grid gap-3">
+                                            {submission.answers_labeled.map((answer, index) => (
+                                              <div key={`${answer.question_id}-${index}`} className="rounded-lg px-3 py-2" style={{ background: '#F5F8FF' }}>
+                                                <dt className="text-xs" style={{ color: 'rgba(13,15,20,0.45)' }}>{answer.question}</dt>
+                                                <dd className="text-sm font-bold" style={{ color: '#0d0f14' }}>{answer.answer || String(answer.value ?? '—')}</dd>
+                                              </div>
+                                            ))}
+                                          </dl>
+
+                                          {(submission.score !== null || submission.result || Number.isFinite(nominalReturn) || Number.isFinite(realReturn)) && (
+                                            <div className="grid gap-2 rounded-lg border p-3" style={{ borderColor: '#e8ecf4' }}>
+                                              <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'rgba(13,15,20,0.4)' }}>Resultaat</p>
+                                              {submission.score !== null && <p className="text-sm font-bold" style={{ color: '#2500F5' }}>Score: {submission.score}</p>}
+                                              {submission.result && <p className="text-sm font-bold" style={{ color: '#0d0f14' }}>{details.verdict?.word ?? submission.result}</p>}
+                                              {Number.isFinite(nominalReturn) && <p className="text-xs" style={{ color: 'rgba(13,15,20,0.65)' }}>Rendement: <strong>{nominalReturn.toLocaleString('nl-BE')}%</strong></p>}
+                                              {Number.isFinite(realReturn) && <p className="text-xs" style={{ color: 'rgba(13,15,20,0.65)' }}>Na inflatie: <strong>{realReturn.toLocaleString('nl-BE')}%</strong></p>}
+                                            </div>
+                                          )}
+
+                                          {submission.lead_flow === 'inflatietest' && blocks && (
+                                            <div className="grid gap-2">
+                                              <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'rgba(13,15,20,0.4)' }}>Verdeling</p>
+                                              <ul className="grid gap-1.5">
+                                                {Object.entries(blocks).filter(([, value]) => Number(value) > 0).map(([key, value]) => {
+                                                  const blockCount = Number(value)
+                                                  return (
+                                                    <li key={key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs" style={{ background: '#F5F8FF', color: '#0d0f14' }}>
+                                                      <span>{INFLATIETEST_BLOCK_LABELS[key] ?? key}</span>
+                                                      <span className="font-semibold">{blockCount} {blockCount === 1 ? 'blokje' : 'blokjes'} · {formatEuro(assets * blockCount / 10)} · {blockCount * 10}%</span>
+                                                    </li>
+                                                  )
+                                                })}
+                                              </ul>
+                                            </div>
+                                          )}
+                                        </article>
+                                      )
+                                    })}
+                                  </section>
+                                )}
 
                                 <p className="text-xs font-semibold mb-3" style={{ color: 'rgba(13,15,20,0.55)' }}>
                                   Timeline ({logs.length} events)

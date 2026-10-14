@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Player from '@vimeo/player'
-import { CheckCircle2, ExternalLink, FileText, Maximize2, Pause, Play, RefreshCw, SkipForward, Trophy, X } from 'lucide-react'
+import { CheckCircle2, ExternalLink, FileText, Maximize2, Minimize2, Pause, Play, RefreshCw, SkipForward, Trophy, Volume2, VolumeX, X } from 'lucide-react'
 
 function parseVimeoId(src: string): number | null {
   const m = src.match(/(?:vimeo\.com\/|video\/)(\d+)/)
@@ -19,6 +19,13 @@ const MAX_REQUEST_ATTEMPTS = 3
 
 function wait(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function formatVideoTime(seconds: number) {
+  const safeSeconds = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0
+  const minutes = Math.floor(safeSeconds / 60)
+  const remainingSeconds = safeSeconds % 60
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
 }
 
 function getPlayerErrorMessage(error: unknown) {
@@ -109,12 +116,19 @@ export default function VimeoPlayer({
   const countdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const heartbeatRef = useRef<(() => Promise<void>) | null>(null)
   const heartbeatFailuresRef = useRef(0)
+  const maxWatchedTimeRef = useRef(0)
+  // Video 6: al stil opgeslagen bij 90%, de afsluitende UI wacht nog op het echte einde.
+  const pendingCompletionUiRef = useRef(false)
+  const endedRef = useRef(false)
   const onAutoNextRef = useRef(onAutoNext)
   useEffect(() => { onAutoNextRef.current = onAutoNext }, [onAutoNext])
 
   const [ended, setEnded] = useState(false)
   const [hasStarted, setHasStarted] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [maxWatchedTime, setMaxWatchedTime] = useState(0)
   const [playerReady, setPlayerReady] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [cancelled, setCancelled] = useState(false)
@@ -123,6 +137,8 @@ export default function VimeoPlayer({
   const [retrying, setRetrying] = useState(false)
   const [playerRetryKey, setPlayerRetryKey] = useState(0)
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(fallbackThumbnailUrl)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
 
   const vimeoId = parseVimeoId(src)
   const vimeoUrl = (src.startsWith('https://') ? src : `https://vimeo.com/${vimeoId}`) as VimeoUrl
@@ -130,6 +146,8 @@ export default function VimeoPlayer({
   // Reset all state when video changes
   useEffect(() => {
     marked.current = completed
+    pendingCompletionUiRef.current = false
+    endedRef.current = false
     startedTrackedRef.current = false
     lastTrackedProgressRef.current = Math.floor(initialProgressPct / 10) * 10
     progressRequestRef.current = Promise.resolve()
@@ -137,6 +155,10 @@ export default function VimeoPlayer({
     setEnded(false)
     setHasStarted(false)
     setIsPlaying(false)
+    maxWatchedTimeRef.current = 0
+    setCurrentTime(0)
+    setDuration(0)
+    setMaxWatchedTime(0)
     setPlayerReady(false)
     setCountdown(null)
     setCancelled(false)
@@ -150,6 +172,12 @@ export default function VimeoPlayer({
   useEffect(() => {
     if (completed) marked.current = true
   }, [completed])
+
+  useEffect(() => {
+    const syncFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement))
+    document.addEventListener('fullscreenchange', syncFullscreen)
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen)
+  }, [])
 
   // ── Countdown logic — fully imperative, immune to React batching races ────
   // Declared BEFORE doComplete because doComplete's deps array references it.
@@ -194,8 +222,32 @@ export default function VimeoPlayer({
   }, [videoDbId])
 
   // ── doComplete — called at 90%, by 'ended' and by the manual fallback ─────
-  const doComplete = useCallback(async (source: 'threshold' | 'ended' | 'manual') => {
+  const doComplete = useCallback(async (source: 'threshold' | 'ended' | 'manual' | 'silent') => {
+    if (source === 'silent') {
+      // Laatste kernvideo bij 90%: sla de voltooiing op zodat wie de laatste seconden
+      // overslaat of het tabblad sluit toch op 6/6 komt. De editiekeuze blijft wachten op 'ended'.
+      if (marked.current) return
+      marked.current = true
+      try {
+        await postWithRetry('/api/video-complete', { videoId: videoDbId })
+        if (endedRef.current) {
+          onCompleted?.()
+          onUnlockNext?.()
+        } else {
+          pendingCompletionUiRef.current = true
+        }
+      } catch (error) {
+        console.error('[v0] stille voltooiing video 6 mislukt, einde probeert opnieuw:', error)
+        marked.current = false
+      }
+      return
+    }
     if (marked.current) {
+      if (source === 'ended' && pendingCompletionUiRef.current) {
+        pendingCompletionUiRef.current = false
+        onCompleted?.()
+        onUnlockNext?.()
+      }
       if (source === 'ended' && isLastVideo) onAutoNextRef.current?.()
       if (source === 'ended' && !isLastVideo && onAutoNextRef.current) startCountdown(5)
       return
@@ -203,15 +255,19 @@ export default function VimeoPlayer({
     marked.current = true
     setRetrying(source === 'manual')
 
+    // Bij video 6 verschijnt de editiekeuze meteen zodra Vimeo het echte einde meldt.
+    // De opslag en externe synchronisaties mogen die gebruikersfeedback niet vertragen.
+    if (source === 'ended' && isLastVideo) onAutoNextRef.current?.()
+
     try {
       await postWithRetry('/api/video-complete', { videoId: videoDbId })
       setErrorMsg(null)
       setTrackingError(null)
       onCompleted?.()
       onUnlockNext?.()
-      if (isLastVideo) {
+      if (isLastVideo && source !== 'ended') {
         onAutoNextRef.current?.()
-      } else if (source === 'ended' && onAutoNextRef.current) {
+      } else if (!isLastVideo && source === 'ended' && onAutoNextRef.current) {
         startCountdown(5)
       }
     } catch (error) {
@@ -261,13 +317,20 @@ export default function VimeoPlayer({
       trackProgress('started')
     }
 
+    const registerWatchedTime = (seconds: number) => {
+      if (!Number.isFinite(seconds) || seconds <= maxWatchedTimeRef.current) return
+      maxWatchedTimeRef.current = seconds
+      setMaxWatchedTime(seconds)
+    }
+
     const registerPercent = (percent: number) => {
       if (!Number.isFinite(percent) || percent < 0) return
       if (percent > 0) registerStarted()
 
-      // De laatste kernvideo telt pas wanneer Vimeo daadwerkelijk het einde meldt.
-      if (percent >= 0.9 && !requireEndedForCompletion) {
-        void doComplete('threshold')
+      // Elke video telt vanaf 90%. Bij de laatste kernvideo gebeurt dat stil;
+      // de editiekeuze verschijnt pas wanneer Vimeo daadwerkelijk het einde meldt.
+      if (percent >= 0.9) {
+        void doComplete(requireEndedForCompletion ? 'silent' : 'threshold')
         return
       }
       if (marked.current) return
@@ -288,6 +351,9 @@ export default function VimeoPlayer({
 
         heartbeatFailuresRef.current = 0
         onRealDuration?.(duration)
+        setCurrentTime(currentTime)
+        setDuration(duration)
+        registerWatchedTime(currentTime)
         registerPercent(currentTime / duration)
         setErrorMsg(current => current?.includes('laden van de video') ? null : current)
       } catch (error) {
@@ -307,8 +373,15 @@ export default function VimeoPlayer({
         const duration = await withTimeout(player.getDuration(), PLAYER_CALL_TIMEOUT_MS)
         if (disposed || !duration || duration <= 0) return
         onRealDuration?.(duration)
-        if (!completed && initialProgressPct > 0 && initialProgressPct < 90) {
-          await withTimeout(player.setCurrentTime(duration * (initialProgressPct / 100)), PLAYER_CALL_TIMEOUT_MS)
+        setDuration(duration)
+        if (completed) {
+          maxWatchedTimeRef.current = duration
+          setMaxWatchedTime(duration)
+        } else if (initialProgressPct > 0 && initialProgressPct < 90) {
+          const resumedAt = duration * (initialProgressPct / 100)
+          maxWatchedTimeRef.current = resumedAt
+          setMaxWatchedTime(resumedAt)
+          await withTimeout(player.setCurrentTime(resumedAt), PLAYER_CALL_TIMEOUT_MS)
         }
         if (autoPlay) {
           try {
@@ -336,10 +409,16 @@ export default function VimeoPlayer({
       registerStarted()
     }
     const handlePause = () => setIsPlaying(false)
-    const handleTimeUpdate = ({ percent }: { percent: number }) => registerPercent(percent)
+    const handleTimeUpdate = ({ percent, seconds, duration: eventDuration }: { percent: number; seconds: number; duration: number }) => {
+      setCurrentTime(seconds)
+      setDuration(eventDuration)
+      registerWatchedTime(seconds)
+      registerPercent(percent)
+    }
     const handleEnded = () => {
       setIsPlaying(false)
       setEnded(true)
+      endedRef.current = true
       void doComplete('ended')
     }
 
@@ -399,16 +478,47 @@ export default function VimeoPlayer({
     }
   }
 
-  const openFullscreen = async () => {
+  const seekTo = async (seconds: number) => {
+    if (!playerReady || !playerRef.current) return
+    const seekLimit = completed ? duration : maxWatchedTimeRef.current
+    const safeTime = Math.max(0, Math.min(seconds, seekLimit))
+
     try {
+      setCurrentTime(safeTime)
+      await playerRef.current.setCurrentTime(safeTime)
+    } catch (error) {
+      console.error('[v0] Video terugspoelen mislukt:', error)
+      setErrorMsg('Terugspoelen lukte niet. Probeer opnieuw.')
+    }
+  }
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+        return
+      }
       if (wrapperRef.current?.requestFullscreen) {
         await wrapperRef.current.requestFullscreen()
       } else {
         await playerRef.current?.requestFullscreen()
       }
+      await playerRef.current?.play()
+      setHasStarted(true)
     } catch (error) {
-      console.error('[v0] Volledig scherm openen mislukt:', error)
-      setErrorMsg('Volledig scherm kon niet worden geopend. Probeer opnieuw.')
+      console.error('[v0] Volledig scherm wisselen mislukt:', error)
+      setErrorMsg('Volledig scherm kon niet worden gewisseld. Probeer opnieuw.')
+    }
+  }
+
+  const toggleMute = async () => {
+    if (!playerReady || !playerRef.current) return
+    try {
+      const nextMuted = !isMuted
+      await playerRef.current.setVolume(nextMuted ? 0 : 1)
+      setIsMuted(nextMuted)
+    } catch (error) {
+      console.error('[v0] Geluid wisselen mislukt:', error)
     }
   }
 
@@ -434,8 +544,7 @@ export default function VimeoPlayer({
       {/* Player + end-screen overlay */}
       <div
         ref={wrapperRef}
-        className="group relative w-full"
-        style={{ aspectRatio: '16/9', background: '#000', borderRadius: '1rem', overflow: 'hidden' }}
+        className="group relative aspect-video w-full overflow-hidden rounded-2xl bg-black fullscreen:h-screen fullscreen:aspect-auto fullscreen:rounded-none"
       >
         {/* Vimeo rendert alleen de video. De bediening hieronder is volledig van Archer. */}
         <div ref={containerRef} className="absolute inset-0 size-full" />
@@ -445,18 +554,15 @@ export default function VimeoPlayer({
             type="button"
             onClick={handlePosterPlay}
             aria-label="Video afspelen"
-            className="absolute inset-0 z-10 flex items-center justify-center overflow-hidden bg-background focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-primary"
+            className="absolute inset-0 z-10 overflow-hidden bg-background focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-primary"
           >
             <img src={thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" />
-            <span className="relative flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 sm:size-20">
-              <Play className="ml-1 size-7 fill-current sm:size-8" aria-hidden="true" />
-            </span>
           </button>
         )}
 
         {!playerLoadError && !ended && (
           <div
-            className={`pointer-events-none absolute inset-x-3 bottom-3 z-30 flex items-center justify-between text-foreground transition-opacity duration-300 group-hover:opacity-100 focus-within:opacity-100 sm:inset-x-4 sm:bottom-4 ${isPlaying ? 'opacity-0' : 'opacity-100'}`}
+            className="pointer-events-none absolute inset-x-3 bottom-3 z-30 flex items-center justify-between text-foreground sm:inset-x-4 sm:bottom-4"
           >
             <button
               type="button"
@@ -467,15 +573,48 @@ export default function VimeoPlayer({
             >
               {isPlaying ? <Pause className="size-5 fill-current" aria-hidden="true" /> : <Play className="ml-0.5 size-5 fill-current" aria-hidden="true" />}
             </button>
+            {duration > 0 && (
+              <div className="mx-3 flex min-w-0 flex-1 items-center gap-2">
+                <span className="min-w-10 text-right text-sm font-medium tabular-nums text-primary-foreground">
+                  {formatVideoTime(currentTime)}
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={duration}
+                  step={0.1}
+                  value={Math.min(currentTime, duration)}
+                  onChange={(event) => void seekTo(Number(event.currentTarget.value))}
+                  disabled={!playerReady || maxWatchedTime <= 0}
+                  aria-label="Video terugspoelen"
+                  aria-valuetext={`${formatVideoTime(currentTime)} van ${formatVideoTime(duration)} bekeken`}
+                  className="pointer-events-auto h-2 min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-wait disabled:opacity-60"
+                />
+                <span className="min-w-10 text-sm font-medium tabular-nums text-primary-foreground">
+                  {formatVideoTime(duration)}
+                </span>
+              </div>
+            )}
             <button
               type="button"
-              onClick={openFullscreen}
+              onClick={toggleMute}
               disabled={!playerReady}
-              aria-label="Video op volledig scherm bekijken"
-              className="pointer-events-auto flex size-11 items-center justify-center rounded-full border border-border/40 bg-background/85 shadow-lg backdrop-blur-md transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-50"
+              aria-label={isMuted ? 'Geluid aanzetten' : 'Geluid uitzetten'}
+              aria-pressed={isMuted}
+              className="pointer-events-auto mr-2 flex size-11 items-center justify-center rounded-full border border-border/40 bg-background/85 shadow-lg backdrop-blur-md transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-50"
             >
-              <Maximize2 className="size-5" aria-hidden="true" />
+              {isMuted ? <VolumeX className="size-5" aria-hidden="true" /> : <Volume2 className="size-5" aria-hidden="true" />}
             </button>
+            <button
+              type="button"
+            onClick={toggleFullscreen}
+            disabled={!playerReady}
+            aria-label={isFullscreen ? 'Volledig scherm sluiten' : 'Video op volledig scherm bekijken'}
+            aria-pressed={isFullscreen}
+            className="pointer-events-auto flex size-11 items-center justify-center rounded-full border border-border/40 bg-background/85 shadow-lg backdrop-blur-md transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-50"
+          >
+            {isFullscreen ? <Minimize2 className="size-5" aria-hidden="true" /> : <Maximize2 className="size-5" aria-hidden="true" />}
+          </button>
           </div>
         )}
 

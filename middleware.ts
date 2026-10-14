@@ -8,6 +8,7 @@ const PUBLIC_PREFIXES = [
   '/api/auth/',
   '/api/activeren',
   '/api/account-aanmaken',
+  '/api/hubspot/hot-lead',
   '/api/cron/',
   '/api/setup-db',
   '/_next',
@@ -30,9 +31,12 @@ export function middleware(req: NextRequest) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    // App routes redirect to login
+    // App routes redirect to login and preserve the requested page.
     const url = req.nextUrl.clone()
+    const destination = `${req.nextUrl.pathname}${req.nextUrl.search}`
     url.pathname = '/login'
+    url.search = ''
+    url.searchParams.set('next', destination)
     return NextResponse.redirect(url)
   }
 

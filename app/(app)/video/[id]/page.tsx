@@ -316,13 +316,24 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
               >
                 <CheckCircle2 size={15} style={{ color: '#059669' }} />
               </div>
-              <p className="text-sm font-medium" style={{ color: '#0d0f14' }}>
-                {isLastCoreVideo
-                  ? 'Alle 6 kernvideo\'s bekeken. Je bonusmateriaal is vrijgespeeld!'
-                  : nextVideo && nextVideo.section === 'core'
-                    ? `Goed gedaan! Ga door naar video ${coreVideos.findIndex(v => v.id === nextVideo.id) + 1}.`
-                    : 'Goed gedaan! Je hebt deze video bekeken.'}
-              </p>
+              <div className="flex min-w-0 flex-1 flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-medium" style={{ color: '#0d0f14' }}>
+                  {isLastCoreVideo
+                    ? 'Alle 6 kernvideo\'s bekeken. Je bonusmateriaal is vrijgespeeld!'
+                    : nextVideo && nextVideo.section === 'core'
+                      ? `Goed gedaan! Ga door naar video ${coreVideos.findIndex(v => v.id === nextVideo.id) + 1}.`
+                      : 'Goed gedaan! Je hebt deze video bekeken.'}
+                </p>
+                {isLastCoreVideo && !investAvondGeclaimd ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowInvestAvondModal(true)}
+                    className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    Kies je editie
+                  </button>
+                ) : null}
+              </div>
             </div>
           )}
 

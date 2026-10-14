@@ -1,9 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import Image from 'next/image'
 
+const subscribeNoop = () => () => {}
+
+// Wachtwoordmanagers zoals LastPass injecteren elementen naast invoervelden
+// voordat React hydrateert. Door het veld pas op de client te renderen
+// ontstaat er geen verschil tussen server-HTML en client.
+function useIsClient() {
+  return useSyncExternalStore(subscribeNoop, () => true, () => false)
+}
+
 export default function LoginPage() {
+  const isClient = useIsClient()
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -23,7 +33,11 @@ export default function LoginPage() {
     try { data = await res.json() } catch { /* ignore */ }
 
     if (res.ok && data.ok) {
-      window.location.assign('/home')
+      const requestedDestination = new URLSearchParams(window.location.search).get('next')
+      const destination = requestedDestination?.startsWith('/') && !requestedDestination.startsWith('//')
+        ? requestedDestination
+        : '/home'
+      window.location.assign(destination)
       return
     }
 
@@ -91,10 +105,28 @@ export default function LoginPage() {
 
             {/* Email */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.85)' }}>
+              <label
+                htmlFor="login-email"
+                className="text-sm font-medium"
+                style={{ color: 'rgba(255,255,255,0.85)' }}
+              >
                 E-mailadres
               </label>
+              {!isClient ? (
+                <div
+                  aria-hidden="true"
+                  className="w-full rounded-xl px-4 py-3 text-sm"
+                  style={{
+                    background: 'rgba(255,255,255,0.1)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    color: 'rgba(255,255,255,0.4)',
+                  }}
+                >
+                  naam@voorbeeld.nl
+                </div>
+              ) : (
               <input
+                id="login-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -121,6 +153,7 @@ export default function LoginPage() {
                   e.currentTarget.style.boxShadow = 'none'
                 }}
               />
+              )}
             </div>
 
             {error && (

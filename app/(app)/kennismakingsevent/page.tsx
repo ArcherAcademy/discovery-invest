@@ -1,6 +1,6 @@
 export default function KennismakingseventPage() {
   return (
-    <section className="absolute inset-0 overflow-hidden bg-background" aria-labelledby="event-page-title">
+    <section className="absolute inset-0 overflow-hidden rounded-2xl bg-transparent" aria-labelledby="event-page-title">
       <h1 id="event-page-title" className="sr-only">
         Kennismakingsevent
       </h1>
