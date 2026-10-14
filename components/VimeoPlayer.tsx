@@ -367,6 +367,30 @@ export default function VimeoPlayer({
     }
     heartbeatRef.current = heartbeat
 
+    // Vimeo onthoudt soms een eerder gekozen stille stand; forceer daarom altijd geluid aan.
+    const enableSound = async () => {
+      try {
+        await withTimeout(player.setMuted(false), PLAYER_CALL_TIMEOUT_MS)
+        await withTimeout(player.setVolume(1), PLAYER_CALL_TIMEOUT_MS)
+        if (!disposed) setIsMuted(false)
+      } catch (error) {
+        console.error('[v0] Geluid aanzetten mislukt:', error)
+      }
+    }
+
+    const unmuteOnGesture = () => {
+      removeGestureListeners()
+      void enableSound()
+    }
+    const removeGestureListeners = () => {
+      window.removeEventListener('pointerdown', unmuteOnGesture)
+      window.removeEventListener('keydown', unmuteOnGesture)
+    }
+    const armUnmuteOnGesture = () => {
+      window.addEventListener('pointerdown', unmuteOnGesture, { once: true })
+      window.addEventListener('keydown', unmuteOnGesture, { once: true })
+    }
+
     player.ready().then(async () => {
       try {
         setPlayerReady(true)
@@ -383,11 +407,21 @@ export default function VimeoPlayer({
           setMaxWatchedTime(resumedAt)
           await withTimeout(player.setCurrentTime(resumedAt), PLAYER_CALL_TIMEOUT_MS)
         }
+        await enableSound()
         if (autoPlay) {
           try {
             await withTimeout(player.play(), PLAYER_CALL_TIMEOUT_MS)
           } catch {
-            // Browsers kunnen autoplay met geluid blokkeren; de posterknop blijft dan beschikbaar.
+            // Browsers blokkeren soms autoplay met geluid. Speel dan stil af en zet
+            // het geluid aan bij de eerste klik of toets van de gebruiker.
+            try {
+              await withTimeout(player.setMuted(true), PLAYER_CALL_TIMEOUT_MS)
+              setIsMuted(true)
+              await withTimeout(player.play(), PLAYER_CALL_TIMEOUT_MS)
+              armUnmuteOnGesture()
+            } catch {
+              // De posterknop blijft beschikbaar om handmatig te starten.
+            }
           }
         }
         await heartbeat()
@@ -432,6 +466,7 @@ export default function VimeoPlayer({
 
     return () => {
       disposed = true
+      removeGestureListeners()
       window.clearInterval(heartbeatTimer)
       heartbeatRef.current = null
       player.off('play', handlePlay)
@@ -515,7 +550,8 @@ export default function VimeoPlayer({
     if (!playerReady || !playerRef.current) return
     try {
       const nextMuted = !isMuted
-      await playerRef.current.setVolume(nextMuted ? 0 : 1)
+      await playerRef.current.setMuted(nextMuted)
+      if (!nextMuted) await playerRef.current.setVolume(1)
       setIsMuted(nextMuted)
     } catch (error) {
       console.error('[v0] Geluid wisselen mislukt:', error)

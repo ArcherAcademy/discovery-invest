@@ -18,7 +18,7 @@ export default function PlatformIntroModal({ accountKey, isNewAccount, firstVide
   const playerRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [isMuted, setIsMuted] = useState(true)
+  const [isMuted, setIsMuted] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [progress, setProgress] = useState(0)
   const hasContinuedRef = useRef(false)
@@ -54,8 +54,32 @@ export default function PlatformIntroModal({ accountKey, isNewAccount, firstVide
 
   useEffect(() => {
     const video = videoRef.current
-    if (video) video.muted = isMuted
-  }, [isMuted, open])
+    if (!open || !video) return
+
+    const unmuteOnGesture = () => {
+      removeGestureListeners()
+      video.muted = false
+      setIsMuted(false)
+    }
+    const removeGestureListeners = () => {
+      window.removeEventListener('pointerdown', unmuteOnGesture)
+      window.removeEventListener('keydown', unmuteOnGesture)
+    }
+
+    video.muted = false
+    setIsMuted(false)
+    video.play().catch(() => {
+      // Browsers blokkeren soms autoplay met geluid. Speel dan stil af en zet
+      // het geluid aan bij de eerste klik of toets van de gebruiker.
+      video.muted = true
+      setIsMuted(true)
+      video.play().catch(() => {})
+      window.addEventListener('pointerdown', unmuteOnGesture, { once: true })
+      window.addEventListener('keydown', unmuteOnGesture, { once: true })
+    })
+
+    return removeGestureListeners
+  }, [open])
 
   useEffect(() => {
     const syncFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement))
@@ -148,8 +172,6 @@ export default function PlatformIntroModal({ accountKey, isNewAccount, firstVide
             ref={videoRef}
             src="/platform-intro-subtitles.mp4"
             aria-label="Introductievideo met ondertitels"
-            autoPlay
-            muted
             playsInline
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
