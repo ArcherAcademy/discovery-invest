@@ -50,13 +50,15 @@ export function HomeJourneyShowcase({
   const heroHref = heroVideo ? `/video/${heroVideo.id}` : '/traject'
   const primaryHref = isCompleted ? '/masterclass' : heroHref
   const primaryLabel = isCompleted ? 'Schrijf je in' : completedCount === 0 ? 'Start de discovery' : 'Ga verder met je discovery'
+  const naam = firstName?.trim() ?? ''
+  const aanNaam = naam ? `, ${naam}` : ''
   const heroTitle = isShowingBonus
-    ? `Je bonusmateriaal staat voor je klaar, ${firstName}.`
+    ? `Je bonusmateriaal staat voor je klaar${aanNaam}.`
     : isCompleted
-      ? `Je hebt de volledige reeks gezien, ${firstName}.`
+      ? `Je hebt de volledige reeks gezien${aanNaam}.`
       : completedCount === 0
-        ? `Je discovery start hier, ${firstName}.`
-        : `Goed bezig, ${firstName}. Je bent al goed op weg.`
+        ? `Je discovery start hier${aanNaam}.`
+        : `Goed bezig${aanNaam}. Je bent al goed op weg.`
   const heroSubtitle = isShowingBonus
     ? `Bekijk nu ${activeBonus.title}.`
     : isCompleted
