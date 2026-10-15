@@ -8,6 +8,7 @@ import { Users, TrendingUp, Trophy, CalendarDays, Clock, ChevronDown, ChevronUp,
 import { WORKFLOWS } from '@/lib/workflow-engine'
 import { HUBSPOT_CODES_ORDERED } from '@/lib/hubspot-codes'
 import { VoortgangTab } from '@/components/admin/VoortgangTab'
+import { TestsTab, isTestFlow, type TestSubmission } from '@/components/admin/TestsTab'
 import { InhaalrondeModal } from '@/components/admin/InhaalrondeModal'
 import { UserFollowUpControl } from '@/components/admin/UserFollowUpControl'
 import { BookingLinksTab } from '@/components/admin/BookingLinksTab'
@@ -41,6 +42,7 @@ interface LeadSubmission {
     segment?: string
   }
   score: number | null
+  extra?: Record<string, unknown> | null
   utm_source: string | null
   utm_campaign: string | null
   submitted_at: string
@@ -54,7 +56,7 @@ interface AdminUser extends DemoUser {
   /** Actueel telefoonnummer uit HubSpot; mobiel krijgt voorrang. */
   phone?: string | null
   /** Herkomst van het account, server-side bepaald uit de eerste bekende instroom. */
-  instroom?: 'inflatietest' | 'vermogenstest' | 'discovery' | 'onbekend'
+  instroom?: 'inflatietest' | 'eenprocenttest' | 'vermogenstest' | 'discovery' | 'onbekend'
   // Live afgeleide call-status en opvolgvlag — server-side samengevoegd in /api/admin/data.
   call_clicked_at?: string | null
   call_opened_at?: string | null
@@ -65,7 +67,7 @@ type AccountStatus = 'aangemaakt' | 'geactiveerd'
 type HistoryCategory = 'accepted' | 'skipped' | 'problem' | 'failed'
 type HistoryChannel = 'hubspot' | 'form' | 'funnel'
 
-type Tab = 'overview' | 'accounts' | 'users' | 'mentors' | 'webhooks' | 'workflows' | 'history' | 'account_logs' | 'voortgang'
+type Tab = 'overview' | 'tests' | 'accounts' | 'users' | 'mentors' | 'webhooks' | 'workflows' | 'history' | 'account_logs' | 'voortgang'
 
 const ACCOUNTS_PER_PAGE = 50
 const INFLATIETEST_BLOCK_LABELS: Record<string, string> = {
@@ -102,6 +104,7 @@ export default function AdminPage() {
   const tr = t(locale)
 
   const [tab, setTab] = useState<Tab>('overview')
+  const [testFocusUserId, setTestFocusUserId] = useState<string | null>(null)
   const [users, setUsers] = useState<AdminUser[]>([])
   const [accountTotal, setAccountTotal] = useState(0)
   const [accountPage, setAccountPage] = useState(1)
@@ -109,7 +112,7 @@ export default function AdminPage() {
   const [triggerLog, setTriggerLog] = useState<DemoTriggerLog[]>([])
   const [webhookConfig, setWebhookConfig] = useState<DemoWebhookConfig[]>([])
   const [accountsFilter, setAccountsFilter] = useState<{ query: string; status: '' | AccountStatus }>({ query: '', status: '' })
-  const [instroomFilter, setInstroomFilter] = useState<'' | 'inflatietest' | 'vermogenstest' | 'discovery' | 'onbekend'>('')
+  const [instroomFilter, setInstroomFilter] = useState<'' | 'inflatietest' | 'eenprocenttest' | 'vermogenstest' | 'discovery' | 'onbekend'>('')
   const [accountManagerFilter, setAccountManagerFilter] = useState<string>('')
   const [accountLogs, setAccountLogs] = useState<AccountWebhookLog[]>([])
   const [accountLogsFilter, setAccountLogsFilter] = useState<{ email: string; outcome: '' | 'created' | 'reused' | 'error' }>({ email: '', outcome: '' })
@@ -414,6 +417,7 @@ export default function AdminPage() {
     const tags: string[] = []
     const submissionFlows = new Set(leadSubmissions.filter(submission => submission.user_id === u.id).map(submission => submission.lead_flow))
     if (submissionFlows.has('inflatietest')) tags.push('inflatietest')
+    if (submissionFlows.has('eenprocenttest')) tags.push('1%-test')
     if (submissionFlows.has('vermogenstest') || quizSubmissions.some(q => q.user_id === u.id)) tags.push('vermogenstest')
     if (submissionFlows.has('demo')) tags.push('discovery')
     const email = (u.email ?? '').toLowerCase()
@@ -536,6 +540,7 @@ export default function AdminPage() {
 
   const ALL_TABS: { id: Tab; label: string }[] = [
     { id: 'overview', label: tr.admin.overview },
+    { id: 'tests', label: 'Tests' },
     { id: 'accounts', label: 'Accounts' },
     { id: 'voortgang', label: 'Voortgang' },
     { id: 'users', label: tr.admin.users },
@@ -767,6 +772,14 @@ export default function AdminPage() {
       {/* Voortgang tab */}
       {tab === 'voortgang' && <VoortgangTab />}
 
+      {tab === 'tests' && isAdmin && (
+        <TestsTab
+          submissions={leadSubmissions as unknown as TestSubmission[]}
+          users={users}
+          focusUserId={testFocusUserId}
+        />
+      )}
+
       {/* Accounts tab */}
       {tab === 'accounts' && (() => {
         // Status-badge config (geen rood/warm, geen goud)
@@ -921,7 +934,7 @@ export default function AdminPage() {
               <select
                 value={instroomFilter}
                 onChange={e => {
-                  setInstroomFilter(e.target.value as '' | 'inflatietest' | 'vermogenstest' | 'discovery' | 'onbekend')
+                  setInstroomFilter(e.target.value as '' | 'inflatietest' | 'eenprocenttest' | 'vermogenstest' | 'discovery' | 'onbekend')
                   setAccountPage(1)
                 }}
                 className="rounded-xl px-3 py-2 text-xs border outline-none"
@@ -930,6 +943,7 @@ export default function AdminPage() {
               >
                 <option value="">Alle bronnen ({scopedUsers.length})</option>
                 <option value="inflatietest">Inflatietest ({scopedUsers.filter(u => u.instroom === 'inflatietest').length})</option>
+                <option value="eenprocenttest">1%-test ({scopedUsers.filter(u => u.instroom === 'eenprocenttest').length})</option>
                 <option value="vermogenstest">Vermogenstest ({vermogenstestCount})</option>
                 <option value="discovery">Discovery-aanvraag ({discoveryCount})</option>
                 <option value="onbekend">Onbekend ({onbekendCount})</option>
@@ -1076,6 +1090,8 @@ export default function AdminPage() {
                                 >
                                   {instroom === 'inflatietest'
                                     ? 'Inflatietest'
+                                    : instroom === 'eenprocenttest'
+                                    ? '1%-test'
                                     : instroom === 'vermogenstest'
                                       ? `Vermogenstest${u.vermogenstest_variant ? ` ${u.vermogenstest_variant}` : ''}`
                                       : instroom === 'discovery'
@@ -1479,6 +1495,8 @@ export default function AdminPage() {
                                           ? `Vermogenstest${submissions[0].variant ? ` ${submissions[0].variant}` : ''}`
                                           : submissions[0].lead_flow === 'inflatietest'
                                             ? 'Inflatietest'
+                                            : submissions[0].lead_flow === 'eenprocenttest'
+                                            ? '1%-test'
                                             : submissions[0].lead_flow === 'demo'
                                               ? 'Discovery-aanvraag'
                                               : 'Onbekend'}
@@ -1486,6 +1504,16 @@ export default function AdminPage() {
                                       <p className="mt-1 text-[10px]" style={{ color: 'rgba(13,15,20,0.45)' }}>
                                         {formatDateTime(submissions[0].submitted_at)}{submissions[0].assigned_advisor ? ` · ${submissions[0].assigned_advisor}` : ''}
                                       </p>
+                                      {isAdmin && submissions.some(s => isTestFlow(s.lead_flow)) && (
+                                        <button
+                                          type="button"
+                                          onClick={() => { setTestFocusUserId(u.id); setTab('tests') }}
+                                          className="mt-1 text-xs font-semibold underline-offset-2 hover:underline"
+                                          style={{ color: '#2500F5' }}
+                                        >
+                                          Bekijk testantwoorden
+                                        </button>
+                                      )}
                                     </div>
                                   )}
                                 </header>
@@ -1552,6 +1580,8 @@ export default function AdminPage() {
                                         ? `Vermogenstest${submission.variant ? ` ${submission.variant}` : ''}`
                                         : submission.lead_flow === 'inflatietest'
                                           ? 'Inflatietest'
+                                          : submission.lead_flow === 'eenprocenttest'
+                                          ? '1%-test'
                                           : submission.lead_flow === 'demo'
                                             ? 'Discovery-aanvraag'
                                             : 'Onbekend'

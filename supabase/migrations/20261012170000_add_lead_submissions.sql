@@ -22,6 +22,7 @@ create table if not exists public.lead_submissions (
   result text,
   result_details jsonb not null default '{}'::jsonb,
   score numeric,
+  extra jsonb not null default '{}'::jsonb,
   utm_source text,
   utm_campaign text,
   submitted_at timestamptz not null,
@@ -42,17 +43,16 @@ create index if not exists demo_invest_account_webhook_log_user_id_idx
 create index if not exists demo_invest_account_webhook_log_submission_id_idx
   on public.demo_invest_account_webhook_log (submission_id);
 
+-- Voor een tabel die al bestond zonder deze kolom.
+alter table public.lead_submissions add column if not exists extra jsonb not null default '{}'::jsonb;
+
+-- RLS aan zonder policies: anon en authenticated lezen niets, ook de gebruiker
+-- zelf niet. Alleen de service role (server-side, achter requireAdminOrMentor
+-- in /api/admin/data) heeft toegang.
 alter table public.lead_submissions enable row level security;
 revoke all on table public.lead_submissions from anon, authenticated;
 grant all on table public.lead_submissions to service_role;
-grant select on table public.lead_submissions to authenticated;
-
 drop policy if exists lead_submissions_admin_select on public.lead_submissions;
-create policy lead_submissions_admin_select
-  on public.lead_submissions
-  for select
-  to authenticated
-  using (public.demo_is_admin());
 
 do $migration$
 begin
@@ -77,20 +77,21 @@ with geldige_logs as (
     users.id as user_id,
     (log.payload_json ->> 'submission_id')::uuid as submission_id,
     case
-      when coalesce(nullif(log.payload_json ->> 'lead_flow', ''), case when log.payload_json ->> 'source' = 'discovery' then 'demo' else nullif(log.payload_json ->> 'source', '') end) in ('vermogenstest', 'demo', 'inflatietest') then coalesce(nullif(log.payload_json ->> 'lead_flow', ''), case when log.payload_json ->> 'source' = 'discovery' then 'demo' else nullif(log.payload_json ->> 'source', '') end)
+      when coalesce(nullif(log.payload_json ->> 'lead_flow', ''), case when log.payload_json ->> 'source' = 'discovery' then 'demo' else nullif(log.payload_json ->> 'source', '') end) in ('vermogenstest', 'demo', 'inflatietest', 'eenprocenttest') then coalesce(nullif(log.payload_json ->> 'lead_flow', ''), case when log.payload_json ->> 'source' = 'discovery' then 'demo' else nullif(log.payload_json ->> 'source', '') end)
       else 'onbekend'
     end as lead_flow,
     case coalesce(nullif(log.payload_json ->> 'lead_flow', ''), case when log.payload_json ->> 'source' = 'discovery' then 'demo' else nullif(log.payload_json ->> 'source', '') end)
       when 'vermogenstest' then 'Vermogenstest'
       when 'demo' then 'Discovery-aanvraag'
       when 'inflatietest' then 'Inflatietest'
+      when 'eenprocenttest' then '1%-test'
       else 'onbekend'
     end as source,
     nullif(log.payload_json ->> 'vermogenstest_variant', '') as variant,
     nullif(log.payload_json ->> 'vermogenstest_vragenset', '') as vragenset,
     nullif(log.payload_json ->> 'assigned_advisor', '') as assigned_advisor,
     case
-      when coalesce(nullif(log.payload_json ->> 'lead_flow', ''), case when log.payload_json ->> 'source' = 'discovery' then 'demo' else nullif(log.payload_json ->> 'source', '') end) = 'inflatietest' and jsonb_typeof(log.payload_json -> 'answers_labeled') = 'array'
+      when coalesce(nullif(log.payload_json ->> 'lead_flow', ''), case when log.payload_json ->> 'source' = 'discovery' then 'demo' else nullif(log.payload_json ->> 'source', '') end) in ('inflatietest', 'eenprocenttest') and jsonb_typeof(log.payload_json -> 'answers_labeled') = 'array'
         then log.payload_json -> 'answers_labeled'
       when coalesce(nullif(log.payload_json ->> 'lead_flow', ''), case when log.payload_json ->> 'source' = 'discovery' then 'demo' else nullif(log.payload_json ->> 'source', '') end) = 'vermogenstest' and jsonb_typeof(log.payload_json -> 'answers') = 'array'
         then log.payload_json -> 'answers'
