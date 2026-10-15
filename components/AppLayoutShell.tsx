@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import { Sidebar } from '@/components/sidebar'
 import { ExpiredTrialBanner } from '@/components/ExpiredTrialBanner'
 import { SignupBanner } from '@/components/SignupBanner'
+import { MasterclassIntroRedirect } from '@/components/MasterclassIntroRedirect'
 import { cn } from '@/lib/utils'
 
 export function AppLayoutShell({ children }: { children: React.ReactNode }) {
@@ -22,6 +23,7 @@ export function AppLayoutShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden pb-24 sm:pb-0">
         <ExpiredTrialBanner />
         <SignupBanner />
+        <MasterclassIntroRedirect />
         <main
           className={cn(
             'relative flex-1 overflow-y-auto bg-background p-4 sm:p-6',
