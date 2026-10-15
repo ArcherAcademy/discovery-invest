@@ -656,7 +656,7 @@ export default function VimeoPlayer({
 
         {playerLoadError && !ended && (
           <div
-            className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 px-6 text-center"
+            className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 overflow-y-auto px-3 py-2 text-center sm:gap-4 sm:px-6"
             style={{
               background: thumbnailUrl
                 ? `linear-gradient(rgba(8,10,16,0.68), rgba(8,10,16,0.9)), url(${thumbnailUrl}) center/cover no-repeat`
@@ -664,14 +664,14 @@ export default function VimeoPlayer({
             }}
           >
             <div className="flex max-w-sm flex-col gap-1">
-              <p className="text-base font-bold text-primary-foreground">Video kan hier niet afspelen</p>
-              <p className="text-sm leading-5 text-primary-foreground/65">Open de video rechtstreeks in Vimeo om meteen verder te kijken.</p>
+              <p className="text-sm font-bold text-primary-foreground sm:text-base">Video kan hier niet afspelen</p>
+              <p className="hidden text-sm leading-5 text-primary-foreground/65 sm:block">Open de video rechtstreeks in Vimeo om meteen verder te kijken.</p>
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={retryPlayer}
-                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground shadow-lg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                className="inline-flex min-h-10 items-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground shadow-lg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:min-h-11 sm:px-5"
               >
                 <RefreshCw size={16} />
                 Probeer opnieuw
@@ -680,7 +680,7 @@ export default function VimeoPlayer({
                 href={vimeoPageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-primary-foreground/25 px-5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary-foreground/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                className="inline-flex min-h-10 items-center gap-2 rounded-full border border-primary-foreground/25 px-4 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary-foreground/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:min-h-11 sm:px-5"
               >
                 <ExternalLink size={16} />
                 Open in Vimeo
@@ -690,7 +690,7 @@ export default function VimeoPlayer({
                   type="button"
                   onClick={() => doComplete('manual')}
                   disabled={retrying}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-primary-foreground/25 px-5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary-foreground/10 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-full border border-primary-foreground/25 px-4 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary-foreground/10 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:min-h-11 sm:px-5"
                 >
                   <CheckCircle2 size={16} />
                   Markeer als bekeken
