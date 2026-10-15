@@ -12,7 +12,6 @@ import { useApp } from '@/components/app-context'
 import { t } from '@/lib/i18n'
 import VimeoPlayer from '@/components/VimeoPlayer'
 import PdfItem from '@/components/PdfItem'
-import InvestAvondUnlockModal from '@/components/InvestAvondUnlockModal'
 
 
 export default function VideoPage({ params }: { params: Promise<{ id: string }> }) {
@@ -70,7 +69,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
   }, [id, progress]) // re-check whenever progress changes (live unlock)
 
   const [completed, setCompleted] = useState(false)
-  const [showInvestAvondModal, setShowInvestAvondModal] = useState(false)
   const [realDurationSeconds, setRealDurationSeconds] = useState<number | null>(null)
   // Cache real durations per video so sidebar shows correct times
   const [realDurations, setRealDurations] = useState<Record<string, number>>({})
@@ -80,16 +78,9 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
     setCompleted(existing?.status === 'completed')
   }, [progress, id])
 
-  useEffect(() => {
-    if (accessChecked && isLastCoreVideo && completed && !investAvondGeclaimd) {
-      setShowInvestAvondModal(true)
-    }
-  }, [accessChecked, completed, investAvondGeclaimd, isLastCoreVideo])
-
   // Called by VimeoPlayer when 90% is reached — refresh progress from DB
   function handleCompleted() {
     setCompleted(true)
-    if (isLastCoreVideo && !investAvondGeclaimd) setShowInvestAvondModal(true)
     void refresh()
   }
 
@@ -191,10 +182,8 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                   requireEndedForCompletion={isLastCoreVideo}
                   onCompleted={handleCompleted}
                   onAutoNext={() => {
-                    if (isLastCoreVideo && !investAvondGeclaimd) {
-                      setShowInvestAvondModal(true)
-                    } else if (isLastCoreVideo) {
-                      router.push('/traject#bonusmateriaal')
+                    if (isLastCoreVideo) {
+                      router.push('/masterclass')
                     } else if (nextVideo) {
                       router.push(`/video/${nextVideo.id}`)
                     }
@@ -325,13 +314,12 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
                       : 'Goed gedaan! Je hebt deze video bekeken.'}
                 </p>
                 {isLastCoreVideo && !investAvondGeclaimd ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowInvestAvondModal(true)}
+                  <Link
+                    href="/masterclass"
                     className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   >
-                    Kies je editie
-                  </button>
+                    Schrijf je in
+                  </Link>
                 ) : null}
               </div>
             </div>
@@ -608,16 +596,6 @@ export default function VideoPage({ params }: { params: Promise<{ id: string }> 
           </div>
         </div>
       </div>
-
-      <InvestAvondUnlockModal
-        open={showInvestAvondModal}
-        onClose={() => setShowInvestAvondModal(false)}
-        onSubmitted={refresh}
-        onViewBonus={() => {
-          setShowInvestAvondModal(false)
-          router.push('/traject#bonusmateriaal')
-        }}
-      />
     </div>
   )
 }

@@ -255,7 +255,7 @@ export default function VimeoPlayer({
     marked.current = true
     setRetrying(source === 'manual')
 
-    // Bij video 6 verschijnt de editiekeuze meteen zodra Vimeo het echte einde meldt.
+    // Bij video 6 gaat de gebruiker meteen naar de inschrijfpagina zodra Vimeo het echte einde meldt.
     // De opslag en externe synchronisaties mogen die gebruikersfeedback niet vertragen.
     if (source === 'ended' && isLastVideo) onAutoNextRef.current?.()
 
@@ -265,9 +265,7 @@ export default function VimeoPlayer({
       setTrackingError(null)
       onCompleted?.()
       onUnlockNext?.()
-      if (isLastVideo && source !== 'ended') {
-        onAutoNextRef.current?.()
-      } else if (!isLastVideo && source === 'ended' && onAutoNextRef.current) {
+      if (!isLastVideo && source === 'ended' && onAutoNextRef.current) {
         startCountdown(5)
       }
     } catch (error) {
