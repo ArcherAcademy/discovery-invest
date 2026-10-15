@@ -73,13 +73,14 @@ export async function GET(req: NextRequest) {
     supabase.from('demo_invest_boekingslinks').select('hubspot_owner_id, naam'),
     supabase
       .from('lead_submissions')
-      .select('id, user_id, submission_id, lead_flow, source, variant, vragenset, assigned_advisor, answers_labeled, answers_raw, result, result_details, score, utm_source, utm_campaign, submitted_at, created_at')
+      .select('id, user_id, submission_id, lead_flow, source, variant, vragenset, assigned_advisor, answers_labeled, answers_raw, result, result_details, score, extra, utm_source, utm_campaign, submitted_at, created_at')
       .order('submitted_at', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(5000),
   ])
 
-  const leadSubmissionsTableMissing = leadSubmissionsError?.code === 'PGRST205' || leadSubmissionsError?.code === '42P01'
+  // Ontbrekende tabel of kolom: terugvallen op de payloads in het webhooklog.
+  const leadSubmissionsTableMissing = ['PGRST205', '42P01', '42703', 'PGRST204'].includes(leadSubmissionsError?.code ?? '')
   if (leadSubmissionsError && !leadSubmissionsTableMissing) {
     console.error('[admin/data] Leadinzendingen ophalen mislukt:', leadSubmissionsError)
     return NextResponse.json({ error: 'De leadinzendingen konden niet worden opgehaald.' }, { status: 500 })
@@ -92,7 +93,7 @@ export async function GET(req: NextRequest) {
   // expliciete signalen; een ontbrekende bron als "Discovery" tonen zou de
   // marketingcijfers kunstmatig verbeteren. Oudere logs blijven bruikbaar doordat
   // we de volledige tabel chronologisch en in stabiele batches lezen.
-  type Instroom = 'inflatietest' | 'vermogenstest' | 'discovery' | 'onbekend'
+  type Instroom = 'inflatietest' | 'eenprocenttest' | 'vermogenstest' | 'discovery' | 'onbekend'
   type VermogenstestTracking = {
     lead_flow: string | null
     vermogenstest_variant: 'A' | 'B' | null
@@ -112,11 +113,14 @@ export async function GET(req: NextRequest) {
     result: string | null
     result_details: Record<string, unknown>
     score: number | null
+    extra: Record<string, unknown>
     utm_source: string | null
     utm_campaign: string | null
     submitted_at: string
     created_at: string
   }
+
+  const EXTRA_KEYS = ['path', 'age_class', 'situation', 'building_blocks', 'building_blocks_total', 'missing_points', 'strengths', 'layer', 'wealth_band', 'segment', 'page_uri']
 
   const instroomByEmail = new Map<string, Exclude<Instroom, 'onbekend'>>()
   const trackingByEmail = new Map<string, VermogenstestTracking>()
@@ -151,6 +155,7 @@ export async function GET(req: NextRequest) {
   const toInstroom = (flow: string | null | undefined): Exclude<Instroom, 'onbekend'> | null => {
   const value = (flow ?? '').trim().toLowerCase()
   if (value === 'inflatietest' || value === 'inflatie-test') return 'inflatietest'
+  if (value === 'eenprocenttest' || value === '1%-test' || value === '1-procent-test') return 'eenprocenttest'
   if (value === 'vermogenstest' || value === 'vermogens-test') return 'vermogenstest'
   if (value === 'demo' || value === 'discovery') return 'discovery'
   return null
@@ -164,13 +169,14 @@ export async function GET(req: NextRequest) {
     ].join(' ').toLowerCase()
 
     if (signal.includes('inflatie-test') || signal.includes('inflatietest')) return 'inflatietest'
+    if (signal.includes('eenprocenttest') || signal.includes('1%-test') || signal.includes('1-procent-test')) return 'eenprocenttest'
     if (signal.includes('vermogens-test') || signal.includes('vermogenstest')) return 'vermogenstest'
     if (signal.includes('/demo') || signal.includes('discovery')) return 'discovery'
     return null
   }
 
   const normalizeAnswers = (flow: string, payload: Record<string, unknown>) => {
-    if (flow === 'inflatietest' && Array.isArray(payload.answers_labeled)) return payload.answers_labeled
+    if (flow !== 'demo' && Array.isArray(payload.answers_labeled)) return payload.answers_labeled
     if (flow === 'vermogenstest' && Array.isArray(payload.answers)) return payload.answers
     if (flow === 'demo' && payload.discovery_answers && typeof payload.discovery_answers === 'object' && !Array.isArray(payload.discovery_answers)) {
       return Object.entries(payload.discovery_answers as Record<string, unknown>)
@@ -211,7 +217,11 @@ export async function GET(req: NextRequest) {
           const user = userByEmail.get(email)
           if (submissionId && user && !fallbackSubmissionsById.has(submissionId)) {
             const rawFlow = (payloadValue(payload, 'lead_flow') || payloadValue(payload, 'source')).toLowerCase()
-            const flow = rawFlow === 'discovery' ? 'demo' : ['vermogenstest', 'demo', 'inflatietest'].includes(rawFlow) ? rawFlow : 'onbekend'
+            const flow = rawFlow === 'discovery' ? 'demo' : ['vermogenstest', 'demo', 'inflatietest', 'eenprocenttest'].includes(rawFlow) ? rawFlow : 'onbekend'
+            const extra: Record<string, unknown> = {}
+            for (const key of EXTRA_KEYS) {
+              if (payload[key] !== undefined && payload[key] !== null && payload[key] !== '') extra[key] = payload[key]
+            }
             const rawAnswers = flow === 'demo' ? payload.discovery_answers : payload.answers
             const resultDetails = payload.result_details && typeof payload.result_details === 'object' && !Array.isArray(payload.result_details)
               ? payload.result_details as Record<string, unknown>
@@ -223,7 +233,8 @@ export async function GET(req: NextRequest) {
               user_id: user.id,
               submission_id: submissionId,
               lead_flow: flow,
-              source: flow === 'vermogenstest' ? 'Vermogenstest' : flow === 'demo' ? 'Discovery-aanvraag' : flow === 'inflatietest' ? 'Inflatietest' : 'onbekend',
+              source: flow === 'vermogenstest' ? 'Vermogenstest' : flow === 'demo' ? 'Discovery-aanvraag' : flow === 'inflatietest' ? 'Inflatietest' : flow === 'eenprocenttest' ? '1%-test' : 'onbekend',
+              extra,
               variant: payload.vermogenstest_variant === 'A' || payload.vermogenstest_variant === 'B' ? payload.vermogenstest_variant : null,
               vragenset: payload.vermogenstest_vragenset === 'oude_vragen' || payload.vermogenstest_vragenset === 'nieuwe_vragen' ? payload.vermogenstest_vragenset : null,
               assigned_advisor: payloadValue(payload, 'assigned_advisor') || null,

@@ -311,7 +311,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   const sourceRaw = pick(body, 'source').toLowerCase()
   const leadFlowRaw = pick(body, 'lead_flow').toLowerCase()
   const fallbackFlow = sourceRaw === 'discovery' ? 'demo' : sourceRaw
-  const leadFlow = ['demo', 'vermogenstest', 'inflatietest'].includes(leadFlowRaw || fallbackFlow)
+  const leadFlow = ['demo', 'vermogenstest', 'inflatietest', 'eenprocenttest'].includes(leadFlowRaw || fallbackFlow)
     ? leadFlowRaw || fallbackFlow
     : 'onbekend'
   const source = leadFlow === 'vermogenstest'
@@ -320,7 +320,9 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
       ? 'Discovery-aanvraag'
       : leadFlow === 'inflatietest'
         ? 'Inflatietest'
-        : 'onbekend'
+        : leadFlow === 'eenprocenttest'
+          ? '1%-test'
+          : 'onbekend'
   const isInflatietest = leadFlow === 'inflatietest'
   const submissionId = pick(body, 'submission_id')
   const submittedAt = pick(body, 'submitted_at')
@@ -345,21 +347,17 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     : (vermogenstestVariant === 'A' && vermogenstestVragenset === 'oude_vragen')
       || (vermogenstestVariant === 'B' && vermogenstestVragenset === 'nieuwe_vragen')
 
+  // Testantwoorden zijn optioneel: een ontbrekend of onverwacht formaat mag de
+  // accountaanmaak nooit blokkeren. De website valt bij een 400 terug op een
+  // kleinere payload zonder antwoorden, dus weigeren zou ze stil laten verdwijnen.
   const validatesSubmission = acceptsJson || Boolean(submissionId)
   let validationError = ''
-  if (answers !== undefined && !isJsonCollection(answers)) validationError = 'answers moet een JSON-object of lijst zijn'
-  else if (answersLabeled !== undefined && !isJsonCollection(answersLabeled)) validationError = 'answers_labeled moet een JSON-object of lijst zijn'
-  else if (resultDetails !== undefined && !isRecord(resultDetails)) validationError = 'result_details moet een JSON-object zijn'
-  else if (acceptsJson && !submissionId) validationError = 'Ontbrekend verplicht veld: submission_id'
+  if (acceptsJson && !submissionId) validationError = 'Ontbrekend verplicht veld: submission_id'
   else if (submissionId && !UUID_PATTERN.test(submissionId)) validationError = 'submission_id moet een geldige UUID zijn'
   else if (acceptsJson && !submittedAt) validationError = 'Ontbrekend verplicht veld: submitted_at'
   else if (submittedAt && Number.isNaN(Date.parse(submittedAt))) validationError = 'submitted_at moet een geldige ISO-datum zijn'
   else if (pick(body, 'lead_id') && pick(body, 'lead_id') !== submissionId) validationError = 'lead_id moet gelijk zijn aan submission_id'
   else if (variantRaw && !vermogenstestVariant || vragensetRaw && !vermogenstestVragenset || !geldigeVermogenstestKoppeling) validationError = 'ongeldige combinatie vermogenstest_variant en vermogenstest_vragenset'
-  else if (validatesSubmission && isInflatietest && !validateInflatietestAnswers(answers)) validationError = 'answers bevat ongeldige of onvolledige Inflatietest-antwoorden'
-  else if (validatesSubmission && isInflatietest && !Array.isArray(answersLabeled)) validationError = 'answers_labeled moet voor de Inflatietest een lijst zijn'
-  else if (validatesSubmission && leadFlow === 'vermogenstest' && !Array.isArray(answers)) validationError = 'answers moet voor de Vermogenstest een lijst zijn'
-  else if (validatesSubmission && leadFlow === 'demo' && !isRecord(discoveryAnswers)) validationError = 'discovery_answers moet voor de Discovery-aanvraag een object zijn'
   else if (validatesSubmission && isInflatietest && body.consent !== true) validationError = 'consent moet true zijn'
   else if (validatesSubmission && isInflatietest && (body.vermogenstest_variant != null || body.vermogenstest_vragenset != null)) validationError = 'Vermogenstest-velden moeten leeg zijn voor de Inflatietest'
 
@@ -372,13 +370,22 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     console.warn(`[v0] account-aanmaken: onbekende Inflatietest-adviseur "${assignedAdvisor}"; account wordt zonder ownerkoppeling verwerkt`)
   }
 
-  const normalizedAnswers = leadFlow === 'inflatietest'
-    ? normalizeLabeledAnswers(answersLabeled)
-    : leadFlow === 'demo'
-      ? normalizeDiscoveryAnswers(discoveryAnswers)
+  // answers_labeled is de waarheid op het moment van invullen. Bij de
+  // Vermogenstest is answers zelf al gelabeld en bestaat er geen aparte lijst.
+  const normalizedAnswers = leadFlow === 'demo'
+    ? normalizeDiscoveryAnswers(discoveryAnswers)
+    : Array.isArray(answersLabeled)
+      ? normalizeLabeledAnswers(answersLabeled)
       : normalizeLabeledAnswers(answers)
-  const answersRaw = leadFlow === 'demo' ? discoveryAnswers : answers
-  const score = typeof scoreRaw === 'number' && Number.isFinite(scoreRaw) ? scoreRaw : null
+  const answersRawCandidate = leadFlow === 'demo' ? discoveryAnswers : answers
+  const answersRaw = isJsonCollection(answersRawCandidate) ? answersRawCandidate : {}
+  const safeResultDetails = isRecord(resultDetails) ? resultDetails : {}
+  const scoreNumber = typeof scoreRaw === 'string' && scoreRaw.trim() !== '' ? Number(scoreRaw) : scoreRaw
+  const score = typeof scoreNumber === 'number' && Number.isFinite(scoreNumber) ? scoreNumber : null
+  const extra: Record<string, unknown> = {}
+  for (const key of ['path', 'age_class', 'situation', 'building_blocks', 'building_blocks_total', 'missing_points', 'strengths', 'layer', 'wealth_band', 'segment', 'page_uri']) {
+    if (body[key] !== undefined && body[key] !== null && body[key] !== '') extra[key] = body[key]
+  }
 
   let contactOwnerId = advisorOwner?.id ?? extractHubSpotOwnerId(body)
 
@@ -597,48 +604,6 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     }
   }
 
-  if (submissionId) {
-    const submission = {
-      user_id: userId,
-      submission_id: submissionId,
-      lead_flow: leadFlow,
-      source,
-      variant: vermogenstestVariant,
-      vragenset: vermogenstestVragenset,
-      assigned_advisor: assignedAdvisor || null,
-      answers_labeled: normalizedAnswers,
-      answers_raw: answersRaw ?? {},
-      result: result || null,
-      result_details: resultDetails ?? {},
-      score,
-      utm_source: pick(body, 'utm_source') || null,
-      utm_campaign: pick(body, 'utm_campaign') || null,
-      submitted_at: new Date(submittedAt).toISOString(),
-    }
-    const { error: submissionError } = await supabase
-      .from('lead_submissions')
-      .insert(submission)
-
-    if (submissionError?.code === '23505') {
-      const { data: existingSubmission, error: existingSubmissionError } = await supabase
-        .from('lead_submissions')
-        .select('user_id')
-        .eq('submission_id', submissionId)
-        .single()
-
-      if (existingSubmissionError || existingSubmission?.user_id !== userId) {
-        console.error('[v0] account-aanmaken: submission_id hoort bij een andere of onleesbare inzending', existingSubmissionError)
-        await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: 'submission_id is al aan een andere inzending gekoppeld', activatielink: null, http_status: 409, user_id: userId, submission_id: submissionId })
-        return jsonError('submission_id is al in gebruik', 409)
-      }
-      outcome = 'reused'
-    } else if (submissionError && submissionError.code !== 'PGRST205' && submissionError.code !== '42P01') {
-      console.error('[v0] account-aanmaken: inzending opslaan mislukt:', submissionError.message)
-      await logWebhookCall({ supabase, email, payload_json: payloadWithOwner, outcome: 'error', reden: `Inzending opslaan: ${submissionError.message}`, activatielink: null, http_status: 500, user_id: userId, submission_id: submissionId })
-      return jsonError('Inzending kon niet worden opgeslagen', 500)
-    }
-  }
-
   // ── 5. Invite ophalen of aanmaken (nooit twee actieve invites per user) ────
   //
   // Strategie:
@@ -724,6 +689,61 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
   // ── 6. Activatielink bouwen ───────────────────────────────────────────────
   const activatieLink = activationLink(rawToken)
 
+  // ── 6b. Testantwoorden opslaan (pas na account + link, nooit blokkerend) ──
+  // Elke fout hier wordt gelogd en ingeslikt: de response blijft identiek. De
+  // volledige payload staat bovendien in het webhooklog, zodat de admin de
+  // antwoorden ook kan tonen als deze tabel (nog) niet bestaat.
+  if (submissionId) {
+    try {
+      const { data: bestaandeInzending, error: lookupError } = await supabase
+        .from('lead_submissions')
+        .select('user_id')
+        .eq('submission_id', submissionId)
+        .maybeSingle()
+
+      if (lookupError) throw lookupError
+
+      if (bestaandeInzending && bestaandeInzending.user_id !== userId) {
+        console.warn('[v0] account-aanmaken: submission_id hoort bij een ander account; antwoorden niet overschreven')
+      } else {
+        const submission: Record<string, unknown> = {
+          user_id: userId,
+          submission_id: submissionId,
+          lead_flow: leadFlow,
+          source,
+          variant: vermogenstestVariant,
+          vragenset: vermogenstestVragenset,
+          assigned_advisor: assignedAdvisor || null,
+          answers_labeled: normalizedAnswers,
+          answers_raw: answersRaw,
+          result: result || null,
+          result_details: safeResultDetails,
+          score,
+          extra,
+          utm_source: pick(body, 'utm_source') || null,
+          utm_campaign: pick(body, 'utm_campaign') || null,
+          submitted_at: submittedAt && !Number.isNaN(Date.parse(submittedAt)) ? new Date(submittedAt).toISOString() : new Date().toISOString(),
+        }
+        let { error: upsertError } = await supabase
+          .from('lead_submissions')
+          .upsert(submission, { onConflict: 'submission_id' })
+
+        if (upsertError?.code === 'PGRST204') {
+          const { extra: _extra, ...zonderExtra } = submission
+          upsertError = (await supabase.from('lead_submissions').upsert(zonderExtra, { onConflict: 'submission_id' })).error
+        }
+        if (upsertError) throw upsertError
+      }
+    } catch (err) {
+      const code = (err as { code?: string })?.code
+      if (code === 'PGRST205' || code === '42P01') {
+        console.warn('[v0] account-aanmaken: tabel lead_submissions ontbreekt nog; antwoorden staan alleen in het webhooklog')
+      } else {
+        console.error('[v0] account-aanmaken: testantwoorden opslaan mislukt (non-fatal):', (err as { message?: string })?.message ?? err)
+      }
+    }
+  }
+
   // ── 7. Log succes ─────────────────────────────────────────────────────────
   await logWebhookCall({
     supabase,
@@ -736,7 +756,7 @@ async function handleWebhook(req: NextRequest): Promise<Response> {
     user_id: userId,
     submission_id: submissionId || null,
   })
-  console.log('[v0] account-aanmaken: succes', { email, userId, outcome, bron, activatieLink })
+  console.log('[v0] account-aanmaken: succes', { email, userId, outcome, bron })
 
   // ── 8. Stuur activatielink terug ──────────────────────────────────────────
   // Websites (Lovable) sturen Accept: application/json → JSON-antwoord.
