@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getHubSpotOwnerName } from '@/lib/hubspot-owners'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 const CALL_OPENED_MARKER = '__persoonlijke_call_geopend__'
 const CALL_CLICKED_MARKER = '__persoonlijke_call_geklikt__'
@@ -264,17 +265,18 @@ export async function updateCallUserState(
 }
 
 export async function getAllCallUserStates(supabase: SupabaseClient): Promise<Map<string, CallUserState>> {
-  const [{ data: users, error: userError }, { data: markers, error: markerError }] = await Promise.all([
-    supabase.from('demo_invest_users').select('id, hubspot_owner_id'),
-    supabase
-      .from('demo_invest_trigger_sent')
-      .select('user_id, workflow_naam, created_at')
-      .in('workflow_naam', CALL_MARKERS),
+  const [users, markers] = await Promise.all([
+  fetchAllRows<{ id: string; hubspot_owner_id: string | null }>((from, to) =>
+  supabase.from('demo_invest_users').select('id, hubspot_owner_id').order('id').range(from, to)),
+  fetchAllRows<CallMarkerRow>((from, to) =>
+  supabase
+  .from('demo_invest_trigger_sent')
+  .select('user_id, workflow_naam, created_at')
+  .in('workflow_naam', CALL_MARKERS)
+  .order('id')
+  .range(from, to)),
   ])
-
-  if (userError) throw userError
-  if (markerError) throw markerError
-
+  
   const markersByUser = new Map<string, CallMarkerRow[]>()
   for (const marker of (markers ?? []) as CallMarkerRow[]) {
     const current = markersByUser.get(marker.user_id) ?? []
