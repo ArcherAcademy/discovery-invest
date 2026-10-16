@@ -150,6 +150,7 @@ export default function AdminPage() {
   const [roleLoading, setRoleLoading] = useState<string | null>(null)
   const [roleFeedback, setRoleFeedback] = useState<{ ok: boolean; message: string } | null>(null)
   const [exportLoading, setExportLoading] = useState(false)
+  const [exportUntil, setExportUntil] = useState('')
   const [demoExportLoading, setDemoExportLoading] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
@@ -157,7 +158,8 @@ export default function AdminPage() {
     setExportLoading(true)
     setExportError(null)
     try {
-      const response = await fetch('/api/admin/export-accounts')
+      const query = exportUntil ? `?tot=${encodeURIComponent(exportUntil)}` : ''
+      const response = await fetch(`/api/admin/export-accounts${query}`)
       if (!response.ok) {
         const data = await response.json().catch(() => null)
         setExportError(data?.error ?? 'De Excel-export kon niet worden gemaakt.')
@@ -1012,6 +1014,17 @@ export default function AdminPage() {
                 {demoExportLoading ? <RefreshCw size={15} className="animate-spin" /> : <Download size={15} />}
                 {demoExportLoading ? 'Demo Excel maken…' : 'Download demo-inschrijvingen'}
               </button>
+              <label className="inline-flex items-center gap-2 text-xs font-medium" style={{ color: 'rgba(13,15,20,0.6)' }}>
+                Aangemaakt t/m
+                <input
+                  type="date"
+                  value={exportUntil}
+                  onChange={event => setExportUntil(event.target.value)}
+                  className="rounded-xl border px-3 py-2 text-xs"
+                  style={{ background: '#ffffff', borderColor: 'rgba(13,15,20,0.15)', color: '#0d0f14' }}
+                  aria-label="Exporteer accounts aangemaakt tot en met deze datum (leeg is alles)"
+                />
+              </label>
               <button
                 type="button"
                 onClick={handleAccountsExport}
@@ -1020,7 +1033,7 @@ export default function AdminPage() {
                 style={{ background: '#2500F5', color: '#ffffff' }}
               >
                 {exportLoading ? <RefreshCw size={15} className="animate-spin" /> : <Download size={15} />}
-                {exportLoading ? 'Excel maken…' : 'Download alle accounts'}
+                {exportLoading ? 'Excel maken…' : exportUntil ? 'Download accounts' : 'Download alle accounts'}
               </button>
             </div>
             {exportError && (

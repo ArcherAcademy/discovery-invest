@@ -4,6 +4,7 @@ import { requireAdminOrMentor } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { hasPermanentAccess } from '@/lib/access'
 import { getAllCallUserStates } from '@/lib/call-booking-data'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 export const runtime = 'nodejs'
 
@@ -35,6 +36,15 @@ function excelDate(value: string | null) {
   return value ? new Date(value) : ''
 }
 
+function endOfBrusselsDay(day: string) {
+  const noonUtc = new Date(`${day}T12:00:00Z`)
+  const brusselsHour = Number(
+    new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Brussels', hour: '2-digit', hourCycle: 'h23' }).format(noonUtc),
+  )
+  const offsetHours = brusselsHour - 12
+  return new Date(Date.parse(`${day}T23:59:59.999Z`) - offsetHours * 3600_000).toISOString()
+}
+
 function statusFor(user: ExportUser) {
   return user.activated_at ? 'Geactiveerd' : 'Aangemaakt'
 }
@@ -47,23 +57,47 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: message === 'Forbidden' ? 403 : 401 })
   }
 
-  const supabase = createAdminClient()
-  const [usersResult, funnelsResult, followUpDisabledResult] = await Promise.all([
-    supabase.from('demo_invest_users').select('*').order('created_at', { ascending: false }),
-    supabase.from('demo_invest_user_funnel').select('*'),
-    supabase.from('demo_invest_trigger_sent').select('user_id').eq('workflow_naam', '__automatische_opvolging_uit__'),
-  ])
+  // Optioneel: ?tot=JJJJ-MM-DD geeft alleen accounts die tot en met die dag (Belgische tijd) zijn aangemaakt.
+  const tot = req.nextUrl.searchParams.get('tot')
+  if (tot && !/^\d{4}-\d{2}-\d{2}$/.test(tot)) {
+    return NextResponse.json({ error: 'Gebruik ?tot=JJJJ-MM-DD.' }, { status: 400 })
+  }
+  const createdUntil = tot ? endOfBrusselsDay(tot) : null
 
-  const queryError = usersResult.error ?? funnelsResult.error ?? followUpDisabledResult.error
-  if (queryError) {
+  const supabase = createAdminClient()
+  let users: ExportUser[]
+  let funnels: ExportFunnel[]
+  let followUpDisabled: { user_id: string }[]
+  let callStates: Awaited<ReturnType<typeof getAllCallUserStates>>
+  try {
+    ;[users, funnels, followUpDisabled, callStates] = await Promise.all([
+      fetchAllRows<ExportUser>((from, to) => {
+        let query = supabase
+          .from('demo_invest_users')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+        if (createdUntil) query = query.lte('created_at', createdUntil)
+        return query.range(from, to)
+      }),
+      fetchAllRows<ExportFunnel>((from, to) =>
+        supabase.from('demo_invest_user_funnel').select('*').order('id').range(from, to)),
+      fetchAllRows<{ user_id: string }>((from, to) =>
+        supabase
+          .from('demo_invest_trigger_sent')
+          .select('user_id')
+          .eq('workflow_naam', '__automatische_opvolging_uit__')
+          .order('id')
+          .range(from, to)),
+      getAllCallUserStates(supabase),
+    ])
+  } catch (error) {
+    console.error('[export-accounts] Gegevens ophalen mislukt:', error)
     return NextResponse.json({ error: 'De accountgegevens konden niet worden opgehaald.' }, { status: 500 })
   }
 
-  const users = (usersResult.data ?? []) as ExportUser[]
-  const callStates = await getAllCallUserStates(supabase)
-  const funnels = (funnelsResult.data ?? []) as ExportFunnel[]
   const funnelsByUser = new Map(funnels.map(funnel => [funnel.user_id, funnel]))
-  const followUpDisabledUserIds = new Set((followUpDisabledResult.data ?? []).map(row => row.user_id))
+  const followUpDisabledUserIds = new Set(followUpDisabled.map(row => row.user_id))
 
   const rows = users.map(user => {
     const funnel = funnelsByUser.get(user.id)
@@ -127,7 +161,7 @@ export async function GET(req: NextRequest) {
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': `attachment; filename="archer-accounts-${date}.xlsx"`,
+      'Content-Disposition': `attachment; filename="archer-accounts-${tot ? `tot-${tot}` : date}.xlsx"`,
       'Cache-Control': 'no-store',
     },
   })

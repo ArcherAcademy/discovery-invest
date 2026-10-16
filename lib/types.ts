@@ -19,6 +19,8 @@ export interface DemoUser {
   lead_flow: string | null
   vermogenstest_variant: 'A' | 'B' | null
   vermogenstest_vragenset: 'oude_vragen' | 'nieuwe_vragen' | null
+  // Eenmalige doorverwijzing naar /masterclass voor bestaande actieve gebruikers.
+  masterclass_intro_pending?: boolean | null
   // Live afgeleide call-status — samengevoegd in /api/me, staat niet in de users-tabel.
   call_booked?: boolean
   call_booked_at?: string | null
